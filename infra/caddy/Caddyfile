@@ -1,0 +1,31 @@
+{
+	# Replace with your domain for production
+	# email your@email.com
+}
+
+# Development: localhost
+:80 {
+	reverse_proxy api:8000
+
+	# Limit request body to 1MB
+	request_body {
+		max_size 1MB
+	}
+
+	log {
+		output stdout
+	}
+}
+
+# Production: uncomment and set your domain
+# your-domain.com {
+# 	reverse_proxy api:8000
+#
+# 	request_body {
+# 		max_size 1MB
+# 	}
+#
+# 	log {
+# 		output stdout
+# 	}
+# }

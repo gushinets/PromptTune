@@ -1,0 +1,36 @@
+# Node
+node_modules/
+dist/
+.output/
+.wxt/
+*.tgz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+.eggs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Docker local volumes
+postgres-data/
+
+# Test / Coverage
+coverage/
+htmlcov/
+.coverage
+.pytest_cache/

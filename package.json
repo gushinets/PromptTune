@@ -1,0 +1,20 @@
+{
+  "private": true,
+  "devDependencies": {
+    "husky": "^9",
+    "lint-staged": "^15"
+  },
+  "lint-staged": {
+    "extension/**/*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "backend/**/*.py": [
+      "ruff check --fix",
+      "ruff format"
+    ]
+  },
+  "scripts": {
+    "prepare": "husky"
+  }
+}
