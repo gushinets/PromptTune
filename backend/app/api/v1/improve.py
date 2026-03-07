@@ -3,7 +3,7 @@ import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import ImproveRequest, ImproveResponse
-from app.dependencies import get_client_ip, get_db, get_redis
+from app.dependencies import get_authorization, get_client_ip, get_db, get_redis
 from app.services.prompt_service import PromptService
 
 router = APIRouter()
@@ -15,6 +15,7 @@ async def improve(
     db: AsyncSession = Depends(get_db),
     redis: aioredis.Redis = Depends(get_redis),
     client_ip: str = Depends(get_client_ip),
+    api_key: str = Depends(get_authorization),
 ):
     service = PromptService(db=db, redis=redis)
 
@@ -28,6 +29,9 @@ async def improve(
     result = await service.improve_prompt(
         text=req.text,
         installation_id=req.installation_id,
+        api_key=api_key,
+        client=req.client,
+        client_version=req.client_version,
         site=req.site,
         page_url=req.page_url,
     )
