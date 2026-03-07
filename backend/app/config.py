@@ -1,25 +1,103 @@
-from pydantic_settings import BaseSettings
+import os
+from dataclasses import dataclass, field
+from typing import Optional
 
 
-class Settings(BaseSettings):
+@dataclass
+class BotConfig:
+    """Configuration for PromptTune application."""
+
     # Database
-    database_url: str = "postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune"
+    database_url: str = field(
+        default=os.getenv(
+            "DATABASE_URL",
+            "postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune"
+        )
+    )
 
     # Redis
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = field(
+        default=os.getenv(
+            "REDIS_URL",
+            "redis://localhost:6379/0"
+        )
+    )
 
     # LLM
-    llm_model: str = "gpt-4o-mini"
+    llm_backend: str = field(
+        default=os.getenv("LLM_BACKEND", "OPENROUTER").upper()
+    )
+    llm_model: str = field(
+        default=os.getenv("LLM_MODEL", "gpt-4o-mini")
+    )
+    openai_api_key: Optional[str] = field(
+        default=os.getenv("OPENAI_API_KEY")
+    )
+    openrouter_api_key: Optional[str] = field(
+        default=os.getenv("OPENROUTER_API_KEY")
+    )
 
     # Rate limits
-    free_req_per_day: int = 50
-    free_req_per_min: int = 10
+    free_req_per_day: int = field(
+        default=int(os.getenv("FREE_REQ_PER_DAY", "50"))
+    )
+    free_req_per_min: int = field(
+        default=int(os.getenv("FREE_REQ_PER_MIN", "10"))
+    )
 
     # Security
-    max_text_length: int = 8000
-    allowed_origins: str = "*"
+    max_text_length: int = field(
+        default=int(os.getenv("MAX_TEXT_LENGTH", "8000"))
+    )
+    allowed_origins: str = field(
+        default=os.getenv("ALLOWED_ORIGINS", "*")
+    )
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    @classmethod
+    def from_env(cls) -> "BotConfig":
+        """Load configuration from environment variables."""
+        # Load .env file if present (only once at startup)
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        return cls()
+
+    def validate(self) -> None:
+        """Validate configuration consistency and business rules."""
+        # 1. Allowed values for enums
+        if self.llm_backend not in ("OPENAI", "OPENROUTER"):
+            raise ValueError(
+                f"LLM_BACKEND must be one of: OPENAI, OPENROUTER. Got: {self.llm_backend}"
+            )
+
+        # 2. Feature toggle dependencies
+        if self.llm_backend == "OPENAI":
+            if not self.openai_api_key:
+                raise ValueError(
+                    "OPENAI_API_KEY is required when LLM_BACKEND=OPENAI"
+                )
+        elif self.llm_backend == "OPENROUTER":
+            if not self.openrouter_api_key:
+                raise ValueError(
+                    "OPENROUTER_API_KEY is required when LLM_BACKEND=OPENROUTER"
+                )
+
+        # 3. Numeric constraints - must be positive
+        if self.free_req_per_day <= 0:
+            raise ValueError(
+                f"FREE_REQ_PER_DAY must be positive. Got: {self.free_req_per_day}"
+            )
+        if self.free_req_per_min <= 0:
+            raise ValueError(
+                f"FREE_REQ_PER_MIN must be positive. Got: {self.free_req_per_min}"
+            )
+        if self.max_text_length <= 0:
+            raise ValueError(
+                f"MAX_TEXT_LENGTH must be positive. Got: {self.max_text_length}"
+            )
 
 
-settings = Settings()
+# Global config instance - initialized at module import
+# Use `settings` for backward compatibility with existing code
+settings = BotConfig.from_env()
+settings.validate()
