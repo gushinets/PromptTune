@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PromptTune — Write Better AI Prompts in One Click</title>
   <meta name="description" content="Free browser extension that instantly improves your prompts for ChatGPT, Claude, Perplexity, Groq and Deepseek. No login. No setup. Just better prompts.">
+  <meta name="theme-color" content="#0b1022">
+  <meta property="og:title" content="PromptTune — Write Better AI Prompts in One Click">
+  <meta property="og:description" content="Free browser extension that instantly transforms vague prompts into precise, effective instructions for any AI chatbot.">
+  <meta property="og:type" content="website">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   <style>
-    /* ============================================
-       CSS Variables
-       ============================================ */
     :root {
       --bg-deep: #060a14;
       --bg-base: #0b1022;
@@ -30,7 +31,6 @@
       --grad-primary: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
       --grad-hero: linear-gradient(160deg, #0b1022 0%, #131b3d 40%, #1a1040 70%, #0b1022 100%);
       --grad-text: linear-gradient(135deg, #c4b5fd 0%, #93c5fd 50%, #5eead4 100%);
-      --grad-glow: radial-gradient(ellipse 600px 400px at 50% 0%, rgba(124,58,237,0.15) 0%, transparent 70%);
 
       --text-primary: #f1f5f9;
       --text-secondary: #94a3b8;
@@ -51,9 +51,6 @@
       --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
-    /* ============================================
-       Reset
-       ============================================ */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html {
@@ -74,9 +71,6 @@
     img { max-width: 100%; display: block; }
     button { font-family: inherit; cursor: pointer; border: none; }
 
-    /* ============================================
-       Layout
-       ============================================ */
     .container {
       max-width: 1200px;
       margin: 0 auto;
@@ -88,9 +82,7 @@
       position: relative;
     }
 
-    /* ============================================
-       Background Effects
-       ============================================ */
+    /* Background effects */
     .bg-grid {
       position: fixed;
       inset: 0;
@@ -110,27 +102,11 @@
       z-index: 0;
     }
 
-    .bg-orb--purple {
-      width: 600px;
-      height: 600px;
-      background: rgba(124, 58, 237, 0.08);
-    }
+    .bg-orb--purple { width: 600px; height: 600px; background: rgba(124, 58, 237, 0.08); }
+    .bg-orb--blue { width: 500px; height: 500px; background: rgba(59, 130, 246, 0.06); }
+    .bg-orb--teal { width: 400px; height: 400px; background: rgba(45, 212, 191, 0.05); }
 
-    .bg-orb--blue {
-      width: 500px;
-      height: 500px;
-      background: rgba(59, 130, 246, 0.06);
-    }
-
-    .bg-orb--teal {
-      width: 400px;
-      height: 400px;
-      background: rgba(45, 212, 191, 0.05);
-    }
-
-    /* ============================================
-       Navigation
-       ============================================ */
+    /* ---- Navigation ---- */
     .nav {
       position: fixed;
       top: 0;
@@ -164,11 +140,7 @@
       letter-spacing: -0.02em;
     }
 
-    .nav__brand svg {
-      width: 28px;
-      height: 28px;
-      color: var(--purple);
-    }
+    .nav__brand svg { width: 28px; height: 28px; color: var(--purple); }
 
     .nav__links {
       display: flex;
@@ -227,11 +199,57 @@
       height: 40px;
       align-items: center;
       justify-content: center;
+      border-radius: var(--radius-sm);
+      transition: background 0.2s;
     }
 
-    /* ============================================
-       Hero
-       ============================================ */
+    .nav__mobile-toggle:hover { background: rgba(148, 163, 184, 0.08); }
+
+    /* Mobile menu */
+    .nav__mobile-menu {
+      display: none;
+      position: fixed;
+      top: 72px;
+      left: 0;
+      right: 0;
+      background: rgba(11, 16, 34, 0.96);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      padding: 16px 24px 24px;
+      border-bottom: 1px solid var(--border);
+      transform: translateY(-10px);
+      opacity: 0;
+      transition: transform 0.3s var(--ease-out), opacity 0.3s var(--ease-out);
+      z-index: 99;
+    }
+
+    .nav__mobile-menu.open {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .nav__mobile-menu a {
+      display: block;
+      padding: 14px 0;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      transition: color 0.2s;
+    }
+
+    .nav__mobile-menu a:last-child { border-bottom: none; }
+    .nav__mobile-menu a:hover { color: var(--text-primary); }
+
+    .nav__mobile-menu .btn {
+      margin-top: 16px;
+      text-align: center;
+    }
+
+    /* ---- Hero ---- */
     .hero {
       min-height: 100vh;
       display: flex;
@@ -334,6 +352,7 @@
       border-radius: var(--radius-md);
       transition: all 0.25s var(--ease-bounce);
       white-space: nowrap;
+      cursor: pointer;
     }
 
     .btn--primary {
@@ -370,7 +389,7 @@
 
     .hero__free strong { color: var(--teal); font-weight: 600; }
 
-    /* Hero Mockup */
+    /* Hero mockup */
     .hero__visual {
       position: relative;
       display: flex;
@@ -464,11 +483,27 @@
       min-height: 68px;
       display: flex;
       align-items: flex-start;
+      overflow: hidden;
+      position: relative;
     }
 
     .mockup__textarea--improved {
       border-left: 3px solid var(--teal);
       color: var(--text-primary);
+    }
+
+    .mockup__textarea .typed-text {
+      display: inline;
+    }
+
+    .mockup__textarea .cursor-blink {
+      display: inline-block;
+      width: 2px;
+      height: 14px;
+      background: var(--purple-light);
+      margin-left: 2px;
+      vertical-align: text-bottom;
+      animation: blink 0.8s step-end infinite;
     }
 
     .mockup__btn-improve {
@@ -485,9 +520,28 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      position: relative;
+      overflow: hidden;
     }
 
     .mockup__btn-improve svg { width: 16px; height: 16px; }
+
+    .mockup__btn-improve.loading .mockup__btn-label { opacity: 0; }
+
+    .mockup__btn-improve .mockup__spinner {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      display: none;
+    }
+
+    .mockup__btn-improve.loading .mockup__spinner {
+      display: block;
+      animation: spin 0.6s linear infinite;
+    }
 
     .mockup__actions {
       display: flex;
@@ -553,9 +607,7 @@
 
     .mockup__float-tag strong { color: var(--teal); }
 
-    /* ============================================
-       Logos strip
-       ============================================ */
+    /* ---- Logos strip ---- */
     .logos {
       padding: 60px 0;
       border-top: 1px solid var(--border);
@@ -591,6 +643,7 @@
       color: var(--text-muted);
       transition: color 0.3s;
       font-family: var(--font-heading);
+      cursor: pointer;
     }
 
     .logo-item:hover { color: var(--text-primary); }
@@ -607,9 +660,52 @@
       color: #fff;
     }
 
-    /* ============================================
-       How It Works
-       ============================================ */
+    /* ---- Stats bar ---- */
+    .stats {
+      padding: 64px 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    .stats__grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 32px;
+    }
+
+    .stat {
+      text-align: center;
+      padding: 24px 16px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      transition: transform 0.3s var(--ease-out), box-shadow 0.3s;
+    }
+
+    .stat:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+    }
+
+    .stat__value {
+      font-family: var(--font-heading);
+      font-size: clamp(28px, 3vw, 40px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+      background: var(--grad-text);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stat__label {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ---- Section titles ---- */
     .section__eyebrow {
       font-size: 13px;
       font-weight: 600;
@@ -639,6 +735,7 @@
       line-height: 1.7;
     }
 
+    /* ---- How It Works ---- */
     .steps {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -657,10 +754,7 @@
       opacity: 0.3;
     }
 
-    .step {
-      text-align: center;
-      position: relative;
-    }
+    .step { text-align: center; position: relative; }
 
     .step__number {
       width: 56px;
@@ -695,13 +789,6 @@
       border: 1px solid rgba(45, 212, 191, 0.25);
     }
 
-    .step__icon {
-      width: 32px;
-      height: 32px;
-      margin: 0 auto 16px;
-      color: var(--text-muted);
-    }
-
     .step__title {
       font-family: var(--font-heading);
       font-size: 20px;
@@ -718,9 +805,7 @@
       margin: 0 auto;
     }
 
-    /* ============================================
-       Before / After
-       ============================================ */
+    /* ---- Before / After ---- */
     .before-after {
       background: var(--bg-base);
       border-top: 1px solid var(--border);
@@ -743,9 +828,7 @@
       position: relative;
     }
 
-    .ba__card--before {
-      background: var(--bg-deep);
-    }
+    .ba__card--before { background: var(--bg-deep); }
 
     .ba__card--after {
       background: var(--bg-elevated);
@@ -764,19 +847,11 @@
     .ba__card--before .ba__card-label { color: var(--text-muted); }
     .ba__card--after .ba__card-label { color: var(--teal); }
 
-    .ba__card-text {
-      font-size: 15px;
-      line-height: 1.7;
-    }
-
+    .ba__card-text { font-size: 15px; line-height: 1.7; }
     .ba__card--before .ba__card-text { color: var(--text-muted); }
     .ba__card--after .ba__card-text { color: var(--text-primary); }
 
-    .ba__arrow {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+    .ba__arrow { display: flex; align-items: center; justify-content: center; }
 
     .ba__arrow-icon {
       width: 48px;
@@ -793,9 +868,29 @@
 
     .ba__arrow-icon svg { width: 20px; height: 20px; }
 
-    /* ============================================
-       Features
-       ============================================ */
+    /* Navigation dots for before/after examples */
+    .ba__nav {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 40px;
+    }
+
+    .ba__dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border-card);
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s, transform 0.2s;
+      padding: 0;
+    }
+
+    .ba__dot:hover { transform: scale(1.3); }
+    .ba__dot.active { background: var(--purple); }
+
+    /* ---- Features ---- */
     .features__grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -810,6 +905,7 @@
       transition: all 0.35s var(--ease-out);
       position: relative;
       overflow: hidden;
+      cursor: pointer;
     }
 
     .feature::before {
@@ -844,23 +940,9 @@
 
     .feature__icon svg { width: 24px; height: 24px; }
 
-    .feature__icon--purple {
-      background: rgba(124, 58, 237, 0.12);
-      color: var(--purple-light);
-      border: 1px solid rgba(124, 58, 237, 0.2);
-    }
-
-    .feature__icon--blue {
-      background: rgba(59, 130, 246, 0.12);
-      color: var(--blue-light);
-      border: 1px solid rgba(59, 130, 246, 0.2);
-    }
-
-    .feature__icon--teal {
-      background: rgba(45, 212, 191, 0.12);
-      color: var(--teal);
-      border: 1px solid rgba(45, 212, 191, 0.2);
-    }
+    .feature__icon--purple { background: rgba(124, 58, 237, 0.12); color: var(--purple-light); border: 1px solid rgba(124, 58, 237, 0.2); }
+    .feature__icon--blue { background: rgba(59, 130, 246, 0.12); color: var(--blue-light); border: 1px solid rgba(59, 130, 246, 0.2); }
+    .feature__icon--teal { background: rgba(45, 212, 191, 0.12); color: var(--teal); border: 1px solid rgba(45, 212, 191, 0.2); }
 
     .feature__title {
       font-family: var(--font-heading);
@@ -876,9 +958,7 @@
       line-height: 1.6;
     }
 
-    /* ============================================
-       Pricing / Free Tier
-       ============================================ */
+    /* ---- Pricing ---- */
     .pricing { text-align: center; }
 
     .pricing__card {
@@ -962,9 +1042,66 @@
 
     .pricing__check svg { width: 12px; height: 12px; }
 
-    /* ============================================
-       Final CTA
-       ============================================ */
+    /* ---- FAQ ---- */
+    .faq__grid {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .faq__item {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .faq__question {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 0;
+      background: none;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-align: left;
+      cursor: pointer;
+      transition: color 0.2s;
+      font-family: var(--font-heading);
+    }
+
+    .faq__question:hover { color: var(--purple-light); }
+
+    .faq__icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      color: var(--text-muted);
+      transition: transform 0.3s var(--ease-out), color 0.2s;
+    }
+
+    .faq__item.open .faq__icon {
+      transform: rotate(45deg);
+      color: var(--purple-light);
+    }
+
+    .faq__answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s var(--ease-out), padding 0.3s;
+    }
+
+    .faq__item.open .faq__answer {
+      max-height: 300px;
+    }
+
+    .faq__answer p {
+      padding-bottom: 20px;
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    /* ---- Final CTA ---- */
     .cta {
       text-align: center;
       position: relative;
@@ -1004,6 +1141,7 @@
       font-weight: 600;
       color: var(--text-secondary);
       transition: all 0.25s var(--ease-out);
+      cursor: pointer;
     }
 
     .cta__browser:hover {
@@ -1015,9 +1153,7 @@
 
     .cta__browser svg { width: 20px; height: 20px; }
 
-    /* ============================================
-       Footer
-       ============================================ */
+    /* ---- Footer ---- */
     .footer {
       padding: 48px 0;
       border-top: 1px solid var(--border);
@@ -1061,9 +1197,7 @@
 
     .footer__links a:hover { color: var(--text-primary); }
 
-    /* ============================================
-       Animations
-       ============================================ */
+    /* ---- Animations ---- */
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(24px); }
       to { opacity: 1; transform: translateY(0); }
@@ -1079,9 +1213,13 @@
       50% { opacity: 0.6; transform: scale(1.3); }
     }
 
-    @keyframes typing {
-      0% { width: 0; }
-      100% { width: 100%; }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
     }
 
     .reveal {
@@ -1100,9 +1238,31 @@
     .reveal-delay-3 { transition-delay: 0.3s; }
     .reveal-delay-4 { transition-delay: 0.4s; }
 
-    /* ============================================
-       Responsive
-       ============================================ */
+    /* ---- Focus-visible (keyboard nav) ---- */
+    *:focus-visible {
+      outline: 2px solid var(--purple);
+      outline-offset: 3px;
+      border-radius: 4px;
+    }
+
+    .btn:focus-visible,
+    .nav__cta:focus-visible {
+      outline-offset: 4px;
+    }
+
+    /* ---- Reduced motion ---- */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      .reveal { opacity: 1; transform: none; }
+      html { scroll-behavior: auto; }
+    }
+
+    /* ---- Responsive ---- */
     @media (max-width: 1024px) {
       .hero__content {
         grid-template-columns: 1fr;
@@ -1114,11 +1274,13 @@
       .hero__actions { justify-content: center; }
       .features__grid { grid-template-columns: repeat(2, 1fr); }
       .mockup__float-tag { display: none; }
+      .stats__grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     @media (max-width: 768px) {
       .section { padding: 80px 0; }
       .nav__links { display: none; }
+      .nav__cta--desktop { display: none; }
       .nav__mobile-toggle { display: flex; }
       .steps { grid-template-columns: 1fr; gap: 48px; }
       .steps::before { display: none; }
@@ -1130,12 +1292,14 @@
       .hero__actions .btn { justify-content: center; }
       .footer__inner { flex-direction: column; gap: 16px; text-align: center; }
       .footer__links { justify-content: center; }
+      .stats__grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
     }
 
     @media (max-width: 480px) {
       .mockup { width: 100%; max-width: 340px; }
       .pricing__card { padding: 32px 24px; }
       .cta__browsers { flex-direction: column; align-items: center; }
+      .stats__grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -1143,13 +1307,11 @@
 
 <div class="bg-grid"></div>
 
-<!-- ============================================
-     Navigation
-     ============================================ -->
-<nav class="nav" id="nav">
+<!-- Navigation -->
+<nav class="nav" id="nav" role="navigation" aria-label="Main navigation">
   <div class="container nav__inner">
-    <a href="#" class="nav__brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <a href="#" class="nav__brand" aria-label="PromptTune home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/>
         <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/>
       </svg>
@@ -1159,20 +1321,26 @@
       <li><a href="#how-it-works">How It Works</a></li>
       <li><a href="#features">Features</a></li>
       <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#faq">FAQ</a></li>
     </ul>
-    <a href="#install" class="nav__cta">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    <a href="#install" class="nav__cta nav__cta--desktop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Install Free
     </a>
-    <button class="nav__mobile-toggle" aria-label="Menu">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <button class="nav__mobile-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileToggle">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
+  </div>
+  <div class="nav__mobile-menu" id="mobileMenu" role="menu">
+    <a href="#how-it-works" role="menuitem">How It Works</a>
+    <a href="#features" role="menuitem">Features</a>
+    <a href="#pricing" role="menuitem">Pricing</a>
+    <a href="#faq" role="menuitem">FAQ</a>
+    <a href="#install" class="btn btn--primary" role="menuitem">Install Free</a>
   </div>
 </nav>
 
-<!-- ============================================
-     Hero
-     ============================================ -->
+<!-- Hero -->
 <section class="hero section">
   <div class="hero__glow"></div>
   <div class="bg-orb bg-orb--purple" style="top:-200px;right:-200px;"></div>
@@ -1192,11 +1360,11 @@
       </p>
       <div class="hero__actions">
         <a href="#install" class="btn btn--primary">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Install for Free
         </a>
         <a href="#demo" class="btn btn--ghost">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           See it in action
         </a>
       </div>
@@ -1208,10 +1376,10 @@
         <strong>+42%</strong> more specific
       </div>
 
-      <div class="mockup">
+      <div class="mockup" aria-label="PromptTune extension preview">
         <div class="mockup__header">
           <div class="mockup__brand">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
             PromptTune
           </div>
           <span class="mockup__badge">47/50 today</span>
@@ -1224,31 +1392,34 @@
 
         <div class="mockup__body">
           <div class="mockup__label">Original Prompt</div>
-          <div class="mockup__textarea">
-            Explain how to implement authentication in a Node.js app
+          <div class="mockup__textarea" id="mockupOriginal">
+            <span class="typed-text"></span><span class="cursor-blink"></span>
           </div>
 
-          <div class="mockup__btn-improve">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/></svg>
-            Improve
+          <div class="mockup__btn-improve" id="mockupBtn">
+            <span class="mockup__btn-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/></svg>
+              Improve
+            </span>
+            <span class="mockup__spinner"></span>
           </div>
 
-          <div class="mockup__label">Improved Prompt</div>
-          <div class="mockup__textarea mockup__textarea--improved">
-            Act as an expert backend developer. Explain step-by-step how to implement JWT-based authentication with refresh token rotation in a Node.js Express app...
+          <div class="mockup__label" id="mockupImprovedLabel" style="opacity:0;transition:opacity 0.3s;">Improved Prompt</div>
+          <div class="mockup__textarea mockup__textarea--improved" id="mockupImproved" style="opacity:0;transition:opacity 0.3s;">
+            <span class="typed-text"></span><span class="cursor-blink" style="display:none;"></span>
           </div>
 
-          <div class="mockup__actions">
+          <div class="mockup__actions" id="mockupActions" style="opacity:0;transition:opacity 0.3s;">
             <div class="mockup__action">Copy</div>
             <div class="mockup__action">Save to Library</div>
           </div>
 
           <div class="mockup__sites">
-            <div class="mockup__site-icon" style="background:#10a37f;">G</div>
-            <div class="mockup__site-icon" style="background:#d97706;">A</div>
-            <div class="mockup__site-icon" style="background:#20b2aa;">P</div>
-            <div class="mockup__site-icon" style="background:#f55036;">G</div>
-            <div class="mockup__site-icon" style="background:#4f6cf7;">D</div>
+            <div class="mockup__site-icon" style="background:#10a37f;" aria-label="ChatGPT">G</div>
+            <div class="mockup__site-icon" style="background:#d97706;" aria-label="Claude">A</div>
+            <div class="mockup__site-icon" style="background:#20b2aa;" aria-label="Perplexity">P</div>
+            <div class="mockup__site-icon" style="background:#f55036;" aria-label="Groq">G</div>
+            <div class="mockup__site-icon" style="background:#4f6cf7;" aria-label="Deepseek">D</div>
           </div>
         </div>
       </div>
@@ -1260,9 +1431,7 @@
   </div>
 </section>
 
-<!-- ============================================
-     Supported Sites
-     ============================================ -->
+<!-- Supported Sites -->
 <section class="logos">
   <div class="container">
     <p class="logos__label">Works with the AI tools you already use</p>
@@ -1301,9 +1470,31 @@
   </div>
 </section>
 
-<!-- ============================================
-     How It Works
-     ============================================ -->
+<!-- Stats -->
+<section class="stats" aria-label="Usage statistics">
+  <div class="container">
+    <div class="stats__grid">
+      <div class="stat reveal">
+        <div class="stat__value" data-target="50">50</div>
+        <div class="stat__label">Free daily improvements</div>
+      </div>
+      <div class="stat reveal reveal-delay-1">
+        <div class="stat__value">5</div>
+        <div class="stat__label">AI platforms supported</div>
+      </div>
+      <div class="stat reveal reveal-delay-2">
+        <div class="stat__value">3</div>
+        <div class="stat__label">Browsers supported</div>
+      </div>
+      <div class="stat reveal reveal-delay-3">
+        <div class="stat__value">0s</div>
+        <div class="stat__label">Setup time required</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works -->
 <section class="section" id="how-it-works">
   <div class="bg-orb bg-orb--teal" style="top:100px;right:-100px;"></div>
   <div class="container">
@@ -1338,9 +1529,7 @@
   </div>
 </section>
 
-<!-- ============================================
-     Before & After
-     ============================================ -->
+<!-- Before & After -->
 <section class="section before-after" id="demo">
   <div class="container">
     <p class="section__eyebrow reveal">See the Difference</p>
@@ -1348,31 +1537,34 @@
     <p class="section__sub reveal reveal-delay-2">
       Watch how a basic prompt becomes a detailed, structured instruction that AI actually understands.
     </p>
-    <div class="ba__grid reveal reveal-delay-3">
+    <div class="ba__grid reveal reveal-delay-3" id="baGrid">
       <div class="ba__card ba__card--before">
         <div class="ba__card-label">Before</div>
-        <p class="ba__card-text">
+        <p class="ba__card-text" id="baBefore">
           Write me a Python script to scrape a website
         </p>
       </div>
       <div class="ba__arrow">
         <div class="ba__arrow-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
         </div>
       </div>
       <div class="ba__card ba__card--after">
         <div class="ba__card-label">After PromptTune</div>
-        <p class="ba__card-text">
+        <p class="ba__card-text" id="baAfter">
           Act as a senior Python developer. Write a production-ready web scraper using <strong>requests</strong> and <strong>BeautifulSoup4</strong> that extracts product titles, prices, and ratings from an e-commerce product listing page. Include proper error handling, rate limiting with 2-second delays between requests, a rotating user-agent header, and output results as structured JSON. Add type hints and docstrings.
         </p>
       </div>
     </div>
+    <div class="ba__nav reveal reveal-delay-4" role="tablist" aria-label="Example selector">
+      <button class="ba__dot active" data-example="0" role="tab" aria-selected="true" aria-label="Example 1"></button>
+      <button class="ba__dot" data-example="1" role="tab" aria-selected="false" aria-label="Example 2"></button>
+      <button class="ba__dot" data-example="2" role="tab" aria-selected="false" aria-label="Example 3"></button>
+    </div>
   </div>
 </section>
 
-<!-- ============================================
-     Features
-     ============================================ -->
+<!-- Features -->
 <section class="section" id="features">
   <div class="bg-orb bg-orb--purple" style="top:200px;left:-200px;"></div>
   <div class="container">
@@ -1384,7 +1576,7 @@
     <div class="features__grid">
       <div class="feature reveal reveal-delay-1">
         <div class="feature__icon feature__icon--purple">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
         </div>
         <h3 class="feature__title">AI-Powered Rewriting</h3>
         <p class="feature__desc">
@@ -1394,7 +1586,7 @@
 
       <div class="feature reveal reveal-delay-2">
         <div class="feature__icon feature__icon--blue">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <h3 class="feature__title">No Account Required</h3>
         <p class="feature__desc">
@@ -1404,7 +1596,7 @@
 
       <div class="feature reveal reveal-delay-3">
         <div class="feature__icon feature__icon--teal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
         <h3 class="feature__title">Open &amp; Paste</h3>
         <p class="feature__desc">
@@ -1414,7 +1606,7 @@
 
       <div class="feature reveal reveal-delay-1">
         <div class="feature__icon feature__icon--teal">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
         </div>
         <h3 class="feature__title">Prompt Library</h3>
         <p class="feature__desc">
@@ -1424,7 +1616,7 @@
 
       <div class="feature reveal reveal-delay-2">
         <div class="feature__icon feature__icon--purple">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
         </div>
         <h3 class="feature__title">Cross-Browser</h3>
         <p class="feature__desc">
@@ -1434,7 +1626,7 @@
 
       <div class="feature reveal reveal-delay-3">
         <div class="feature__icon feature__icon--blue">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
         <h3 class="feature__title">In-Page Toolbar</h3>
         <p class="feature__desc">
@@ -1445,9 +1637,7 @@
   </div>
 </section>
 
-<!-- ============================================
-     Pricing
-     ============================================ -->
+<!-- Pricing -->
 <section class="section pricing" id="pricing">
   <div class="container">
     <p class="section__eyebrow reveal">Pricing</p>
@@ -1461,37 +1651,102 @@
       <p class="pricing__period">Free forever &middot; No credit card</p>
       <ul class="pricing__features">
         <li>
-          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
           50 prompt improvements per day
         </li>
         <li>
-          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
           Unlimited local prompt library
         </li>
         <li>
-          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
           Open &amp; Paste to 5 AI sites
         </li>
         <li>
-          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
           Chrome, Edge &amp; Firefox support
         </li>
         <li>
-          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
           No account required
         </li>
       </ul>
       <a href="#install" class="btn btn--primary" style="width:100%;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Install for Free
       </a>
     </div>
   </div>
 </section>
 
-<!-- ============================================
-     Final CTA
-     ============================================ -->
+<!-- FAQ -->
+<section class="section" id="faq">
+  <div class="container">
+    <p class="section__eyebrow reveal">FAQ</p>
+    <h2 class="section__title reveal reveal-delay-1">Common questions</h2>
+    <p class="section__sub reveal reveal-delay-2">
+      Everything you need to know about PromptTune before getting started.
+    </p>
+    <div class="faq__grid">
+      <div class="faq__item reveal reveal-delay-1">
+        <button class="faq__question" aria-expanded="false">
+          Is PromptTune really free?
+          <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq__answer">
+          <p>Yes, completely free. You get 50 prompt improvements per day with no sign-up, no credit card, and no hidden costs. The daily limit resets at midnight UTC.</p>
+        </div>
+      </div>
+      <div class="faq__item reveal reveal-delay-2">
+        <button class="faq__question" aria-expanded="false">
+          Which browsers are supported?
+          <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq__answer">
+          <p>PromptTune works on Chrome, Microsoft Edge, and Firefox. All Chromium-based browsers (Brave, Vivaldi, Arc) are also supported. Safari support is planned.</p>
+        </div>
+      </div>
+      <div class="faq__item reveal reveal-delay-3">
+        <button class="faq__question" aria-expanded="false">
+          Do I need to create an account?
+          <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq__answer">
+          <p>No. PromptTune works immediately after installation with zero configuration. No email, no password, no personal data collected.</p>
+        </div>
+      </div>
+      <div class="faq__item reveal reveal-delay-4">
+        <button class="faq__question" aria-expanded="false">
+          Is my data private?
+          <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq__answer">
+          <p>Your prompts are sent to our backend for AI processing and are not shared with third parties. Your saved prompt library is stored locally in your browser and never leaves your device.</p>
+        </div>
+      </div>
+      <div class="faq__item reveal">
+        <button class="faq__question" aria-expanded="false">
+          Which AI sites does Open & Paste support?
+          <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq__answer">
+          <p>Currently supported: ChatGPT, Claude, Perplexity, Groq, and Deepseek. We're continuously adding more sites based on user feedback.</p>
+        </div>
+      </div>
+      <div class="faq__item reveal reveal-delay-1">
+        <button class="faq__question" aria-expanded="false">
+          What happens when I hit the daily limit?
+          <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <div class="faq__answer">
+          <p>You'll see a friendly notification that your limit has been reached. Your 50 improvements reset at midnight UTC. Your saved library and previously improved prompts remain accessible.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
 <section class="section cta" id="install">
   <div class="cta__glow"></div>
   <div class="container" style="position:relative;z-index:1;">
@@ -1500,34 +1755,32 @@
     <p class="section__sub reveal reveal-delay-2">
       Join thousands of people who get better AI responses every day with PromptTune.
     </p>
-    <a href="#install" class="btn btn--primary reveal reveal-delay-3" style="margin-bottom:8px;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    <a href="#" class="btn btn--primary reveal reveal-delay-3" style="margin-bottom:8px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Install PromptTune
     </a>
     <div class="cta__browsers reveal reveal-delay-4">
       <a href="#" class="cta__browser">
-        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/><line x1="21.17" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="3.95" y1="6.06" x2="8.54" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="10.88" y1="21.94" x2="15.46" y2="14" stroke="currentColor" stroke-width="1.5"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.5"/><line x1="21.17" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.5"/><line x1="3.95" y1="6.06" x2="8.54" y2="14" stroke="currentColor" stroke-width="1.5"/><line x1="10.88" y1="21.94" x2="15.46" y2="14" stroke="currentColor" stroke-width="1.5"/></svg>
         Chrome
       </a>
       <a href="#" class="cta__browser">
-        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 8a4 4 0 100 8" stroke="currentColor" stroke-width="1.5"/><path d="M8 12a4 4 0 010-8" stroke="currentColor" stroke-width="1.5"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><path d="M12 8a4 4 0 100 8" stroke="currentColor" stroke-width="1.5"/><path d="M8 12a4 4 0 010-8" stroke="currentColor" stroke-width="1.5"/></svg>
         Edge
       </a>
       <a href="#" class="cta__browser">
-        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg>
         Firefox
       </a>
     </div>
   </div>
 </section>
 
-<!-- ============================================
-     Footer
-     ============================================ -->
+<!-- Footer -->
 <footer class="footer">
   <div class="container footer__inner">
     <div class="footer__brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
       PromptTune
     </div>
     <span class="footer__copy">&copy; 2026 PromptTune. All rights reserved.</span>
@@ -1539,13 +1792,16 @@
   </div>
 </footer>
 
-<!-- ============================================
-     Scripts
-     ============================================ -->
+<!-- Scripts -->
 <script>
 (function() {
-  const nav = document.getElementById('nav');
-  let ticking = false;
+  'use strict';
+
+  var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Sticky nav
+  var nav = document.getElementById('nav');
+  var ticking = false;
   window.addEventListener('scroll', function() {
     if (!ticking) {
       requestAnimationFrame(function() {
@@ -1556,8 +1812,39 @@
     }
   });
 
-  const reveals = document.querySelectorAll('.reveal');
-  const observer = new IntersectionObserver(function(entries) {
+  // Mobile menu
+  var mobileToggle = document.getElementById('mobileToggle');
+  var mobileMenu = document.getElementById('mobileMenu');
+  var menuOpen = false;
+
+  mobileToggle.addEventListener('click', function() {
+    menuOpen = !menuOpen;
+    mobileToggle.setAttribute('aria-expanded', String(menuOpen));
+    if (menuOpen) {
+      mobileMenu.style.display = 'flex';
+      requestAnimationFrame(function() {
+        mobileMenu.classList.add('open');
+      });
+    } else {
+      mobileMenu.classList.remove('open');
+      setTimeout(function() {
+        if (!menuOpen) mobileMenu.style.display = 'none';
+      }, 300);
+    }
+  });
+
+  mobileMenu.querySelectorAll('a').forEach(function(link) {
+    link.addEventListener('click', function() {
+      menuOpen = false;
+      mobileToggle.setAttribute('aria-expanded', 'false');
+      mobileMenu.classList.remove('open');
+      setTimeout(function() { mobileMenu.style.display = 'none'; }, 300);
+    });
+  });
+
+  // Scroll reveal
+  var reveals = document.querySelectorAll('.reveal');
+  var observer = new IntersectionObserver(function(entries) {
     entries.forEach(function(entry) {
       if (entry.isIntersecting) {
         entry.target.classList.add('visible');
@@ -1568,6 +1855,7 @@
 
   reveals.forEach(function(el) { observer.observe(el); });
 
+  // Smooth anchor scroll
   document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
     anchor.addEventListener('click', function(e) {
       var target = document.querySelector(this.getAttribute('href'));
@@ -1577,6 +1865,149 @@
       }
     });
   });
+
+  // FAQ accordion
+  document.querySelectorAll('.faq__question').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var item = btn.parentElement;
+      var isOpen = item.classList.contains('open');
+
+      document.querySelectorAll('.faq__item.open').forEach(function(openItem) {
+        openItem.classList.remove('open');
+        openItem.querySelector('.faq__question').setAttribute('aria-expanded', 'false');
+      });
+
+      if (!isOpen) {
+        item.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+  });
+
+  // Before/After examples carousel
+  var baExamples = [
+    {
+      before: 'Write me a Python script to scrape a website',
+      after: 'Act as a senior Python developer. Write a production-ready web scraper using <strong>requests</strong> and <strong>BeautifulSoup4</strong> that extracts product titles, prices, and ratings from an e-commerce product listing page. Include proper error handling, rate limiting with 2-second delays between requests, a rotating user-agent header, and output results as structured JSON. Add type hints and docstrings.'
+    },
+    {
+      before: 'Help me write a marketing email',
+      after: 'Act as an experienced email marketing specialist. Write a promotional email for a <strong>B2B SaaS product launch</strong> targeting CTOs of mid-size companies (50-500 employees). Include a compelling subject line under 50 characters, a personalized opening hook, 3 bullet points highlighting key benefits (not features), a clear single CTA button, and a P.S. line with a time-limited offer. Tone: professional but conversational. Length: 150-200 words.'
+    },
+    {
+      before: 'Make my website faster',
+      after: 'Act as a senior web performance engineer. Audit and optimize a <strong>Next.js 14</strong> application for Core Web Vitals. Provide a prioritized checklist covering: LCP optimization (image loading, font strategy, server response time), CLS fixes (layout shift sources, dynamic content), INP improvements (event handlers, main thread blocking). For each item, include the specific code change, expected impact, and measurement method using Lighthouse and Chrome DevTools. Target: LCP < 2.5s, CLS < 0.1, INP < 200ms.'
+    }
+  ];
+
+  var baBefore = document.getElementById('baBefore');
+  var baAfter = document.getElementById('baAfter');
+  var baDots = document.querySelectorAll('.ba__dot');
+  var currentExample = 0;
+
+  baDots.forEach(function(dot) {
+    dot.addEventListener('click', function() {
+      var idx = parseInt(dot.dataset.example);
+      if (idx === currentExample) return;
+      currentExample = idx;
+
+      baDots.forEach(function(d) {
+        d.classList.remove('active');
+        d.setAttribute('aria-selected', 'false');
+      });
+      dot.classList.add('active');
+      dot.setAttribute('aria-selected', 'true');
+
+      var grid = document.getElementById('baGrid');
+      grid.style.opacity = '0';
+      grid.style.transition = 'opacity 0.3s';
+      setTimeout(function() {
+        baBefore.textContent = baExamples[idx].before;
+        baAfter.innerHTML = baExamples[idx].after;
+        grid.style.opacity = '1';
+      }, 300);
+    });
+  });
+
+  // Hero mockup typing animation
+  if (!prefersReducedMotion) {
+    var mockupOriginal = document.getElementById('mockupOriginal');
+    var mockupImproved = document.getElementById('mockupImproved');
+    var mockupBtn = document.getElementById('mockupBtn');
+    var mockupImprovedLabel = document.getElementById('mockupImprovedLabel');
+    var mockupActions = document.getElementById('mockupActions');
+
+    var originalText = 'Explain how to implement authentication in a Node.js app';
+    var improvedText = 'Act as an expert backend developer. Explain step-by-step how to implement JWT-based authentication with refresh token rotation in a Node.js Express app...';
+
+    var origSpan = mockupOriginal.querySelector('.typed-text');
+    var origCursor = mockupOriginal.querySelector('.cursor-blink');
+    var impSpan = mockupImproved.querySelector('.typed-text');
+    var impCursor = mockupImproved.querySelector('.cursor-blink');
+
+    function typeText(el, text, speed, cb) {
+      var i = 0;
+      function tick() {
+        if (i < text.length) {
+          el.textContent += text.charAt(i);
+          i++;
+          setTimeout(tick, speed);
+        } else if (cb) {
+          cb();
+        }
+      }
+      tick();
+    }
+
+    function runMockupAnimation() {
+      origSpan.textContent = '';
+      impSpan.textContent = '';
+      origCursor.style.display = 'inline-block';
+      impCursor.style.display = 'none';
+      mockupBtn.classList.remove('loading');
+      mockupImproved.style.opacity = '0';
+      mockupImprovedLabel.style.opacity = '0';
+      mockupActions.style.opacity = '0';
+
+      setTimeout(function() {
+        typeText(origSpan, originalText, 35, function() {
+          origCursor.style.display = 'none';
+          setTimeout(function() {
+            mockupBtn.classList.add('loading');
+            setTimeout(function() {
+              mockupBtn.classList.remove('loading');
+              mockupImprovedLabel.style.opacity = '1';
+              mockupImproved.style.opacity = '1';
+              impCursor.style.display = 'inline-block';
+              typeText(impSpan, improvedText, 20, function() {
+                impCursor.style.display = 'none';
+                mockupActions.style.opacity = '1';
+                setTimeout(runMockupAnimation, 5000);
+              });
+            }, 1200);
+          }, 400);
+        });
+      }, 800);
+    }
+
+    var heroObserver = new IntersectionObserver(function(entries) {
+      if (entries[0].isIntersecting) {
+        runMockupAnimation();
+        heroObserver.disconnect();
+      }
+    }, { threshold: 0.3 });
+
+    heroObserver.observe(document.querySelector('.hero__visual'));
+  } else {
+    var origSpanStatic = document.querySelector('#mockupOriginal .typed-text');
+    var impSpanStatic = document.querySelector('#mockupImproved .typed-text');
+    origSpanStatic.textContent = 'Explain how to implement authentication in a Node.js app';
+    impSpanStatic.textContent = 'Act as an expert backend developer. Explain step-by-step how to implement JWT-based authentication with refresh token rotation in a Node.js Express app...';
+    document.querySelector('#mockupOriginal .cursor-blink').style.display = 'none';
+    document.getElementById('mockupImproved').style.opacity = '1';
+    document.getElementById('mockupImprovedLabel').style.opacity = '1';
+    document.getElementById('mockupActions').style.opacity = '1';
+  }
 })();
 </script>
 </body>

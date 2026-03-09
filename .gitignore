@@ -21,6 +21,8 @@ __pycache__/
 # IDE
 .idea/
 .vscode/
+.claude/
+.cursor/
 
 # OS
 .DS_Store
@@ -38,6 +40,3 @@ htmlcov/
 
 # MCP
 .mcp.json
-
-# Claude related folder
-.claude/
