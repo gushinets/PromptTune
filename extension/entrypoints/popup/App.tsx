@@ -1,40 +1,225 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
 import { ActionBar } from "./components/ActionBar";
 import { SiteIcons } from "./components/SiteIcons";
+import { Library } from "./components/Library";
+import { ErrorToast } from "./components/ErrorToast";
+import { getAll, save } from "@shared/storage";
+import { LIMITS, FEATURES } from "@shared/constants";
+
+type TabId = "improve" | "library";
+
+export interface ErrorInfo {
+  type: "rate-limit" | "network" | "generic";
+  message: string;
+}
+
+interface ImproveResponse {
+  payload?: {
+    improved_text?: string;
+    rate_limit?: { per_day_remaining: number };
+  };
+}
+
+function SparkleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z" />
+      <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z" />
+    </svg>
+  );
+}
+
+function BookmarkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+    </svg>
+  );
+}
 
 export function App() {
+  const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState("");
   const [improved, setImproved] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(null);
+  const [rateLimit, setRateLimit] = useState({ remaining: 50, total: 50 });
+  const [libraryCount, setLibraryCount] = useState(0);
+
+  const refreshLibraryCount = useCallback(() => {
+    getAll().then((entries) => setLibraryCount(entries.length));
+  }, []);
+
+  useEffect(() => {
+    refreshLibraryCount();
+  }, [refreshLibraryCount]);
+
+  const isExhausted = rateLimit.remaining <= 0;
+
+  const handleImprove = useCallback(async () => {
+    const trimmed = original.trim();
+    if (!trimmed) return;
+
+    if (trimmed.length > LIMITS.MAX_TEXT_LENGTH) {
+      setError({
+        type: "generic",
+        message: `Prompt exceeds maximum length of ${LIMITS.MAX_TEXT_LENGTH.toLocaleString()} characters.`,
+      });
+      return;
+    }
+
+    if (isExhausted) {
+      setError({
+        type: "rate-limit",
+        message: "You've used all 50 requests today. Resets at midnight UTC.",
+      });
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setImproved("");
+
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: "IMPROVE_REQUEST",
+        payload: { text: trimmed },
+      })) as ImproveResponse;
+
+      if (response?.payload?.improved_text) {
+        setImproved(response.payload.improved_text);
+        if (response.payload.rate_limit) {
+          setRateLimit({
+            remaining: response.payload.rate_limit.per_day_remaining,
+            total: rateLimit.total,
+          });
+        }
+      } else {
+        throw new Error("Unexpected response from background.");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+        setError({
+          type: "rate-limit",
+          message: "You've used all 50 requests today. Resets at midnight UTC.",
+        });
+        setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+      } else if (
+        message.includes("Failed to fetch") ||
+        message.includes("NetworkError") ||
+        message.toLowerCase().includes("network")
+      ) {
+        setError({
+          type: "network",
+          message: "Check your internet and try again.",
+        });
+      } else {
+        setError({
+          type: "generic",
+          message: message || "Something went wrong. Please try again.",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [original, isExhausted, rateLimit.total]);
+
+  const handleSave = useCallback(async () => {
+    await save({ original, improved });
+    refreshLibraryCount();
+  }, [original, improved, refreshLibraryCount]);
+
+  const handleDismissError = useCallback(() => {
+    setError(null);
+  }, []);
 
   return (
     <div className="popup-container">
-      <h1 className="popup-title">PromptTune</h1>
-      <PromptForm
-        original={original}
-        improved={improved}
-        loading={loading}
-        error={error}
-        onOriginalChange={setOriginal}
-        onImprove={() => {
-          // TODO: wire up background IMPROVE_REQUEST
-          setLoading(true);
-          setError(null);
-        }}
-      />
-      <ActionBar
-        improved={improved}
-        disabled={!improved}
-        onSave={() => {
-          // TODO: save to library
-        }}
-      />
-      <SiteIcons
-        improved={improved}
-        disabled={!improved}
-      />
+      <header className="header">
+        <div className="header-brand">
+          <SparkleIcon className="header-icon" />
+          <span className="header-title">PromptTune</span>
+        </div>
+        <span
+          className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}
+        >
+          {rateLimit.remaining}/{rateLimit.total} today
+        </span>
+      </header>
+
+      <nav className="tab-bar">
+        <button
+          className={`tab${activeTab === "improve" ? " active" : ""}`}
+          onClick={() => setActiveTab("improve")}
+        >
+          <SparkleIcon className="tab-icon" />
+          Improve
+        </button>
+        <button
+          className={`tab${activeTab === "library" ? " active" : ""}`}
+          onClick={() => {
+            setActiveTab("library");
+            refreshLibraryCount();
+          }}
+        >
+          <BookmarkIcon className="tab-icon" />
+          Library
+          {libraryCount > 0 && (
+            <span className="tab-badge">{libraryCount}</span>
+          )}
+        </button>
+      </nav>
+
+      <div className="tab-content">
+        {activeTab === "improve" ? (
+          <>
+            {error && (
+              <ErrorToast
+                error={error}
+                onDismiss={handleDismissError}
+                onRetry={error.type === "network" ? handleImprove : undefined}
+              />
+            )}
+            <PromptForm
+              original={original}
+              improved={improved}
+              loading={loading}
+              onOriginalChange={setOriginal}
+              onImprove={handleImprove}
+            />
+            <ActionBar
+              improved={improved}
+              disabled={!improved}
+              onSave={handleSave}
+            />
+            {FEATURES.OPEN_AND_PASTE && (
+              <SiteIcons improved={improved} disabled={!improved} />
+            )}
+          </>
+        ) : (
+          <Library onCountChange={setLibraryCount} />
+        )}
+      </div>
     </div>
   );
 }

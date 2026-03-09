@@ -20,6 +20,7 @@ __pycache__/
 
 # IDE
 .idea/
+.vscode/
 
 # OS
 .DS_Store
@@ -34,3 +35,9 @@ coverage/
 htmlcov/
 .coverage
 .pytest_cache/
+
+# MCP
+.mcp.json
+
+# Claude related folder
+.claude/
