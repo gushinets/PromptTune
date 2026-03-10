@@ -15,9 +15,9 @@ async def get_limits(
     redis: aioredis.Redis = Depends(get_redis),
 ):
     limiter = RateLimiter(redis)
-    # Use the same counting logic as in check(), but do not increment.
-    allowed, remaining = await limiter.check(installation_id=installation_id, ip="0.0.0.0")
+    allowed, remaining = await limiter.get_remaining(
+        installation_id=installation_id, ip="0.0.0.0"
+    )
     if remaining is None:
         raise HTTPException(status_code=400, detail="Unable to compute limits")
     return RateLimitInfo(**remaining)
-

@@ -2,6 +2,11 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 @dataclass
 class BotConfig:
@@ -56,33 +61,15 @@ class BotConfig:
     @classmethod
     def from_env(cls) -> "BotConfig":
         """Load configuration from environment variables."""
-        # Load .env file if present (only once at startup)
-        from dotenv import load_dotenv
-        load_dotenv()
-
         return cls()
 
     def validate(self) -> None:
         """Validate configuration consistency and business rules."""
-        # 1. Allowed values for enums
         if self.llm_backend not in ("OPENAI", "OPENROUTER"):
             raise ValueError(
                 f"LLM_BACKEND must be one of: OPENAI, OPENROUTER. Got: {self.llm_backend}"
             )
 
-        # 2. Feature toggle dependencies
-        if self.llm_backend == "OPENAI":
-            if not self.openai_api_key:
-                raise ValueError(
-                    "OPENAI_API_KEY is required when LLM_BACKEND=OPENAI"
-                )
-        elif self.llm_backend == "OPENROUTER":
-            if not self.openrouter_api_key:
-                raise ValueError(
-                    "OPENROUTER_API_KEY is required when LLM_BACKEND=OPENROUTER"
-                )
-
-        # 3. Numeric constraints - must be positive
         if self.free_req_per_day <= 0:
             raise ValueError(
                 f"FREE_REQ_PER_DAY must be positive. Got: {self.free_req_per_day}"
@@ -97,7 +84,5 @@ class BotConfig:
             )
 
 
-# Global config instance - initialized at module import
-# Use `settings` for backward compatibility with existing code
 settings = BotConfig.from_env()
 settings.validate()
