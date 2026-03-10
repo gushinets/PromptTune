@@ -6,6 +6,7 @@
   <title>PromptTune — Write Better AI Prompts in One Click</title>
   <meta name="description" content="Free browser extension that instantly improves your prompts for ChatGPT, Claude, Perplexity, Groq and Deepseek. No login. No setup. Just better prompts.">
   <meta name="theme-color" content="#0b1022">
+  <script>(function(){if(localStorage.getItem('pt_theme')==='light'){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name="theme-color"]');if(m)m.content='#f8fafc'}})()</script>
   <meta property="og:title" content="PromptTune — Write Better AI Prompts in One Click">
   <meta property="og:description" content="Free browser extension that instantly transforms vague prompts into precise, effective instructions for any AI chatbot.">
   <meta property="og:type" content="website">
@@ -50,6 +51,155 @@
       --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
       --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+
+    /* ---- Light Theme ---- */
+    [data-theme="light"] {
+      --bg-deep: #f8fafc;
+      --bg-base: #f1f5f9;
+      --bg-elevated: #ffffff;
+      --bg-card: #ffffff;
+      --bg-card-hover: #f8fafc;
+
+      --purple-light: #7c3aed;
+      --purple-glow: rgba(124, 58, 237, 0.15);
+      --blue-light: #3b82f6;
+      --teal: #0d9488;
+      --teal-glow: rgba(13, 148, 136, 0.12);
+
+      --grad-hero: linear-gradient(160deg, #f8fafc 0%, #ede9fe 40%, #dbeafe 70%, #f8fafc 100%);
+      --grad-text: linear-gradient(135deg, #7c3aed 0%, #3b82f6 50%, #0d9488 100%);
+
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
+      --text-muted: #64748b;
+
+      --border: rgba(15, 23, 42, 0.08);
+      --border-card: rgba(15, 23, 42, 0.12);
+    }
+
+    [data-theme="light"] .bg-grid {
+      background-image:
+        linear-gradient(rgba(15,23,42,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15,23,42,0.04) 1px, transparent 1px);
+    }
+
+    [data-theme="light"] .bg-orb--purple { background: rgba(124, 58, 237, 0.05); }
+    [data-theme="light"] .bg-orb--blue { background: rgba(59, 130, 246, 0.04); }
+    [data-theme="light"] .bg-orb--teal { background: rgba(13, 148, 136, 0.04); }
+
+    [data-theme="light"] .nav.scrolled { background: rgba(248, 250, 252, 0.85); }
+    [data-theme="light"] .nav__mobile-menu { background: rgba(248, 250, 252, 0.96); }
+    [data-theme="light"] .nav__mobile-toggle:hover { background: rgba(15, 23, 42, 0.06); }
+
+    [data-theme="light"] .hero__glow {
+      background: radial-gradient(ellipse, rgba(124,58,237,0.06) 0%, rgba(59,130,246,0.03) 40%, transparent 70%);
+    }
+
+    [data-theme="light"] .hero__badge {
+      background: rgba(124, 58, 237, 0.06);
+      border-color: rgba(124, 58, 237, 0.12);
+    }
+
+    [data-theme="light"] .lang-toggle { background: rgba(15, 23, 42, 0.04); }
+
+    [data-theme="light"] .btn--ghost { background: rgba(15, 23, 42, 0.04); }
+    [data-theme="light"] .btn--ghost:hover { background: rgba(15, 23, 42, 0.08); }
+
+    [data-theme="light"] .mockup {
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,0.06),
+        0 20px 60px rgba(0,0,0,0.08),
+        0 0 120px rgba(124, 58, 237, 0.06);
+    }
+
+    [data-theme="light"] .mockup__float-tag { box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
+
+    [data-theme="light"] .mockup__badge {
+      background: rgba(124,58,237,0.08);
+      border-color: rgba(124,58,237,0.15);
+    }
+
+    [data-theme="light"] .stat:hover { box-shadow: 0 12px 40px rgba(0,0,0,0.06); }
+
+    [data-theme="light"] .step:nth-child(1) .step__number {
+      background: rgba(124, 58, 237, 0.08);
+      border-color: rgba(124, 58, 237, 0.15);
+    }
+    [data-theme="light"] .step:nth-child(2) .step__number {
+      background: rgba(59, 130, 246, 0.08);
+      border-color: rgba(59, 130, 246, 0.15);
+    }
+    [data-theme="light"] .step:nth-child(3) .step__number {
+      background: rgba(13, 148, 136, 0.08);
+      border-color: rgba(13, 148, 136, 0.15);
+    }
+
+    [data-theme="light"] .ba__card--after {
+      border-color: rgba(13, 148, 136, 0.2);
+      box-shadow: 0 0 60px rgba(13, 148, 136, 0.04);
+    }
+
+    [data-theme="light"] .feature:hover {
+      border-color: rgba(124, 58, 237, 0.15);
+      box-shadow: 0 16px 50px rgba(0,0,0,0.08);
+    }
+
+    [data-theme="light"] .feature__icon--purple { background: rgba(124, 58, 237, 0.07); border-color: rgba(124, 58, 237, 0.14); }
+    [data-theme="light"] .feature__icon--blue { background: rgba(59, 130, 246, 0.07); border-color: rgba(59, 130, 246, 0.14); }
+    [data-theme="light"] .feature__icon--teal { background: rgba(13, 148, 136, 0.07); border-color: rgba(13, 148, 136, 0.14); }
+
+    [data-theme="light"] .pricing__label {
+      background: rgba(13, 148, 136, 0.06);
+      border-color: rgba(13, 148, 136, 0.15);
+    }
+
+    [data-theme="light"] .pricing__check { background: rgba(13, 148, 136, 0.08); }
+
+    [data-theme="light"] .cta__glow {
+      background: radial-gradient(ellipse, rgba(124,58,237,0.05) 0%, transparent 70%);
+    }
+
+    [data-theme="light"] .cta__browser:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.06); }
+
+    /* ---- Nav Actions Group ---- */
+    .nav__actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* ---- Theme Toggle ---- */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid var(--border-card);
+      border-radius: 10px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s, transform 0.2s var(--ease-bounce);
+      flex-shrink: 0;
+    }
+
+    .theme-toggle:hover {
+      color: var(--text-primary);
+      background: rgba(148, 163, 184, 0.14);
+      transform: scale(1.08);
+    }
+
+    .theme-toggle svg { width: 18px; height: 18px; transition: transform 0.3s var(--ease-out); }
+    .theme-toggle:hover svg { transform: rotate(15deg); }
+
+    .theme-toggle__sun { display: block; }
+    .theme-toggle__moon { display: none; }
+
+    [data-theme="light"] .theme-toggle { background: rgba(15, 23, 42, 0.04); }
+    [data-theme="light"] .theme-toggle:hover { background: rgba(15, 23, 42, 0.08); }
+    [data-theme="light"] .theme-toggle__sun { display: none; }
+    [data-theme="light"] .theme-toggle__moon { display: block; }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -204,6 +354,39 @@
     }
 
     .nav__mobile-toggle:hover { background: rgba(148, 163, 184, 0.08); }
+
+    /* Language toggle */
+    .lang-toggle {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(148, 163, 184, 0.08);
+      border: 1px solid var(--border-card);
+      border-radius: 100px;
+      padding: 3px;
+      gap: 0;
+      flex-shrink: 0;
+    }
+
+    .lang-toggle__btn {
+      padding: 5px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      border-radius: 100px;
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+      line-height: 1;
+    }
+
+    .lang-toggle__btn:hover { color: var(--text-secondary); }
+
+    .lang-toggle__btn.active {
+      background: var(--grad-primary);
+      color: #fff;
+      box-shadow: 0 2px 8px var(--purple-glow);
+    }
 
     /* Mobile menu */
     .nav__mobile-menu {
@@ -1318,25 +1501,35 @@
       PromptTune
     </a>
     <ul class="nav__links">
-      <li><a href="#how-it-works">How It Works</a></li>
-      <li><a href="#features">Features</a></li>
-      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#how-it-works" data-i18n="nav_how">How It Works</a></li>
+      <li><a href="#features" data-i18n="nav_features">Features</a></li>
+      <li><a href="#pricing" data-i18n="nav_pricing">Pricing</a></li>
       <li><a href="#faq">FAQ</a></li>
     </ul>
-    <a href="#install" class="nav__cta nav__cta--desktop">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Install Free
-    </a>
-    <button class="nav__mobile-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileToggle">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-    </button>
+    <div class="nav__actions">
+      <div class="lang-toggle" role="radiogroup" aria-label="Language">
+        <button class="lang-toggle__btn active" data-lang="en" role="radio" aria-checked="true">EN</button>
+        <button class="lang-toggle__btn" data-lang="ru" role="radio" aria-checked="false">RU</button>
+      </div>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        <svg class="theme-toggle__sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg class="theme-toggle__moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <a href="#install" class="nav__cta nav__cta--desktop">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span data-i18n="nav_cta">Install Free</span>
+      </a>
+      <button class="nav__mobile-toggle" aria-label="Toggle menu" aria-expanded="false" id="mobileToggle">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
   </div>
   <div class="nav__mobile-menu" id="mobileMenu" role="menu">
-    <a href="#how-it-works" role="menuitem">How It Works</a>
-    <a href="#features" role="menuitem">Features</a>
-    <a href="#pricing" role="menuitem">Pricing</a>
+    <a href="#how-it-works" role="menuitem" data-i18n="nav_how">How It Works</a>
+    <a href="#features" role="menuitem" data-i18n="nav_features">Features</a>
+    <a href="#pricing" role="menuitem" data-i18n="nav_pricing">Pricing</a>
     <a href="#faq" role="menuitem">FAQ</a>
-    <a href="#install" class="btn btn--primary" role="menuitem">Install Free</a>
+    <a href="#install" class="btn btn--primary" role="menuitem" data-i18n="nav_cta">Install Free</a>
   </div>
 </nav>
 
@@ -1350,29 +1543,29 @@
     <div class="hero__text">
       <div class="hero__badge">
         <span class="hero__badge-dot"></span>
-        Free &middot; No login required
+        <span data-i18n-html="hero_badge">Free &middot; No login required</span>
       </div>
-      <h1 class="hero__title">
+      <h1 class="hero__title" data-i18n-html="hero_title">
         Write better<br>AI prompts<br><span class="hero__title-grad">in one click</span>
       </h1>
-      <p class="hero__sub">
+      <p class="hero__sub" data-i18n="hero_sub">
         PromptTune is a free browser extension that instantly transforms vague prompts into precise, effective instructions for any AI chatbot.
       </p>
       <div class="hero__actions">
         <a href="#install" class="btn btn--primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Install for Free
+          <span data-i18n="hero_cta_install">Install for Free</span>
         </a>
         <a href="#demo" class="btn btn--ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          See it in action
+          <span data-i18n="hero_cta_demo">See it in action</span>
         </a>
       </div>
-      <p class="hero__free"><strong>50 free improvements</strong> per day &middot; Chrome, Edge &amp; Firefox</p>
+      <p class="hero__free" data-i18n-html="hero_free"><strong>50 free improvements</strong> per day &middot; Chrome, Edge &amp; Firefox</p>
     </div>
 
     <div class="hero__visual">
-      <div class="mockup__float-tag mockup__float-tag--top">
+      <div class="mockup__float-tag mockup__float-tag--top" data-i18n-html="float_specific">
         <strong>+42%</strong> more specific
       </div>
 
@@ -1386,12 +1579,12 @@
         </div>
 
         <div class="mockup__tabs">
-          <div class="mockup__tab mockup__tab--active">Improve</div>
-          <div class="mockup__tab">Library</div>
+          <div class="mockup__tab mockup__tab--active" data-i18n="mock_improve">Improve</div>
+          <div class="mockup__tab" data-i18n="mock_library">Library</div>
         </div>
 
         <div class="mockup__body">
-          <div class="mockup__label">Original Prompt</div>
+          <div class="mockup__label" data-i18n="mock_original_label">Original Prompt</div>
           <div class="mockup__textarea" id="mockupOriginal">
             <span class="typed-text"></span><span class="cursor-blink"></span>
           </div>
@@ -1399,19 +1592,19 @@
           <div class="mockup__btn-improve" id="mockupBtn">
             <span class="mockup__btn-label">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/></svg>
-              Improve
+              <span data-i18n="mock_improve">Improve</span>
             </span>
             <span class="mockup__spinner"></span>
           </div>
 
-          <div class="mockup__label" id="mockupImprovedLabel" style="opacity:0;transition:opacity 0.3s;">Improved Prompt</div>
+          <div class="mockup__label" id="mockupImprovedLabel" style="opacity:0;transition:opacity 0.3s;" data-i18n="mock_improved_label">Improved Prompt</div>
           <div class="mockup__textarea mockup__textarea--improved" id="mockupImproved" style="opacity:0;transition:opacity 0.3s;">
             <span class="typed-text"></span><span class="cursor-blink" style="display:none;"></span>
           </div>
 
           <div class="mockup__actions" id="mockupActions" style="opacity:0;transition:opacity 0.3s;">
-            <div class="mockup__action">Copy</div>
-            <div class="mockup__action">Save to Library</div>
+            <div class="mockup__action" data-i18n="mock_copy">Copy</div>
+            <div class="mockup__action" data-i18n="mock_save">Save to Library</div>
           </div>
 
           <div class="mockup__sites">
@@ -1424,7 +1617,7 @@
         </div>
       </div>
 
-      <div class="mockup__float-tag mockup__float-tag--bottom">
+      <div class="mockup__float-tag mockup__float-tag--bottom" data-i18n-html="float_saved">
         Saved <strong>12 prompts</strong>
       </div>
     </div>
@@ -1434,7 +1627,7 @@
 <!-- Supported Sites -->
 <section class="logos">
   <div class="container">
-    <p class="logos__label">Works with the AI tools you already use</p>
+    <p class="logos__label" data-i18n="logos_label">Works with the AI tools you already use</p>
     <div class="logos__grid">
       <div class="logo-item">
         <div class="logo-item__icon" style="background:#10a37f;">
@@ -1476,19 +1669,19 @@
     <div class="stats__grid">
       <div class="stat reveal">
         <div class="stat__value" data-target="50">50</div>
-        <div class="stat__label">Free daily improvements</div>
+        <div class="stat__label" data-i18n="stat_daily">Free daily improvements</div>
       </div>
       <div class="stat reveal reveal-delay-1">
         <div class="stat__value">5</div>
-        <div class="stat__label">AI platforms supported</div>
+        <div class="stat__label" data-i18n="stat_platforms">AI platforms supported</div>
       </div>
       <div class="stat reveal reveal-delay-2">
         <div class="stat__value">3</div>
-        <div class="stat__label">Browsers supported</div>
+        <div class="stat__label" data-i18n="stat_browsers">Browsers supported</div>
       </div>
       <div class="stat reveal reveal-delay-3">
         <div class="stat__value">0s</div>
-        <div class="stat__label">Setup time required</div>
+        <div class="stat__label" data-i18n="stat_setup">Setup time required</div>
       </div>
     </div>
   </div>
@@ -1498,30 +1691,30 @@
 <section class="section" id="how-it-works">
   <div class="bg-orb bg-orb--teal" style="top:100px;right:-100px;"></div>
   <div class="container">
-    <p class="section__eyebrow reveal">How It Works</p>
-    <h2 class="section__title reveal reveal-delay-1">Three steps to a<br>perfect prompt</h2>
-    <p class="section__sub reveal reveal-delay-2">
+    <p class="section__eyebrow reveal" data-i18n="how_eyebrow">How It Works</p>
+    <h2 class="section__title reveal reveal-delay-1" data-i18n-html="how_title">Three steps to a<br>perfect prompt</h2>
+    <p class="section__sub reveal reveal-delay-2" data-i18n="how_sub">
       No account. No configuration. Just install and start writing better prompts immediately.
     </p>
     <div class="steps">
       <div class="step reveal reveal-delay-1">
         <div class="step__number">1</div>
-        <h3 class="step__title">Write your prompt</h3>
-        <p class="step__desc">
+        <h3 class="step__title" data-i18n="step1_title">Write your prompt</h3>
+        <p class="step__desc" data-i18n="step1_desc">
           Type or paste any prompt in the PromptTune popup, or use it directly on supported AI sites.
         </p>
       </div>
       <div class="step reveal reveal-delay-2">
         <div class="step__number">2</div>
-        <h3 class="step__title">Click Improve</h3>
-        <p class="step__desc">
+        <h3 class="step__title" data-i18n="step2_title">Click Improve</h3>
+        <p class="step__desc" data-i18n="step2_desc">
           AI rewrites your prompt with clear structure, context, and specificity that gets better results.
         </p>
       </div>
       <div class="step reveal reveal-delay-3">
         <div class="step__number">3</div>
-        <h3 class="step__title">Use anywhere</h3>
-        <p class="step__desc">
+        <h3 class="step__title" data-i18n="step3_title">Use anywhere</h3>
+        <p class="step__desc" data-i18n="step3_desc">
           Copy to clipboard, save to your library, or open &amp; paste directly into ChatGPT, Claude, and more.
         </p>
       </div>
@@ -1532,14 +1725,14 @@
 <!-- Before & After -->
 <section class="section before-after" id="demo">
   <div class="container">
-    <p class="section__eyebrow reveal">See the Difference</p>
-    <h2 class="section__title reveal reveal-delay-1">Before &amp; after<br>PromptTune</h2>
-    <p class="section__sub reveal reveal-delay-2">
+    <p class="section__eyebrow reveal" data-i18n="ba_eyebrow">See the Difference</p>
+    <h2 class="section__title reveal reveal-delay-1" data-i18n-html="ba_title">Before &amp; after<br>PromptTune</h2>
+    <p class="section__sub reveal reveal-delay-2" data-i18n="ba_sub">
       Watch how a basic prompt becomes a detailed, structured instruction that AI actually understands.
     </p>
     <div class="ba__grid reveal reveal-delay-3" id="baGrid">
       <div class="ba__card ba__card--before">
-        <div class="ba__card-label">Before</div>
+        <div class="ba__card-label" data-i18n="ba_before_label">Before</div>
         <p class="ba__card-text" id="baBefore">
           Write me a Python script to scrape a website
         </p>
@@ -1550,7 +1743,7 @@
         </div>
       </div>
       <div class="ba__card ba__card--after">
-        <div class="ba__card-label">After PromptTune</div>
+        <div class="ba__card-label" data-i18n="ba_after_label">After PromptTune</div>
         <p class="ba__card-text" id="baAfter">
           Act as a senior Python developer. Write a production-ready web scraper using <strong>requests</strong> and <strong>BeautifulSoup4</strong> that extracts product titles, prices, and ratings from an e-commerce product listing page. Include proper error handling, rate limiting with 2-second delays between requests, a rotating user-agent header, and output results as structured JSON. Add type hints and docstrings.
         </p>
@@ -1568,9 +1761,9 @@
 <section class="section" id="features">
   <div class="bg-orb bg-orb--purple" style="top:200px;left:-200px;"></div>
   <div class="container">
-    <p class="section__eyebrow reveal">Features</p>
-    <h2 class="section__title reveal reveal-delay-1">Everything you need,<br>nothing you don't</h2>
-    <p class="section__sub reveal reveal-delay-2">
+    <p class="section__eyebrow reveal" data-i18n="feat_eyebrow">Features</p>
+    <h2 class="section__title reveal reveal-delay-1" data-i18n-html="feat_title">Everything you need,<br>nothing you don't</h2>
+    <p class="section__sub reveal reveal-delay-2" data-i18n="feat_sub">
       Focused on one thing and doing it exceptionally well: making your AI prompts better.
     </p>
     <div class="features__grid">
@@ -1578,8 +1771,8 @@
         <div class="feature__icon feature__icon--purple">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
         </div>
-        <h3 class="feature__title">AI-Powered Rewriting</h3>
-        <p class="feature__desc">
+        <h3 class="feature__title" data-i18n="f1_title">AI-Powered Rewriting</h3>
+        <p class="feature__desc" data-i18n="f1_desc">
           Advanced language models analyze your prompt and rewrite it with better structure, specificity, and context.
         </p>
       </div>
@@ -1588,8 +1781,8 @@
         <div class="feature__icon feature__icon--blue">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
-        <h3 class="feature__title">No Account Required</h3>
-        <p class="feature__desc">
+        <h3 class="feature__title" data-i18n="f2_title">No Account Required</h3>
+        <p class="feature__desc" data-i18n="f2_desc">
           Start improving prompts immediately. No registration, no email, no personal data collected. Privacy first.
         </p>
       </div>
@@ -1598,8 +1791,8 @@
         <div class="feature__icon feature__icon--teal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
         </div>
-        <h3 class="feature__title">Open &amp; Paste</h3>
-        <p class="feature__desc">
+        <h3 class="feature__title" data-i18n="f3_title">Open &amp; Paste</h3>
+        <p class="feature__desc" data-i18n="f3_desc">
           One click to open ChatGPT, Claude, or any supported site and auto-paste your improved prompt.
         </p>
       </div>
@@ -1608,8 +1801,8 @@
         <div class="feature__icon feature__icon--teal">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
         </div>
-        <h3 class="feature__title">Prompt Library</h3>
-        <p class="feature__desc">
+        <h3 class="feature__title" data-i18n="f4_title">Prompt Library</h3>
+        <p class="feature__desc" data-i18n="f4_desc">
           Save your best prompts locally. Search, filter by site, and reuse them anytime without any limits.
         </p>
       </div>
@@ -1618,8 +1811,8 @@
         <div class="feature__icon feature__icon--purple">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
         </div>
-        <h3 class="feature__title">Cross-Browser</h3>
-        <p class="feature__desc">
+        <h3 class="feature__title" data-i18n="f5_title">Cross-Browser</h3>
+        <p class="feature__desc" data-i18n="f5_desc">
           Works on Chrome, Edge, and Firefox. Same experience everywhere you browse. Safari coming soon.
         </p>
       </div>
@@ -1628,8 +1821,8 @@
         <div class="feature__icon feature__icon--blue">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         </div>
-        <h3 class="feature__title">In-Page Toolbar</h3>
-        <p class="feature__desc">
+        <h3 class="feature__title" data-i18n="f6_title">In-Page Toolbar</h3>
+        <p class="feature__desc" data-i18n="f6_desc">
           A subtle toolbar appears next to the AI composer. Improve your prompt without even opening the popup.
         </p>
       </div>
@@ -1640,40 +1833,40 @@
 <!-- Pricing -->
 <section class="section pricing" id="pricing">
   <div class="container">
-    <p class="section__eyebrow reveal">Pricing</p>
-    <h2 class="section__title reveal reveal-delay-1">Free. Really.</h2>
-    <p class="section__sub reveal reveal-delay-2">
+    <p class="section__eyebrow reveal" data-i18n="price_eyebrow">Pricing</p>
+    <h2 class="section__title reveal reveal-delay-1" data-i18n="price_title">Free. Really.</h2>
+    <p class="section__sub reveal reveal-delay-2" data-i18n="price_sub">
       PromptTune is free to use with a generous daily limit. No hidden costs, no credit card, no catch.
     </p>
     <div class="pricing__card reveal reveal-delay-3">
-      <span class="pricing__label">Current plan</span>
+      <span class="pricing__label" data-i18n="price_label">Current plan</span>
       <div class="pricing__price">$0</div>
-      <p class="pricing__period">Free forever &middot; No credit card</p>
+      <p class="pricing__period" data-i18n-html="price_period">Free forever &middot; No credit card</p>
       <ul class="pricing__features">
         <li>
           <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
-          50 prompt improvements per day
+          <span data-i18n="pl1">50 prompt improvements per day</span>
         </li>
         <li>
           <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
-          Unlimited local prompt library
+          <span data-i18n="pl2">Unlimited local prompt library</span>
         </li>
         <li>
           <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
-          Open &amp; Paste to 5 AI sites
+          <span data-i18n="pl3">Open &amp; Paste to 5 AI sites</span>
         </li>
         <li>
           <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
-          Chrome, Edge &amp; Firefox support
+          <span data-i18n="pl4">Chrome, Edge &amp; Firefox support</span>
         </li>
         <li>
           <span class="pricing__check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
-          No account required
+          <span data-i18n="pl5">No account required</span>
         </li>
       </ul>
       <a href="#install" class="btn btn--primary" style="width:100%;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Install for Free
+        <span data-i18n="hero_cta_install">Install for Free</span>
       </a>
     </div>
   </div>
@@ -1683,63 +1876,63 @@
 <section class="section" id="faq">
   <div class="container">
     <p class="section__eyebrow reveal">FAQ</p>
-    <h2 class="section__title reveal reveal-delay-1">Common questions</h2>
-    <p class="section__sub reveal reveal-delay-2">
+    <h2 class="section__title reveal reveal-delay-1" data-i18n="faq_title">Common questions</h2>
+    <p class="section__sub reveal reveal-delay-2" data-i18n="faq_sub">
       Everything you need to know about PromptTune before getting started.
     </p>
     <div class="faq__grid">
       <div class="faq__item reveal reveal-delay-1">
         <button class="faq__question" aria-expanded="false">
-          Is PromptTune really free?
+          <span data-i18n="fq1">Is PromptTune really free?</span>
           <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq__answer">
-          <p>Yes, completely free. You get 50 prompt improvements per day with no sign-up, no credit card, and no hidden costs. The daily limit resets at midnight UTC.</p>
+          <p data-i18n="fa1">Yes, completely free. You get 50 prompt improvements per day with no sign-up, no credit card, and no hidden costs. The daily limit resets at midnight UTC.</p>
         </div>
       </div>
       <div class="faq__item reveal reveal-delay-2">
         <button class="faq__question" aria-expanded="false">
-          Which browsers are supported?
+          <span data-i18n="fq2">Which browsers are supported?</span>
           <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq__answer">
-          <p>PromptTune works on Chrome, Microsoft Edge, and Firefox. All Chromium-based browsers (Brave, Vivaldi, Arc) are also supported. Safari support is planned.</p>
+          <p data-i18n="fa2">PromptTune works on Chrome, Microsoft Edge, and Firefox. All Chromium-based browsers (Brave, Vivaldi, Arc) are also supported. Safari support is planned.</p>
         </div>
       </div>
       <div class="faq__item reveal reveal-delay-3">
         <button class="faq__question" aria-expanded="false">
-          Do I need to create an account?
+          <span data-i18n="fq3">Do I need to create an account?</span>
           <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq__answer">
-          <p>No. PromptTune works immediately after installation with zero configuration. No email, no password, no personal data collected.</p>
+          <p data-i18n="fa3">No. PromptTune works immediately after installation with zero configuration. No email, no password, no personal data collected.</p>
         </div>
       </div>
       <div class="faq__item reveal reveal-delay-4">
         <button class="faq__question" aria-expanded="false">
-          Is my data private?
+          <span data-i18n="fq4">Is my data private?</span>
           <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq__answer">
-          <p>Your prompts are sent to our backend for AI processing and are not shared with third parties. Your saved prompt library is stored locally in your browser and never leaves your device.</p>
+          <p data-i18n="fa4">Your prompts are sent to our backend for AI processing and are not shared with third parties. Your saved prompt library is stored locally in your browser and never leaves your device.</p>
         </div>
       </div>
       <div class="faq__item reveal">
         <button class="faq__question" aria-expanded="false">
-          Which AI sites does Open & Paste support?
+          <span data-i18n="fq5">Which AI sites does Open & Paste support?</span>
           <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq__answer">
-          <p>Currently supported: ChatGPT, Claude, Perplexity, Groq, and Deepseek. We're continuously adding more sites based on user feedback.</p>
+          <p data-i18n="fa5">Currently supported: ChatGPT, Claude, Perplexity, Groq, and Deepseek. We're continuously adding more sites based on user feedback.</p>
         </div>
       </div>
       <div class="faq__item reveal reveal-delay-1">
         <button class="faq__question" aria-expanded="false">
-          What happens when I hit the daily limit?
+          <span data-i18n="fq6">What happens when I hit the daily limit?</span>
           <svg class="faq__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
         <div class="faq__answer">
-          <p>You'll see a friendly notification that your limit has been reached. Your 50 improvements reset at midnight UTC. Your saved library and previously improved prompts remain accessible.</p>
+          <p data-i18n="fa6">You'll see a friendly notification that your limit has been reached. Your 50 improvements reset at midnight UTC. Your saved library and previously improved prompts remain accessible.</p>
         </div>
       </div>
     </div>
@@ -1750,14 +1943,14 @@
 <section class="section cta" id="install">
   <div class="cta__glow"></div>
   <div class="container" style="position:relative;z-index:1;">
-    <p class="section__eyebrow reveal">Get Started</p>
-    <h2 class="section__title reveal reveal-delay-1">Stop guessing.<br>Start prompting.</h2>
-    <p class="section__sub reveal reveal-delay-2">
+    <p class="section__eyebrow reveal" data-i18n="cta_eyebrow">Get Started</p>
+    <h2 class="section__title reveal reveal-delay-1" data-i18n-html="cta_title">Stop guessing.<br>Start prompting.</h2>
+    <p class="section__sub reveal reveal-delay-2" data-i18n="cta_sub">
       Join thousands of people who get better AI responses every day with PromptTune.
     </p>
     <a href="#" class="btn btn--primary reveal reveal-delay-3" style="margin-bottom:8px;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      Install PromptTune
+      <span data-i18n="cta_btn">Install PromptTune</span>
     </a>
     <div class="cta__browsers reveal reveal-delay-4">
       <a href="#" class="cta__browser">
@@ -1783,10 +1976,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/><path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z"/></svg>
       PromptTune
     </div>
-    <span class="footer__copy">&copy; 2026 PromptTune. All rights reserved.</span>
+    <span class="footer__copy" data-i18n-html="footer_copy">&copy; 2026 PromptTune. All rights reserved.</span>
     <ul class="footer__links">
-      <li><a href="#">Privacy Policy</a></li>
-      <li><a href="#">Terms</a></li>
+      <li><a href="#" data-i18n="footer_privacy">Privacy Policy</a></li>
+      <li><a href="#" data-i18n="footer_terms">Terms</a></li>
       <li><a href="https://github.com" target="_blank" rel="noopener">GitHub</a></li>
     </ul>
   </div>
@@ -1797,9 +1990,176 @@
 (function() {
   'use strict';
 
+  /* ========== Theme toggle ========== */
+  var themeToggle = document.getElementById('themeToggle');
+  var currentTheme = localStorage.getItem('pt_theme') || 'dark';
+
+  function applyTheme(theme) {
+    currentTheme = theme;
+    if (theme === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    localStorage.setItem('pt_theme', theme);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === 'light' ? '#f8fafc' : '#0b1022';
+  }
+
+  themeToggle.addEventListener('click', function() {
+    applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  });
+
+  /* ========== i18n dictionary ========== */
+  var T = {
+    en: {
+      nav_how: 'How It Works', nav_features: 'Features', nav_pricing: 'Pricing', nav_cta: 'Install Free',
+      hero_badge: 'Free &middot; No login required',
+      hero_title: 'Write better<br>AI prompts<br><span class="hero__title-grad">in one click</span>',
+      hero_sub: 'PromptTune is a free browser extension that instantly transforms vague prompts into precise, effective instructions for any AI chatbot.',
+      hero_cta_install: 'Install for Free', hero_cta_demo: 'See it in action',
+      hero_free: '<strong>50 free improvements</strong> per day &middot; Chrome, Edge &amp; Firefox',
+      float_specific: '<strong>+42%</strong> more specific', float_saved: 'Saved <strong>12 prompts</strong>',
+      mock_improve: 'Improve', mock_library: 'Library',
+      mock_original_label: 'Original Prompt', mock_improved_label: 'Improved Prompt',
+      mock_copy: 'Copy', mock_save: 'Save to Library',
+      logos_label: 'Works with the AI tools you already use',
+      stat_daily: 'Free daily improvements', stat_platforms: 'AI platforms supported',
+      stat_browsers: 'Browsers supported', stat_setup: 'Setup time required',
+      how_eyebrow: 'How It Works', how_title: 'Three steps to a<br>perfect prompt',
+      how_sub: 'No account. No configuration. Just install and start writing better prompts immediately.',
+      step1_title: 'Write your prompt', step1_desc: 'Type or paste any prompt in the PromptTune popup, or use it directly on supported AI sites.',
+      step2_title: 'Click Improve', step2_desc: 'AI rewrites your prompt with clear structure, context, and specificity that gets better results.',
+      step3_title: 'Use anywhere', step3_desc: 'Copy to clipboard, save to your library, or open & paste directly into ChatGPT, Claude, and more.',
+      ba_eyebrow: 'See the Difference', ba_title: 'Before &amp; after<br>PromptTune',
+      ba_sub: 'Watch how a basic prompt becomes a detailed, structured instruction that AI actually understands.',
+      ba_before_label: 'Before', ba_after_label: 'After PromptTune',
+      feat_eyebrow: 'Features', feat_title: 'Everything you need,<br>nothing you don\'t',
+      feat_sub: 'Focused on one thing and doing it exceptionally well: making your AI prompts better.',
+      f1_title: 'AI-Powered Rewriting', f1_desc: 'Advanced language models analyze your prompt and rewrite it with better structure, specificity, and context.',
+      f2_title: 'No Account Required', f2_desc: 'Start improving prompts immediately. No registration, no email, no personal data collected. Privacy first.',
+      f3_title: 'Open & Paste', f3_desc: 'One click to open ChatGPT, Claude, or any supported site and auto-paste your improved prompt.',
+      f4_title: 'Prompt Library', f4_desc: 'Save your best prompts locally. Search, filter by site, and reuse them anytime without any limits.',
+      f5_title: 'Cross-Browser', f5_desc: 'Works on Chrome, Edge, and Firefox. Same experience everywhere you browse. Safari coming soon.',
+      f6_title: 'In-Page Toolbar', f6_desc: 'A subtle toolbar appears next to the AI composer. Improve your prompt without even opening the popup.',
+      price_eyebrow: 'Pricing', price_title: 'Free. Really.',
+      price_sub: 'PromptTune is free to use with a generous daily limit. No hidden costs, no credit card, no catch.',
+      price_label: 'Current plan', price_period: 'Free forever &middot; No credit card',
+      pl1: '50 prompt improvements per day', pl2: 'Unlimited local prompt library',
+      pl3: 'Open & Paste to 5 AI sites', pl4: 'Chrome, Edge & Firefox support', pl5: 'No account required',
+      faq_title: 'Common questions', faq_sub: 'Everything you need to know about PromptTune before getting started.',
+      fq1: 'Is PromptTune really free?', fa1: 'Yes, completely free. You get 50 prompt improvements per day with no sign-up, no credit card, and no hidden costs. The daily limit resets at midnight UTC.',
+      fq2: 'Which browsers are supported?', fa2: 'PromptTune works on Chrome, Microsoft Edge, and Firefox. All Chromium-based browsers (Brave, Vivaldi, Arc) are also supported. Safari support is planned.',
+      fq3: 'Do I need to create an account?', fa3: 'No. PromptTune works immediately after installation with zero configuration. No email, no password, no personal data collected.',
+      fq4: 'Is my data private?', fa4: 'Your prompts are sent to our backend for AI processing and are not shared with third parties. Your saved prompt library is stored locally in your browser and never leaves your device.',
+      fq5: 'Which AI sites does Open & Paste support?', fa5: 'Currently supported: ChatGPT, Claude, Perplexity, Groq, and Deepseek. We\'re continuously adding more sites based on user feedback.',
+      fq6: 'What happens when I hit the daily limit?', fa6: 'You\'ll see a friendly notification that your limit has been reached. Your 50 improvements reset at midnight UTC. Your saved library and previously improved prompts remain accessible.',
+      cta_eyebrow: 'Get Started', cta_title: 'Stop guessing.<br>Start prompting.',
+      cta_sub: 'Join thousands of people who get better AI responses every day with PromptTune.', cta_btn: 'Install PromptTune',
+      footer_copy: '&copy; 2026 PromptTune. All rights reserved.', footer_privacy: 'Privacy Policy', footer_terms: 'Terms'
+    },
+    ru: {
+      nav_how: 'Как это работает', nav_features: 'Возможности', nav_pricing: 'Цена', nav_cta: 'Установить',
+      hero_badge: 'Бесплатно &middot; Без регистрации',
+      hero_title: 'Улучшайте<br>AI-промпты<br><span class="hero__title-grad">в один клик</span>',
+      hero_sub: 'PromptTune \u2014 бесплатное расширение для браузера, которое мгновенно превращает расплывчатые промпты в точные и эффективные инструкции для любого AI-чатбота.',
+      hero_cta_install: 'Установить бесплатно', hero_cta_demo: 'Смотреть в действии',
+      hero_free: '<strong>50 бесплатных улучшений</strong> в день &middot; Chrome, Edge &amp; Firefox',
+      float_specific: 'На <strong>42%</strong> точнее', float_saved: 'Сохранено <strong>12 промптов</strong>',
+      mock_improve: 'Улучшить', mock_library: 'Библиотека',
+      mock_original_label: 'Исходный промпт', mock_improved_label: 'Улучшенный промпт',
+      mock_copy: 'Копировать', mock_save: 'В библиотеку',
+      logos_label: 'Работает с AI-инструментами, которые вы уже используете',
+      stat_daily: 'Бесплатных улучшений в день', stat_platforms: 'AI-платформ поддерживается',
+      stat_browsers: 'Браузеров поддерживается', stat_setup: 'Время на настройку',
+      how_eyebrow: 'Как это работает', how_title: 'Три шага к<br>идеальному промпту',
+      how_sub: 'Без аккаунта. Без настроек. Просто установите и сразу начните писать лучшие промпты.',
+      step1_title: 'Напишите промпт', step1_desc: 'Введите или вставьте любой промпт в попап PromptTune или используйте его прямо на поддерживаемых AI-сайтах.',
+      step2_title: 'Нажмите Улучшить', step2_desc: 'AI перепишет ваш промпт с чёткой структурой, контекстом и конкретикой для лучших результатов.',
+      step3_title: 'Используйте везде', step3_desc: 'Скопируйте в буфер, сохраните в библиотеку или откройте и вставьте прямо в ChatGPT, Claude и другие.',
+      ba_eyebrow: 'Почувствуйте разницу', ba_title: 'До и после<br>PromptTune',
+      ba_sub: 'Посмотрите, как простой промпт превращается в детальную и структурированную инструкцию, которую AI действительно понимает.',
+      ba_before_label: 'До', ba_after_label: 'После PromptTune',
+      feat_eyebrow: 'Возможности', feat_title: 'Всё что нужно,<br>ничего лишнего',
+      feat_sub: 'Сфокусированы на одном и делаем это исключительно хорошо: улучшаем ваши AI-промпты.',
+      f1_title: 'AI-рерайтинг', f1_desc: 'Продвинутые языковые модели анализируют ваш промпт и переписывают его с лучшей структурой, конкретикой и контекстом.',
+      f2_title: 'Без регистрации', f2_desc: 'Начните улучшать промпты мгновенно. Без регистрации, без email, без сбора персональных данных. Приватность прежде всего.',
+      f3_title: 'Открыть и вставить', f3_desc: 'Один клик — и ChatGPT, Claude или другой поддерживаемый сайт откроется с вашим улучшенным промптом.',
+      f4_title: 'Библиотека промптов', f4_desc: 'Сохраняйте лучшие промпты локально. Ищите, фильтруйте по сайту и используйте повторно без ограничений.',
+      f5_title: 'Кросс-браузерность', f5_desc: 'Работает в Chrome, Edge и Firefox. Одинаковый опыт в любом браузере. Safari — скоро.',
+      f6_title: 'Панель на странице', f6_desc: 'Ненавязчивая панель появляется рядом с полем ввода AI. Улучшайте промпт, не открывая расширение.',
+      price_eyebrow: 'Цена', price_title: 'Бесплатно. Серьёзно.',
+      price_sub: 'PromptTune бесплатен с щедрым дневным лимитом. Без скрытых платежей, без карты, без подвоха.',
+      price_label: 'Текущий план', price_period: 'Бесплатно навсегда &middot; Без карты',
+      pl1: '50 улучшений промптов в день', pl2: 'Безлимитная локальная библиотека',
+      pl3: 'Открыть и вставить на 5 AI-сайтов', pl4: 'Поддержка Chrome, Edge и Firefox', pl5: 'Без регистрации',
+      faq_title: 'Частые вопросы', faq_sub: 'Всё, что нужно знать о PromptTune перед началом работы.',
+      fq1: 'PromptTune действительно бесплатный?', fa1: 'Да, полностью бесплатный. Вы получаете 50 улучшений промптов в день без регистрации, без карты и без скрытых платежей. Дневной лимит сбрасывается в полночь по UTC.',
+      fq2: 'Какие браузеры поддерживаются?', fa2: 'PromptTune работает в Chrome, Microsoft Edge и Firefox. Все браузеры на базе Chromium (Brave, Vivaldi, Arc) тоже поддерживаются. Поддержка Safari запланирована.',
+      fq3: 'Нужно ли создавать аккаунт?', fa3: 'Нет. PromptTune работает сразу после установки без настроек. Без email, без пароля, без сбора персональных данных.',
+      fq4: 'Мои данные в безопасности?', fa4: 'Ваши промпты отправляются на наш сервер для AI-обработки и не передаются третьим лицам. Сохранённая библиотека промптов хранится локально в вашем браузере и никогда не покидает ваше устройство.',
+      fq5: 'Какие AI-сайты поддерживает функция «Открыть и вставить»?', fa5: 'Сейчас поддерживаются: ChatGPT, Claude, Perplexity, Groq и Deepseek. Мы постоянно добавляем новые сайты на основе отзывов пользователей.',
+      fq6: 'Что произойдёт, когда лимит будет исчерпан?', fa6: 'Вы увидите уведомление о том, что лимит достигнут. 50 улучшений обновляются в полночь по UTC. Сохранённая библиотека и ранее улучшенные промпты остаются доступными.',
+      cta_eyebrow: 'Начать', cta_title: 'Хватит гадать.<br>Начните промптить.',
+      cta_sub: 'Присоединяйтесь к тысячам людей, которые каждый день получают лучшие ответы от AI с PromptTune.', cta_btn: 'Установить PromptTune',
+      footer_copy: '&copy; 2026 PromptTune. Все права защищены.', footer_privacy: 'Политика конфиденциальности', footer_terms: 'Условия'
+    }
+  };
+
+  var baExamplesI18n = {
+    en: [
+      { before: 'Write me a Python script to scrape a website', after: 'Act as a senior Python developer. Write a production-ready web scraper using <strong>requests</strong> and <strong>BeautifulSoup4</strong> that extracts product titles, prices, and ratings from an e-commerce product listing page. Include proper error handling, rate limiting with 2-second delays between requests, a rotating user-agent header, and output results as structured JSON. Add type hints and docstrings.' },
+      { before: 'Help me write a marketing email', after: 'Act as an experienced email marketing specialist. Write a promotional email for a <strong>B2B SaaS product launch</strong> targeting CTOs of mid-size companies (50\u2013500 employees). Include a compelling subject line under 50 characters, a personalized opening hook, 3 bullet points highlighting key benefits (not features), a clear single CTA button, and a P.S. line with a time-limited offer. Tone: professional but conversational. Length: 150\u2013200 words.' },
+      { before: 'Make my website faster', after: 'Act as a senior web performance engineer. Audit and optimize a <strong>Next.js 14</strong> application for Core Web Vitals. Provide a prioritized checklist covering: LCP optimization (image loading, font strategy, server response time), CLS fixes (layout shift sources, dynamic content), INP improvements (event handlers, main thread blocking). For each item, include the specific code change, expected impact, and measurement method using Lighthouse and Chrome DevTools. Target: LCP < 2.5s, CLS < 0.1, INP < 200ms.' }
+    ],
+    ru: [
+      { before: '\u041d\u0430\u043f\u0438\u0448\u0438 Python-\u0441\u043a\u0440\u0438\u043f\u0442 \u0434\u043b\u044f \u043f\u0430\u0440\u0441\u0438\u043d\u0433\u0430 \u0441\u0430\u0439\u0442\u0430', after: '\u0412\u044b\u0441\u0442\u0443\u043f\u0438 \u043a\u0430\u043a \u0441\u0442\u0430\u0440\u0448\u0438\u0439 Python-\u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a. \u041d\u0430\u043f\u0438\u0448\u0438 production-ready \u0432\u0435\u0431-\u0441\u043a\u0440\u0435\u0439\u043f\u0435\u0440 \u043d\u0430 <strong>requests</strong> \u0438 <strong>BeautifulSoup4</strong>, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0438\u0437\u0432\u043b\u0435\u043a\u0430\u0435\u0442 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f \u0442\u043e\u0432\u0430\u0440\u043e\u0432, \u0446\u0435\u043d\u044b \u0438 \u0440\u0435\u0439\u0442\u0438\u043d\u0433\u0438 \u0441\u043e \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u044b \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430 \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442-\u043c\u0430\u0433\u0430\u0437\u0438\u043d\u0430. \u0414\u043e\u0431\u0430\u0432\u044c \u043e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0443 \u043e\u0448\u0438\u0431\u043e\u043a, \u0437\u0430\u0434\u0435\u0440\u0436\u043a\u0443 2 \u0441\u0435\u043a\u0443\u043d\u0434\u044b \u043c\u0435\u0436\u0434\u0443 \u0437\u0430\u043f\u0440\u043e\u0441\u0430\u043c\u0438, \u0440\u043e\u0442\u0430\u0446\u0438\u044e user-agent \u0438 \u0432\u044b\u0432\u043e\u0434 \u0432 \u0441\u0442\u0440\u0443\u043a\u0442\u0443\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 JSON. \u0414\u043e\u0431\u0430\u0432\u044c type hints \u0438 docstrings.' },
+      { before: '\u041f\u043e\u043c\u043e\u0433\u0438 \u043d\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u043c\u0430\u0440\u043a\u0435\u0442\u0438\u043d\u0433\u043e\u0432\u043e\u0435 \u043f\u0438\u0441\u044c\u043c\u043e', after: '\u0412\u044b\u0441\u0442\u0443\u043f\u0438 \u043a\u0430\u043a \u043e\u043f\u044b\u0442\u043d\u044b\u0439 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442 \u043f\u043e email-\u043c\u0430\u0440\u043a\u0435\u0442\u0438\u043d\u0433\u0443. \u041d\u0430\u043f\u0438\u0448\u0438 \u043f\u0440\u043e\u043c\u043e-\u043f\u0438\u0441\u044c\u043c\u043e \u0434\u043b\u044f \u0437\u0430\u043f\u0443\u0441\u043a\u0430 <strong>B2B SaaS-\u043f\u0440\u043e\u0434\u0443\u043a\u0442\u0430</strong>, \u043d\u0430\u0446\u0435\u043b\u0435\u043d\u043d\u043e\u0435 \u043d\u0430 CTO \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0439 (50\u2013500 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u043e\u0432). \u0412\u043a\u043b\u044e\u0447\u0438 \u0446\u0435\u043f\u043b\u044f\u044e\u0449\u0443\u044e \u0442\u0435\u043c\u0443 \u0434\u043e 50 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432, \u043f\u0435\u0440\u0441\u043e\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 \u0445\u0443\u043a, 3 \u043f\u0443\u043d\u043a\u0442\u0430 \u0441 \u0432\u044b\u0433\u043e\u0434\u0430\u043c\u0438 (\u043d\u0435 \u0444\u0438\u0447\u0430\u043c\u0438), \u043e\u0434\u043d\u0443 CTA-\u043a\u043d\u043e\u043f\u043a\u0443 \u0438 P.S. \u0441 \u043e\u0433\u0440\u0430\u043d\u0438\u0447\u0435\u043d\u043d\u044b\u043c \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435\u043c. \u0422\u043e\u043d: \u043f\u0440\u043e\u0444\u0435\u0441\u0441\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u044b\u0439, \u043d\u043e \u0440\u0430\u0437\u0433\u043e\u0432\u043e\u0440\u043d\u044b\u0439. \u0414\u043b\u0438\u043d\u0430: 150\u2013200 \u0441\u043b\u043e\u0432.' },
+      { before: '\u0421\u0434\u0435\u043b\u0430\u0439 \u043c\u043e\u0439 \u0441\u0430\u0439\u0442 \u0431\u044b\u0441\u0442\u0440\u0435\u0435', after: '\u0412\u044b\u0441\u0442\u0443\u043f\u0438 \u043a\u0430\u043a \u0441\u0442\u0430\u0440\u0448\u0438\u0439 \u0438\u043d\u0436\u0435\u043d\u0435\u0440 \u043f\u043e \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u0438. \u041f\u0440\u043e\u0432\u0435\u0434\u0438 \u0430\u0443\u0434\u0438\u0442 \u0438 \u043e\u043f\u0442\u0438\u043c\u0438\u0437\u0430\u0446\u0438\u044e \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u043d\u0430 <strong>Next.js 14</strong> \u0434\u043b\u044f Core Web Vitals. \u0421\u043e\u0441\u0442\u0430\u0432\u044c \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 \u0447\u0435\u043a\u043b\u0438\u0441\u0442: \u043e\u043f\u0442\u0438\u043c\u0438\u0437\u0430\u0446\u0438\u044f LCP (\u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0439, \u0448\u0440\u0438\u0444\u0442\u044b, \u0432\u0440\u0435\u043c\u044f \u043e\u0442\u0432\u0435\u0442\u0430), \u0444\u0438\u043a\u0441\u044b CLS (\u0441\u0434\u0432\u0438\u0433\u0438 \u043c\u0430\u043a\u0435\u0442\u0430, \u0434\u0438\u043d\u0430\u043c\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u043a\u043e\u043d\u0442\u0435\u043d\u0442), \u0443\u043b\u0443\u0447\u0448\u0435\u043d\u0438\u0435 INP (\u043e\u0431\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a\u0438 \u0441\u043e\u0431\u044b\u0442\u0438\u0439, \u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u043a\u0430 main thread). \u0426\u0435\u043b\u044c: LCP < 2.5s, CLS < 0.1, INP < 200ms.' }
+    ]
+  };
+
+  var mockupI18n = {
+    en: { original: 'Explain how to implement authentication in a Node.js app', improved: 'Act as an expert backend developer. Explain step-by-step how to implement JWT-based authentication with refresh token rotation in a Node.js Express app...' },
+    ru: { original: '\u041e\u0431\u044a\u044f\u0441\u043d\u0438, \u043a\u0430\u043a \u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u0442\u044c \u0430\u0443\u0442\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044e \u0432 Node.js-\u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0438', improved: '\u0412\u044b\u0441\u0442\u0443\u043f\u0438 \u043a\u0430\u043a \u044d\u043a\u0441\u043f\u0435\u0440\u0442-\u0431\u044d\u043a\u0435\u043d\u0434\u0435\u0440. \u041e\u0431\u044a\u044f\u0441\u043d\u0438 \u043f\u043e\u0448\u0430\u0433\u043e\u0432\u043e, \u043a\u0430\u043a \u0440\u0435\u0430\u043b\u0438\u0437\u043e\u0432\u0430\u0442\u044c JWT-\u0430\u0443\u0442\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044e \u0441 \u0440\u043e\u0442\u0430\u0446\u0438\u0435\u0439 refresh-\u0442\u043e\u043a\u0435\u043d\u043e\u0432 \u0432 Node.js Express...' }
+  };
+
+  var currentLang = localStorage.getItem('pt_lang') || 'en';
+
+  function applyLang(lang) {
+    currentLang = lang;
+    localStorage.setItem('pt_lang', lang);
+    document.documentElement.lang = lang;
+
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n');
+      if (T[lang] && T[lang][key] !== undefined) el.textContent = T[lang][key];
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n-html');
+      if (T[lang] && T[lang][key] !== undefined) el.innerHTML = T[lang][key];
+    });
+
+    document.querySelectorAll('.lang-toggle__btn').forEach(function(b) {
+      var isActive = b.dataset.lang === lang;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-checked', String(isActive));
+    });
+
+    var examples = baExamplesI18n[lang];
+    baBefore.textContent = examples[currentExample].before;
+    baAfter.innerHTML = examples[currentExample].after;
+  }
+
+  document.querySelectorAll('.lang-toggle__btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      applyLang(btn.dataset.lang);
+    });
+  });
+
+  /* ========== Core page logic ========== */
   var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Sticky nav
   var nav = document.getElementById('nav');
   var ticking = false;
   window.addEventListener('scroll', function() {
@@ -1812,7 +2172,6 @@
     }
   });
 
-  // Mobile menu
   var mobileToggle = document.getElementById('mobileToggle');
   var mobileMenu = document.getElementById('mobileMenu');
   var menuOpen = false;
@@ -1822,14 +2181,10 @@
     mobileToggle.setAttribute('aria-expanded', String(menuOpen));
     if (menuOpen) {
       mobileMenu.style.display = 'flex';
-      requestAnimationFrame(function() {
-        mobileMenu.classList.add('open');
-      });
+      requestAnimationFrame(function() { mobileMenu.classList.add('open'); });
     } else {
       mobileMenu.classList.remove('open');
-      setTimeout(function() {
-        if (!menuOpen) mobileMenu.style.display = 'none';
-      }, 300);
+      setTimeout(function() { if (!menuOpen) mobileMenu.style.display = 'none'; }, 300);
     }
   });
 
@@ -1842,64 +2197,34 @@
     });
   });
 
-  // Scroll reveal
   var reveals = document.querySelectorAll('.reveal');
   var observer = new IntersectionObserver(function(entries) {
     entries.forEach(function(entry) {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('visible');
-        observer.unobserve(entry.target);
-      }
+      if (entry.isIntersecting) { entry.target.classList.add('visible'); observer.unobserve(entry.target); }
     });
   }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
-
   reveals.forEach(function(el) { observer.observe(el); });
 
-  // Smooth anchor scroll
   document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
     anchor.addEventListener('click', function(e) {
       var target = document.querySelector(this.getAttribute('href'));
-      if (target) {
-        e.preventDefault();
-        target.scrollIntoView({ behavior: 'smooth' });
-      }
+      if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth' }); }
     });
   });
 
-  // FAQ accordion
   document.querySelectorAll('.faq__question').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var item = btn.parentElement;
       var isOpen = item.classList.contains('open');
-
       document.querySelectorAll('.faq__item.open').forEach(function(openItem) {
         openItem.classList.remove('open');
         openItem.querySelector('.faq__question').setAttribute('aria-expanded', 'false');
       });
-
-      if (!isOpen) {
-        item.classList.add('open');
-        btn.setAttribute('aria-expanded', 'true');
-      }
+      if (!isOpen) { item.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
     });
   });
 
-  // Before/After examples carousel
-  var baExamples = [
-    {
-      before: 'Write me a Python script to scrape a website',
-      after: 'Act as a senior Python developer. Write a production-ready web scraper using <strong>requests</strong> and <strong>BeautifulSoup4</strong> that extracts product titles, prices, and ratings from an e-commerce product listing page. Include proper error handling, rate limiting with 2-second delays between requests, a rotating user-agent header, and output results as structured JSON. Add type hints and docstrings.'
-    },
-    {
-      before: 'Help me write a marketing email',
-      after: 'Act as an experienced email marketing specialist. Write a promotional email for a <strong>B2B SaaS product launch</strong> targeting CTOs of mid-size companies (50-500 employees). Include a compelling subject line under 50 characters, a personalized opening hook, 3 bullet points highlighting key benefits (not features), a clear single CTA button, and a P.S. line with a time-limited offer. Tone: professional but conversational. Length: 150-200 words.'
-    },
-    {
-      before: 'Make my website faster',
-      after: 'Act as a senior web performance engineer. Audit and optimize a <strong>Next.js 14</strong> application for Core Web Vitals. Provide a prioritized checklist covering: LCP optimization (image loading, font strategy, server response time), CLS fixes (layout shift sources, dynamic content), INP improvements (event handlers, main thread blocking). For each item, include the specific code change, expected impact, and measurement method using Lighthouse and Chrome DevTools. Target: LCP < 2.5s, CLS < 0.1, INP < 200ms.'
-    }
-  ];
-
+  /* Before/After carousel */
   var baBefore = document.getElementById('baBefore');
   var baAfter = document.getElementById('baAfter');
   var baDots = document.querySelectorAll('.ba__dot');
@@ -1910,36 +2235,28 @@
       var idx = parseInt(dot.dataset.example);
       if (idx === currentExample) return;
       currentExample = idx;
-
-      baDots.forEach(function(d) {
-        d.classList.remove('active');
-        d.setAttribute('aria-selected', 'false');
-      });
+      baDots.forEach(function(d) { d.classList.remove('active'); d.setAttribute('aria-selected', 'false'); });
       dot.classList.add('active');
       dot.setAttribute('aria-selected', 'true');
-
       var grid = document.getElementById('baGrid');
       grid.style.opacity = '0';
       grid.style.transition = 'opacity 0.3s';
       setTimeout(function() {
-        baBefore.textContent = baExamples[idx].before;
-        baAfter.innerHTML = baExamples[idx].after;
+        var ex = baExamplesI18n[currentLang][idx];
+        baBefore.textContent = ex.before;
+        baAfter.innerHTML = ex.after;
         grid.style.opacity = '1';
       }, 300);
     });
   });
 
-  // Hero mockup typing animation
+  /* Hero mockup typing animation */
   if (!prefersReducedMotion) {
     var mockupOriginal = document.getElementById('mockupOriginal');
     var mockupImproved = document.getElementById('mockupImproved');
     var mockupBtn = document.getElementById('mockupBtn');
     var mockupImprovedLabel = document.getElementById('mockupImprovedLabel');
     var mockupActions = document.getElementById('mockupActions');
-
-    var originalText = 'Explain how to implement authentication in a Node.js app';
-    var improvedText = 'Act as an expert backend developer. Explain step-by-step how to implement JWT-based authentication with refresh token rotation in a Node.js Express app...';
-
     var origSpan = mockupOriginal.querySelector('.typed-text');
     var origCursor = mockupOriginal.querySelector('.cursor-blink');
     var impSpan = mockupImproved.querySelector('.typed-text');
@@ -1948,18 +2265,14 @@
     function typeText(el, text, speed, cb) {
       var i = 0;
       function tick() {
-        if (i < text.length) {
-          el.textContent += text.charAt(i);
-          i++;
-          setTimeout(tick, speed);
-        } else if (cb) {
-          cb();
-        }
+        if (i < text.length) { el.textContent += text.charAt(i); i++; setTimeout(tick, speed); }
+        else if (cb) cb();
       }
       tick();
     }
 
     function runMockupAnimation() {
+      var m = mockupI18n[currentLang];
       origSpan.textContent = '';
       impSpan.textContent = '';
       origCursor.style.display = 'inline-block';
@@ -1970,7 +2283,7 @@
       mockupActions.style.opacity = '0';
 
       setTimeout(function() {
-        typeText(origSpan, originalText, 35, function() {
+        typeText(origSpan, m.original, 35, function() {
           origCursor.style.display = 'none';
           setTimeout(function() {
             mockupBtn.classList.add('loading');
@@ -1979,7 +2292,7 @@
               mockupImprovedLabel.style.opacity = '1';
               mockupImproved.style.opacity = '1';
               impCursor.style.display = 'inline-block';
-              typeText(impSpan, improvedText, 20, function() {
+              typeText(impSpan, m.improved, 20, function() {
                 impCursor.style.display = 'none';
                 mockupActions.style.opacity = '1';
                 setTimeout(runMockupAnimation, 5000);
@@ -1991,23 +2304,20 @@
     }
 
     var heroObserver = new IntersectionObserver(function(entries) {
-      if (entries[0].isIntersecting) {
-        runMockupAnimation();
-        heroObserver.disconnect();
-      }
+      if (entries[0].isIntersecting) { runMockupAnimation(); heroObserver.disconnect(); }
     }, { threshold: 0.3 });
-
     heroObserver.observe(document.querySelector('.hero__visual'));
   } else {
-    var origSpanStatic = document.querySelector('#mockupOriginal .typed-text');
-    var impSpanStatic = document.querySelector('#mockupImproved .typed-text');
-    origSpanStatic.textContent = 'Explain how to implement authentication in a Node.js app';
-    impSpanStatic.textContent = 'Act as an expert backend developer. Explain step-by-step how to implement JWT-based authentication with refresh token rotation in a Node.js Express app...';
+    var m = mockupI18n[currentLang];
+    document.querySelector('#mockupOriginal .typed-text').textContent = m.original;
+    document.querySelector('#mockupImproved .typed-text').textContent = m.improved;
     document.querySelector('#mockupOriginal .cursor-blink').style.display = 'none';
     document.getElementById('mockupImproved').style.opacity = '1';
     document.getElementById('mockupImprovedLabel').style.opacity = '1';
     document.getElementById('mockupActions').style.opacity = '1';
   }
+
+  applyLang(currentLang);
 })();
 </script>
 </body>
