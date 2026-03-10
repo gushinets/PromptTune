@@ -2,41 +2,79 @@ interface PromptFormProps {
   original: string;
   improved: string;
   loading: boolean;
-  error: string | null;
   onOriginalChange: (text: string) => void;
   onImprove: () => void;
+}
+
+function SparkleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z" />
+      <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z" />
+    </svg>
+  );
 }
 
 export function PromptForm({
   original,
   improved,
   loading,
-  error,
   onOriginalChange,
   onImprove,
 }: PromptFormProps) {
   return (
     <div className="prompt-form">
-      <label>
-        Original prompt
-        <textarea
-          value={original}
-          onChange={(e) => onOriginalChange(e.target.value)}
-          placeholder="Enter your prompt here..."
-          rows={4}
-        />
-      </label>
+      <span className="section-label">Original Prompt</span>
+      <textarea
+        value={original}
+        onChange={(e) => onOriginalChange(e.target.value)}
+        placeholder="Type or paste your prompt here..."
+        rows={4}
+      />
 
-      <button onClick={onImprove} disabled={!original.trim() || loading}>
-        {loading ? <span className="spinner" /> : "Improve"}
+      <button
+        className="btn-improve"
+        onClick={onImprove}
+        disabled={!original.trim() || loading}
+      >
+        {loading ? (
+          <>
+            <span className="spinner" />
+            Improving...
+          </>
+        ) : (
+          <>
+            <SparkleIcon className="btn-icon" />
+            Improve
+          </>
+        )}
       </button>
 
-      {error && <div className="error-toast">{error}</div>}
-
-      <label>
-        Improved prompt
-        <textarea value={improved} readOnly placeholder="Improved version will appear here..." rows={4} />
-      </label>
+      <span className="section-label">Improved Prompt</span>
+      {loading ? (
+        <div className="skeleton-loader">
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+          <div className="skeleton-line" />
+        </div>
+      ) : (
+        <textarea
+          className="improved-textarea"
+          value={improved}
+          readOnly
+          placeholder="Improved version will appear here..."
+          rows={4}
+        />
+      )}
     </div>
   );
 }

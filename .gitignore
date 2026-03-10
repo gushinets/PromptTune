@@ -20,6 +20,9 @@ __pycache__/
 
 # IDE
 .idea/
+.vscode/
+.claude/
+.cursor/
 
 # OS
 .DS_Store
@@ -34,3 +37,6 @@ coverage/
 htmlcov/
 .coverage
 .pytest_cache/
+
+# MCP
+.mcp.json
