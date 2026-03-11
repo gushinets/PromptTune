@@ -5,8 +5,9 @@ import { ActionBar } from "./components/ActionBar";
 import { SiteIcons } from "./components/SiteIcons";
 import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
-import { getAll, save } from "@shared/storage";
-import { LIMITS, FEATURES } from "@shared/constants";
+import { getAll, save, getInstallationId } from "@shared/storage";
+import { LIMITS, FEATURES, BACKEND_MODE } from "@shared/constants";
+import { apiClient } from "@shared/api-client";
 
 type TabId = "improve" | "library";
 
@@ -147,6 +148,26 @@ export function App() {
   const handleSave = useCallback(async () => {
     await save({ original, improved });
     refreshLibraryCount();
+    if (!original.trim() || !improved.trim()) return;
+    if (BACKEND_MODE === "fastapi") {
+      try {
+        const installationId = await getInstallationId();
+        const client = "extension";
+        const clientVersion = browser.runtime.getManifest().version;
+        await apiClient.savePrompt({
+          installation_id: installationId,
+          client,
+          client_version: clientVersion,
+          original_text: original,
+          improved_text: improved,
+          site: undefined,
+          page_url: undefined,
+          meta: { source: "popup" },
+        });
+      } catch {
+        // Best-effort; ignore backend save errors for now.
+      }
+    }
   }, [original, improved, refreshLibraryCount]);
 
   const handleDismissError = useCallback(() => {

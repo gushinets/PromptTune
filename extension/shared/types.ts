@@ -1,8 +1,11 @@
 export interface ImproveRequest {
   text: string;
   installation_id: string;
+  client: string;
+  client_version?: string;
   site?: string;
   page_url?: string;
+  client_ts?: number;
 }
 
 export interface ImproveResponse {
@@ -16,6 +19,8 @@ export interface ImproveResponse {
 
 export interface SavePromptRequest {
   installation_id: string;
+  client: string;
+  client_version?: string;
   original_text: string;
   improved_text: string;
   site?: string;
