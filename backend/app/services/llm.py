@@ -48,9 +48,19 @@ def _resolve_api_url() -> str:
     return "https://api.openai.com/v1/chat/completions"
 
 
-def _build_headers(api_key: str) -> dict[str, str]:
+def _resolve_provider_api_key() -> str:
+    if settings.llm_backend == "OPENAI":
+        if not settings.openai_api_key:
+            raise UpstreamAuthError("Server OpenAI API key is not configured")
+        return settings.openai_api_key
+    if not settings.openrouter_api_key:
+        raise UpstreamAuthError("Server OpenRouter API key is not configured")
+    return settings.openrouter_api_key
+
+
+def _build_headers() -> dict[str, str]:
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {_resolve_provider_api_key()}",
         "Content-Type": "application/json",
     }
     if settings.llm_backend == "OPENROUTER":
@@ -70,7 +80,7 @@ def _map_http_error(exc: httpx.HTTPStatusError) -> UpstreamServiceError:
     return UpstreamServiceError(f"Provider API error ({status_code}): {safe_message[:200]}")
 
 
-async def _request_completion(text: str, api_key: str) -> dict:
+async def _request_completion(text: str) -> dict:
     payload = {
         "model": _resolve_model_name(),
         "messages": [
@@ -85,7 +95,7 @@ async def _request_completion(text: str, api_key: str) -> dict:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 _resolve_api_url(),
-                headers=_build_headers(api_key),
+                headers=_build_headers(),
                 json=payload,
             )
         response.raise_for_status()
@@ -106,9 +116,9 @@ async def _request_completion(text: str, api_key: str) -> dict:
         raise UpstreamBadResponseError("Provider returned invalid JSON") from exc
 
 
-async def improve_text(text: str, api_key: str) -> tuple[str, str, int]:
+async def improve_text(text: str) -> tuple[str, str, int]:
     start = time.monotonic()
-    data = await _request_completion(text, api_key)
+    data = await _request_completion(text)
 
     latency_ms = int((time.monotonic() - start) * 1000)
     try:

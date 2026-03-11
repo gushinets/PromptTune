@@ -30,7 +30,6 @@ class PromptService:
         self,
         text: str,
         installation_id: str,
-        api_key: str,
         client: str | None = None,
         client_version: str | None = None,
         site: str | None = None,
@@ -41,7 +40,7 @@ class PromptService:
         request_id = str(uuid.uuid4())
 
         try:
-            improved_text, model_used, latency_ms = await improve_text(text, api_key=api_key)
+            improved_text, model_used, latency_ms = await improve_text(text)
             record = PromptImprovement(
                 id=request_id,
                 installation_id=installation_id,

@@ -69,6 +69,10 @@ class BotConfig:
             raise ValueError(
                 f"LLM_BACKEND must be one of: OPENAI, OPENROUTER. Got: {self.llm_backend}"
             )
+        if self.llm_backend == "OPENAI" and not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required when LLM_BACKEND=OPENAI")
+        if self.llm_backend == "OPENROUTER" and not self.openrouter_api_key:
+            raise ValueError("OPENROUTER_API_KEY is required when LLM_BACKEND=OPENROUTER")
 
         if self.free_req_per_day <= 0:
             raise ValueError(
