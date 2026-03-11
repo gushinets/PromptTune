@@ -49,13 +49,13 @@ def _resolve_api_url() -> str:
 
 
 def _resolve_provider_api_key() -> str:
+    api_key = settings.get_provider_api_key()
+    if api_key:
+        return api_key
+
     if settings.llm_backend == "OPENAI":
-        if not settings.openai_api_key:
-            raise UpstreamAuthError("Server OpenAI API key is not configured")
-        return settings.openai_api_key
-    if not settings.openrouter_api_key:
-        raise UpstreamAuthError("Server OpenRouter API key is not configured")
-    return settings.openrouter_api_key
+        raise UpstreamAuthError("Server OpenAI API key is not configured")
+    raise UpstreamAuthError("Server OpenRouter API key is not configured")
 
 
 def _build_headers() -> dict[str, str]:
