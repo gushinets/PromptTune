@@ -19,7 +19,7 @@ async def readyz(redis: aioredis.Redis = Depends(get_redis)):
     # Check DB connectivity
     try:
         async with async_session_factory() as session:  # type: AsyncSession
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
     except Exception as exc:  # pragma: no cover - defensive
         raise HTTPException(status_code=503, detail="DB not ready") from exc
 
