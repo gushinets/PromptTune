@@ -27,7 +27,7 @@ The extension supports two backends, controlled by the `VITE_BACKEND_MODE` env v
 | Mode | Description | Default |
 |------|-------------|---------|
 | `n8n` | Calls an n8n webhook (current default) | `http://localhost:5678/webhook/improve-prompt` |
-| `fastapi` | Calls the FastAPI backend (not yet implemented) | `http://localhost:8000/v1/improve` |
+| `fastapi` | Calls the FastAPI backend | `http://localhost:8000/v1/improve` |
 
 #### n8n (default)
 
@@ -45,7 +45,7 @@ VITE_BACKEND_MODE=n8n
 VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook/improve-prompt
 ```
 
-#### FastAPI (future)
+#### FastAPI
 
 ```bash
 cd backend
@@ -61,6 +61,27 @@ Then set env vars for the extension:
 VITE_BACKEND_MODE=fastapi
 VITE_API_BASE_URL=http://localhost:8000
 ```
+
+Backend env vars (in `backend/.env`, **do not commit**):
+
+```env
+LLM_BACKEND=OPENROUTER        # or OPENAI
+OPENROUTER_API_KEY=REPLACE_ME # required when LLM_BACKEND=OPENROUTER
+# OPENAI_API_KEY=REPLACE_ME   # required when LLM_BACKEND=OPENAI
+DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune
+REDIS_URL=redis://localhost:6379/0
+```
+
+Notes:
+- The backend uses **server-owned provider keys**; the extension does **not** send provider keys in request headers.
+- The extension automatically includes `client=\"extension\"` and `client_version=<manifest version>` on `/v1/improve` calls.
+
+##### Smoke test (local)
+- Start Postgres + Redis (or use Docker via `infra/`).
+- Start backend and open `http://localhost:8000/docs`.
+- Call `GET /healthz` and `GET /readyz`.
+- Call `POST /v1/improve` with JSON body including `text`, `installation_id`, and `client` (Swagger will validate).
+- Run the extension in dev mode and click **Improve** in the popup; it should return improved text.
 
 ### Full Stack (Docker)
 

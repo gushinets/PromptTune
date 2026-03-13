@@ -37,6 +37,10 @@ coverage/
 htmlcov/
 .coverage
 .pytest_cache/
+backend/pytest-cache-files-*/
+backend/pytest-cache-files-*
+
+PROMPTS/    
 
 # MCP
 .mcp.json

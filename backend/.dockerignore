@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+.env
+.env.*
+
+# Some environments create these with restricted permissions.
+pytest-cache-files-*/
+pytest-cache-files-*
+
+# Local tooling
+.vscode/
+.idea/
+.cursor/
+
