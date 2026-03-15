@@ -18,8 +18,6 @@ async def save_prompt(
     record = PromptImprovement(
         id=str(uuid.uuid4()),
         installation_id=req.installation_id,
-        client=req.client,
-        client_version=req.client_version,
         original_text=req.original_text,
         improved_text=req.improved_text,
         site=req.site,
