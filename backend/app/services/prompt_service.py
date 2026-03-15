@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import RateLimitInfo
 from app.db.models import Installation, PromptImprovement
+from app.security.redaction import redact_secrets
+from app.services.errors import UpstreamServiceError
 from app.services.llm import improve_text
 from app.services.rate_limiter import RateLimiter
 
@@ -28,10 +30,11 @@ class PromptService:
         self,
         text: str,
         installation_id: str,
+        client: str | None = None,
+        client_version: str | None = None,
         site: str | None = None,
         page_url: str | None = None,
     ) -> PromptImprovement:
-        # Ensure installation exists
         await self._upsert_installation(installation_id)
 
         request_id = str(uuid.uuid4())
@@ -41,6 +44,8 @@ class PromptService:
             record = PromptImprovement(
                 id=request_id,
                 installation_id=installation_id,
+                client=client,
+                client_version=client_version,
                 site=site,
                 page_url=page_url,
                 original_text=text,
@@ -49,17 +54,46 @@ class PromptService:
                 latency_ms=latency_ms,
                 status="ok",
             )
-        except Exception as e:
-            logger.exception("LLM call failed")
+        except UpstreamServiceError as exc:
+            logger.warning(
+                "LLM call failed req_id=%s installation_id=%s error_code=%s",
+                request_id,
+                installation_id,
+                exc.error_code,
+            )
             record = PromptImprovement(
                 id=request_id,
                 installation_id=installation_id,
+                client=client,
+                client_version=client_version,
                 site=site,
                 page_url=page_url,
                 original_text=text,
                 improved_text="",
                 status="error",
-                error=str(e),
+                error=exc.error_code,
+            )
+            self.db.add(record)
+            await self.db.commit()
+            raise
+        except Exception as exc:
+            logger.exception(
+                "Unexpected LLM failure req_id=%s installation_id=%s detail=%s",
+                request_id,
+                installation_id,
+                redact_secrets(str(exc)) or "unknown",
+            )
+            record = PromptImprovement(
+                id=request_id,
+                installation_id=installation_id,
+                client=client,
+                client_version=client_version,
+                site=site,
+                page_url=page_url,
+                original_text=text,
+                improved_text="",
+                status="error",
+                error="INTERNAL_ERROR",
             )
             self.db.add(record)
             await self.db.commit()

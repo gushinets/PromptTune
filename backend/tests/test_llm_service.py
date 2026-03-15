@@ -17,3 +17,29 @@ def test_preserves_clean_response():
 
 def test_strips_whitespace():
     assert _normalize_response("  padded  ") == "padded"
+
+
+from httpx import HTTPStatusError, Request, Response
+
+from app.services.errors import UpstreamAuthError, UpstreamRateLimitError
+from app.services.llm import _map_http_error
+
+
+def test_maps_auth_http_error_to_safe_exception():
+    request = Request("POST", "https://example.com")
+    response = Response(401, request=request, text="Invalid token sk-or-v1-secret123")
+    error = HTTPStatusError("boom", request=request, response=response)
+
+    mapped = _map_http_error(error)
+
+    assert isinstance(mapped, UpstreamAuthError)
+
+
+def test_maps_rate_limit_http_error_to_safe_exception():
+    request = Request("POST", "https://example.com")
+    response = Response(429, request=request, text="Too many requests")
+    error = HTTPStatusError("boom", request=request, response=response)
+
+    mapped = _map_http_error(error)
+
+    assert isinstance(mapped, UpstreamRateLimitError)

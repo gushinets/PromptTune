@@ -10,6 +10,18 @@ async def test_healthz(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_readyz(client: AsyncClient):
+async def test_readyz(client: AsyncClient, mock_redis, mock_db, monkeypatch):
+    class _FakeSessionCtx:
+        async def __aenter__(self):
+            return mock_db
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    from app.api.v1 import health as health_module
+
+    monkeypatch.setattr(health_module, "async_session_factory", lambda: _FakeSessionCtx())
+
     response = await client.get("/readyz")
     assert response.status_code == 200
+    assert response.json()["status"] == "ok"
