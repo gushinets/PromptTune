@@ -32,11 +32,7 @@ class PromptImprovement(Base):
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     installation_id: Mapped[str] = mapped_column(String(64), index=True)
-    client: Mapped[str | None] = mapped_column(String(64))
-    client_version: Mapped[str | None] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     site: Mapped[str | None] = mapped_column(String(128))
     page_url: Mapped[str | None] = mapped_column(String(2048))
     original_text: Mapped[str] = mapped_column(Text)

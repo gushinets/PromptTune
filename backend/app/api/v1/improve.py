@@ -18,6 +18,7 @@ async def improve(
 ):
     service = PromptService(db=db, redis=redis)
 
+    # Check rate limits
     allowed, remaining = await service.check_rate_limit(
         installation_id=req.installation_id, ip=client_ip
     )
@@ -27,8 +28,6 @@ async def improve(
     result = await service.improve_prompt(
         text=req.text,
         installation_id=req.installation_id,
-        client=req.client,
-        client_version=req.client_version,
         site=req.site,
         page_url=req.page_url,
     )
