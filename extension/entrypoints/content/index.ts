@@ -43,7 +43,14 @@ export default defineContentScript({
         case "IMPROVE_ACTIVE_FIELD": {
           const field = adapter.findEditableField() ?? lastFocusedField;
           if (!field) {
-            // TODO: show notification "Focus an input field first"
+            // Simple UX: inform the user they need to focus a field first
+            // without breaking the page UX.
+            try {
+              // eslint-disable-next-line no-alert
+              alert("Focus an input field first, then use the improve command.");
+            } catch {
+              // In case alerts are blocked, fail silently.
+            }
             return;
           }
           const text = adapter.getText(field);

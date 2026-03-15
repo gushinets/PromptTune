@@ -16,6 +16,7 @@ describe("apiClient", () => {
     const result = await apiClient.improve({
       text: "original",
       installation_id: "inst-1",
+      client: "extension",
     });
 
     expect(result).toEqual(mockResponse);
@@ -34,7 +35,7 @@ describe("apiClient", () => {
     });
 
     await expect(
-      apiClient.improve({ text: "test", installation_id: "inst-1" }),
+      apiClient.improve({ text: "test", installation_id: "inst-1", client: "extension" }),
     ).rejects.toThrow("API 429");
   });
 });

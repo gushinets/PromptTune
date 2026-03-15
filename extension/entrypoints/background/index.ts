@@ -4,6 +4,9 @@ import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
 
 export default defineBackground(() => {
+  const client = "extension";
+  const clientVersion = browser.runtime.getManifest().version;
+
   // Handle messages from popup and content scripts
   browser.runtime.onMessage.addListener(async (raw: unknown) => {
     const msg = raw as Message;
@@ -14,8 +17,11 @@ export default defineBackground(() => {
         const result = await apiClient.improve({
           text: msg.payload.text,
           installation_id: installationId,
+          client,
+          client_version: clientVersion,
           site: msg.payload.site,
           page_url: msg.payload.page_url,
+          client_ts: Date.now() / 1000,
         });
         return { type: "IMPROVE_RESULT", payload: result };
       }
