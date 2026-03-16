@@ -2,6 +2,12 @@ import browser from "webextension-polyfill";
 import { getAdapter } from "@adapters/registry";
 import type { Message } from "@shared/messages";
 
+interface ImproveActiveFieldResponse {
+  payload?: {
+    improved_text?: string;
+  };
+}
+
 export default defineContentScript({
   matches: [
     "https://chatgpt.com/*",
@@ -46,7 +52,6 @@ export default defineContentScript({
             // Simple UX: inform the user they need to focus a field first
             // without breaking the page UX.
             try {
-              // eslint-disable-next-line no-alert
               alert("Focus an input field first, then use the improve command.");
             } catch {
               // In case alerts are blocked, fail silently.
@@ -56,14 +61,14 @@ export default defineContentScript({
           const text = adapter.getText(field);
           if (!text.trim()) return;
 
-          const response = await browser.runtime.sendMessage({
+          const response = (await browser.runtime.sendMessage({
             type: "IMPROVE_REQUEST",
             payload: {
               text,
               site: location.hostname,
               page_url: location.href,
             },
-          });
+          })) as ImproveActiveFieldResponse;
 
           if (response?.payload?.improved_text) {
             adapter.setText(field, response.payload.improved_text);

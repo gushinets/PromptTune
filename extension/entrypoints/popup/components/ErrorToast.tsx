@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import type { ErrorInfo } from "../App";
 
 interface ErrorToastProps {
@@ -67,7 +68,7 @@ const ERROR_CONFIG: Record<
   {
     className: string;
     title: string;
-    Icon: (props: { className?: string }) => JSX.Element;
+    Icon: (props: { className?: string }) => ReactElement;
   }
 > = {
   "rate-limit": {

@@ -146,9 +146,13 @@ export function App() {
   }, [original, isExhausted, rateLimit.total]);
 
   const handleSave = useCallback(async () => {
-    await save({ original, improved });
+    const originalTrimmed = original.trim();
+    const improvedTrimmed = improved.trim();
+    if (!originalTrimmed || !improvedTrimmed) return;
+
+    await save({ original: originalTrimmed, improved: improvedTrimmed });
     refreshLibraryCount();
-    if (!original.trim() || !improved.trim()) return;
+
     if (BACKEND_MODE === "fastapi") {
       try {
         const installationId = await getInstallationId();
@@ -158,8 +162,8 @@ export function App() {
           installation_id: installationId,
           client,
           client_version: clientVersion,
-          original_text: original,
-          improved_text: improved,
+          original_text: originalTrimmed,
+          improved_text: improvedTrimmed,
           site: undefined,
           page_url: undefined,
           meta: { source: "popup" },
