@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 import redis.asyncio as aioredis
 
 from app.api.schemas import RateLimitInfo
@@ -13,11 +13,11 @@ router = APIRouter()
 async def get_limits(
     installation_id: str = Query(..., max_length=64),
     redis: aioredis.Redis = Depends(get_redis),
-    client_ip: str = Depends(get_client_ip),
+    ip: str = Depends(get_client_ip),
 ):
     limiter = RateLimiter(redis)
     allowed, remaining = await limiter.get_remaining(
-        installation_id=installation_id, ip=client_ip
+        installation_id=installation_id, ip=ip
     )
     if remaining is None:
         raise HTTPException(status_code=400, detail="Unable to compute limits")
