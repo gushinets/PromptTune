@@ -46,3 +46,6 @@ PROMPTS/
 .mcp.json
 
 .kiro/
+
+logs/
+
