@@ -68,12 +68,21 @@ class BotConfig:
     free_req_per_min: int
     max_text_length: int
     allowed_origins: str
+    logs_dir: str
+    log_file: str
+    log_max_size: int
+    log_backup_count: int
 
     @classmethod
     def from_env(cls) -> "BotConfig":
         """Load configuration from environment variables."""
         llm_backend = (_get_env("LLM_BACKEND", "OPENROUTER") or "OPENROUTER").upper()
         llm_model = _get_env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
+
+        logs_dir = _get_env("LOGS_DIR", str(BACKEND_ROOT / "logs"))
+        log_file = _get_env("LOG_FILE", "access.log")
+        log_max_size = _get_int_env("LOG_MAX_SIZE", 10 * 1024 * 1024)  # 10 MB
+        log_backup_count = _get_int_env("LOG_BACKUP_COUNT", 5)
 
         return cls(
             database_url=_get_env(
@@ -90,6 +99,10 @@ class BotConfig:
             free_req_per_min=_get_int_env("FREE_REQ_PER_MIN", 10),
             max_text_length=_get_int_env("MAX_TEXT_LENGTH", 8000),
             allowed_origins=_get_env("ALLOWED_ORIGINS", "*") or "*",
+            logs_dir=logs_dir,
+            log_file=log_file,
+            log_max_size=log_max_size,
+            log_backup_count=log_backup_count,
         )
 
     def validate(self) -> None:
@@ -110,6 +123,14 @@ class BotConfig:
         if self.max_text_length <= 0:
             raise ValueError(
                 f"MAX_TEXT_LENGTH must be positive. Got: {self.max_text_length}"
+            )
+        if self.log_max_size <= 0:
+            raise ValueError(
+                f"LOG_MAX_SIZE must be positive. Got: {self.log_max_size}"
+            )
+        if self.log_backup_count < 0:
+            raise ValueError(
+                f"LOG_BACKUP_COUNT must be non-negative. Got: {self.log_backup_count}"
             )
 
     def get_provider_api_key(self) -> str | None:
