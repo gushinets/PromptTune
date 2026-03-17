@@ -72,6 +72,19 @@ DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttun
 REDIS_URL=redis://localhost:6379/0
 ```
 
+##### Logging (optional)
+
+```env
+# Directory for log files (default: backend/logs)
+LOGS_DIR=logs
+# Log file name (default: access.log)
+LOG_FILE=access.log
+# Maximum log file size in bytes (default: 10485760 = 10 MB)
+LOG_MAX_SIZE=10485760
+# Number of backup log files to keep (default: 5)
+LOG_BACKUP_COUNT=5
+```
+
 Notes:
 - The backend uses **server-owned provider keys**; the extension does **not** send provider keys in request headers.
 - The extension automatically includes `client=\"extension\"` and `client_version=<manifest version>` on `/v1/improve` calls.
