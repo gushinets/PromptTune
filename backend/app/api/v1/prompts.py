@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import SavePromptRequest, SavePromptResponse
 from app.db.models import PromptImprovement
-from app.dependencies import get_db
+from app.dependencies import ensure_installation_id_when_ip_present, get_client_ip, get_db
 
 router = APIRouter()
 
@@ -14,7 +14,10 @@ router = APIRouter()
 async def save_prompt(
     req: SavePromptRequest,
     db: AsyncSession = Depends(get_db),
+    client_ip: str = Depends(get_client_ip),
 ):
+    ensure_installation_id_when_ip_present(client_ip, req.installation_id)
+
     record = PromptImprovement(
         id=str(uuid.uuid4()),
         installation_id=req.installation_id,

@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 
 import redis.asyncio as aioredis
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -27,3 +27,15 @@ async def get_client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+def ensure_installation_id_when_ip_present(
+    client_ip: str, installation_id: str | None
+) -> None:
+    """Raise 403 when request has a detectable IP but no valid installation_id."""
+    if client_ip == "unknown" or client_ip is None:
+        return
+    if not installation_id or not installation_id.strip():
+        raise HTTPException(
+            status_code=403, detail="Your login is invalid"
+        )

@@ -499,7 +499,8 @@ button:disabled {
 }
 
 .error-toast.error-rate-limit,
-.error-toast.error-generic {
+.error-toast.error-generic,
+.error-toast.error-auth {
   background: var(--error-bg);
   border: 1px solid var(--error-border);
   border-left: 3px solid var(--error);
@@ -519,7 +520,8 @@ button:disabled {
 }
 
 .error-toast.error-rate-limit .error-toast-icon,
-.error-toast.error-generic .error-toast-icon {
+.error-toast.error-generic .error-toast-icon,
+.error-toast.error-auth .error-toast-icon {
   color: var(--error);
 }
 
@@ -538,7 +540,8 @@ button:disabled {
 }
 
 .error-toast.error-rate-limit .error-toast-title,
-.error-toast.error-generic .error-toast-title {
+.error-toast.error-generic .error-toast-title,
+.error-toast.error-auth .error-toast-title {
   color: var(--error);
 }
 
