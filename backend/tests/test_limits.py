@@ -1,9 +1,10 @@
-import pytest
-from httpx import AsyncClient
 from unittest.mock import AsyncMock, Mock
 
-from app.main import app
+import pytest
+from httpx import AsyncClient
+
 from app.dependencies import get_redis
+from app.main import app
 
 
 @pytest.mark.asyncio

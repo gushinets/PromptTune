@@ -29,13 +29,9 @@ async def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def ensure_installation_id_when_ip_present(
-    client_ip: str, installation_id: str | None
-) -> None:
+def ensure_installation_id_when_ip_present(client_ip: str, installation_id: str | None) -> None:
     """Raise 403 when request has a detectable IP but no valid installation_id."""
     if client_ip == "unknown" or client_ip is None:
         return
     if not installation_id or not installation_id.strip():
-        raise HTTPException(
-            status_code=403, detail="Your login is invalid"
-        )
+        raise HTTPException(status_code=403, detail="Your login is invalid")

@@ -24,17 +24,21 @@ async def test_prompt_service_persists_safe_upstream_error_code():
     service = PromptService(db=db, redis=redis)
     service._upsert_installation = AsyncMock()
 
-    with patch(
-        "app.services.prompt_service.improve_text",
-        new=AsyncMock(side_effect=UpstreamAuthError("Provider rejected API key: sk-or-v1-secret123")),
+    with (
+        patch(
+            "app.services.prompt_service.improve_text",
+            new=AsyncMock(
+                side_effect=UpstreamAuthError("Provider rejected API key: sk-or-v1-secret123")
+            ),
+        ),
+        pytest.raises(UpstreamAuthError),
     ):
-        with pytest.raises(UpstreamAuthError):
-            await service.improve_prompt(
-                text="hello",
-                installation_id="inst-1",
-                client="manual-test",
-                client_version="0.1.0",
-            )
+        await service.improve_prompt(
+            text="hello",
+            installation_id="inst-1",
+            client="manual-test",
+            client_version="0.1.0",
+        )
 
     record = db.add.call_args.args[0]
     assert record.error == "UPSTREAM_AUTH_ERROR"
@@ -50,15 +54,17 @@ async def test_prompt_service_persists_internal_error_without_raw_message():
     service = PromptService(db=db, redis=redis)
     service._upsert_installation = AsyncMock()
 
-    with patch(
-        "app.services.prompt_service.improve_text",
-        new=AsyncMock(side_effect=RuntimeError("Bearer sk-or-v1-secret123 exploded")),
+    with (
+        patch(
+            "app.services.prompt_service.improve_text",
+            new=AsyncMock(side_effect=RuntimeError("Bearer sk-or-v1-secret123 exploded")),
+        ),
+        pytest.raises(RuntimeError),
     ):
-        with pytest.raises(RuntimeError):
-            await service.improve_prompt(
-                text="hello",
-                installation_id="inst-1",
-            )
+        await service.improve_prompt(
+            text="hello",
+            installation_id="inst-1",
+        )
 
     record = db.add.call_args.args[0]
     assert record.error == "INTERNAL_ERROR"

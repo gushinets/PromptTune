@@ -65,10 +65,12 @@ async def test_no_403_when_ip_unknown_and_installation_id_empty(
     client: AsyncClient, mock_db, mock_redis
 ):
     """When client IP is unknown, empty installation_id does not trigger 403 (422 or normal flow)."""
+
     async def unknown_ip(_):
         return "unknown"
 
     from app.main import app
+
     app.dependency_overrides[get_client_ip] = unknown_ip
 
     try:

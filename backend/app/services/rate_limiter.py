@@ -1,7 +1,7 @@
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from typing import Callable
 
 import redis.asyncio as aioredis
 
@@ -52,9 +52,7 @@ class RateLimiter:
         await self.redis.set(ip_key, bucket_key, ex=self.TTL_MAPPING)
         return bucket_key
 
-    async def get_remaining(
-        self, installation_id: str, ip: str
-    ) -> tuple[bool, dict[str, int]]:
+    async def get_remaining(self, installation_id: str, ip: str) -> tuple[bool, dict[str, int]]:
         bucket_key = await self.resolve_bucket(installation_id, ip)
         now = self.now()
 
@@ -81,9 +79,7 @@ class RateLimiter:
             "per_day_remaining": per_day_remaining,
         }
 
-    async def check(
-        self, installation_id: str, ip: str
-    ) -> tuple[bool, dict[str, int]]:
+    async def check(self, installation_id: str, ip: str) -> tuple[bool, dict[str, int]]:
         """Check and increment rate limits.
 
         Returns: (allowed, {per_minute_remaining, per_day_remaining})

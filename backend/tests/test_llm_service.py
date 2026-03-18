@@ -1,4 +1,7 @@
-from app.services.llm import _normalize_response
+from httpx import HTTPStatusError, Request, Response
+
+from app.services.errors import UpstreamAuthError, UpstreamRateLimitError
+from app.services.llm import _map_http_error, _normalize_response
 
 
 def test_strips_prefix():
@@ -17,12 +20,6 @@ def test_preserves_clean_response():
 
 def test_strips_whitespace():
     assert _normalize_response("  padded  ") == "padded"
-
-
-from httpx import HTTPStatusError, Request, Response
-
-from app.services.errors import UpstreamAuthError, UpstreamRateLimitError
-from app.services.llm import _map_http_error
 
 
 def test_maps_auth_http_error_to_safe_exception():

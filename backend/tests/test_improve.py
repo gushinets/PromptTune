@@ -1,6 +1,7 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
 
 from app.services.errors import UpstreamAuthError
 
@@ -79,7 +80,9 @@ async def test_improve_works_without_client_field(
 
 
 @pytest.mark.asyncio
-async def test_improve_returns_structured_upstream_auth_error(client: AsyncClient, mock_db, mock_redis):
+async def test_improve_returns_structured_upstream_auth_error(
+    client: AsyncClient, mock_db, mock_redis
+):
     with patch(
         "app.services.prompt_service.improve_text",
         new=AsyncMock(side_effect=UpstreamAuthError("Server OpenAI API key is not configured")),

@@ -24,7 +24,9 @@ def mock_litellm():
         "model": "gpt-4o-mini",
     }
 
-    with patch("app.services.llm._request_completion", new=AsyncMock(return_value=mock_response)) as m:
+    with patch(
+        "app.services.llm._request_completion", new=AsyncMock(return_value=mock_response)
+    ) as m:
         yield m
 
 
