@@ -51,7 +51,9 @@ VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook/improve-prompt
 cd backend
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -e ".[dev]"
+pip install -e ".[dev]"      # with dev dependencies (pytest, ruff)
+# OR
+pip install .                # runtime dependencies only
 uvicorn app.main:app --reload
 ```
 
