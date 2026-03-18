@@ -37,6 +37,8 @@ class RateLimiter:
         remaining = {
             "per_minute_remaining": max(0, per_min - min_count),
             "per_day_remaining": max(0, per_day - day_count),
+            "per_minute_total": per_min,
+            "per_day_total": per_day,
         }
         allowed = min_count < per_min and day_count < per_day
         return allowed, remaining
@@ -72,4 +74,6 @@ class RateLimiter:
         return True, {
             "per_minute_remaining": max(0, remaining["per_minute_remaining"] - 1),
             "per_day_remaining": max(0, remaining["per_day_remaining"] - 1),
+            "per_minute_total": remaining["per_minute_total"],
+            "per_day_total": remaining["per_day_total"],
         }

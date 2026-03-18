@@ -7,14 +7,10 @@ from dotenv import load_dotenv
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = BACKEND_ROOT / ".env"
-ENV_FILE_OVERRIDE = os.getenv("PROMPTTUNE_ENV_FILE")
 
 
 def _load_env() -> None:
-    env_files: list[Path] = []
-    if ENV_FILE_OVERRIDE:
-        env_files.append(Path(ENV_FILE_OVERRIDE))
-    env_files.append(DEFAULT_ENV_FILE)
+    env_files: list[Path] = [DEFAULT_ENV_FILE]
 
     seen: set[Path] = set()
     for env_file in env_files:

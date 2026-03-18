@@ -26,6 +26,8 @@ async def test_limits_returns_remaining_without_incrementing(client: AsyncClient
     assert response.json() == {
         "per_minute_remaining": 9,
         "per_day_remaining": 48,
+        "per_minute_total": 10,
+        "per_day_total": 50,
     }
     pipe_mock.incr.assert_not_called()
     pipe_mock.expire.assert_not_called()
