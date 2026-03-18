@@ -24,6 +24,8 @@ async def test_improve_works_without_authorization_header(
     assert body["improved_text"] == "better result"
     assert body["rate_limit"]["per_minute_remaining"] == 9
     assert body["rate_limit"]["per_day_remaining"] == 49
+    assert body["rate_limit"]["per_minute_total"] == 10
+    assert body["rate_limit"]["per_day_total"] == 50
 
 
 @pytest.mark.asyncio
