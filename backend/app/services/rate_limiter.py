@@ -81,7 +81,7 @@ class RateLimiter:
             "per_day_remaining": per_day_remaining,
         }
 
-    async def check(
+    async def get_remaining(
         self, installation_id: str, ip: str
     ) -> tuple[bool, dict[str, int]]:
         """Check and increment rate limits.

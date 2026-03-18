@@ -10,10 +10,12 @@
     }
   },
   "include": [
+    ".wxt/wxt.d.ts",
     "entrypoints/**/*.ts",
     "entrypoints/**/*.tsx",
     "shared/**/*.ts",
     "adapters/**/*.ts",
-    "__tests__/**/*.ts"
+    "__tests__/**/*.ts",
+    "__tests__/**/*.tsx"
   ]
 }

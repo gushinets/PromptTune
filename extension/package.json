@@ -10,7 +10,7 @@
     "build:firefox": "wxt build --browser firefox",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip --browser firefox",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,json,css,html}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,css,html}\"",
     "test": "vitest run",

@@ -155,7 +155,11 @@ export function App() {
   }, [original, isExhausted, rateLimit.total]);
 
   const handleSave = useCallback(async () => {
-    await save({ original, improved });
+    const originalTrimmed = original.trim();
+    const improvedTrimmed = improved.trim();
+    if (!originalTrimmed || !improvedTrimmed) return;
+
+    await save({ original: originalTrimmed, improved: improvedTrimmed });
     refreshLibraryCount();
     if (!original.trim() || !improved.trim()) return;
     if (BACKEND_MODE === "fastapi") {
