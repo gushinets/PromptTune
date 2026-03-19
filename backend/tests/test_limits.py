@@ -10,8 +10,8 @@ from app.main import app
 @pytest.mark.asyncio
 async def test_limits_returns_remaining_without_incrementing(client: AsyncClient):
     redis_mock = Mock()
-    # resolve_bucket: both GETs return None → new bucket created
-    redis_mock.get = AsyncMock(return_value=None)
+    # resolve_bucket: both canonical lookups return None -> use default inst_hash canon_id
+    redis_mock.mget = AsyncMock(return_value=[None, None])
     redis_mock.set = AsyncMock(return_value=True)
     redis_mock.expire = AsyncMock(return_value=True)
 

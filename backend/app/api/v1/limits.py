@@ -14,7 +14,7 @@ async def get_limits(
     redis: aioredis.Redis = Depends(get_redis),
     ip: str = Depends(get_client_ip),
 ):
-    ensure_installation_id_when_ip_present(ip, installation_id)
+    await ensure_installation_id_when_ip_present(ip, installation_id, redis)
 
     limiter = RateLimiter(redis)
     allowed, remaining = await limiter.get_remaining(installation_id=installation_id, ip=ip)

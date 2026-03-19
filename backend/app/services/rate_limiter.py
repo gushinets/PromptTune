@@ -1,4 +1,3 @@
-import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -16,8 +15,20 @@ class RateLimiter:
         self.now = now if now is not None else lambda: datetime.now(UTC)
 
     @staticmethod
+    def _hash_installation(installation_id: str) -> str:
+        payload = f"{installation_id}{settings.installation_id_salt}"
+        return sha256(payload.encode()).hexdigest()
+
+    @staticmethod
     def _hash_ip(ip: str) -> str:
-        return sha256(ip.encode()).hexdigest()[:16]
+        payload = f"{ip}{settings.ip_salt}"
+        return sha256(payload.encode()).hexdigest()
+
+    @staticmethod
+    def _decode(value: str | bytes | None) -> str | None:
+        if value is None:
+            return None
+        return value.decode() if isinstance(value, bytes) else value
 
     @staticmethod
     def _seconds_until_midnight(now: datetime) -> int:
@@ -25,32 +36,32 @@ class RateLimiter:
         seconds = (next_midnight - now).total_seconds()
         return int(seconds)
 
-    TTL_MAPPING = 7_776_000  # 90 days in seconds
+    TTL_CANON_INST = 15_552_000  # 180 days
+    TTL_CANON_IP = 2_592_000  # 30 days
 
     async def resolve_bucket(self, installation_id: str, ip: str) -> str:
+        inst_hash = self._hash_installation(installation_id)
         ip_hash = self._hash_ip(ip)
-        inst_key = f"map:inst:{installation_id}"
-        ip_key = f"map:ip:{ip_hash}"
+        inst_key = f"canon:inst:{inst_hash}"
+        ip_key = f"canon:ip:{ip_hash}"
 
-        # Step 1: Check if installation_id already has a bucket
-        bucket_key = await self.redis.get(inst_key)
-        if bucket_key is not None:
-            await self.redis.expire(inst_key, self.TTL_MAPPING)
-            return bucket_key.decode() if isinstance(bucket_key, bytes) else bucket_key
+        canon_by_inst, canon_by_ip = await self.redis.mget(inst_key, ip_key)
+        canon_by_inst = self._decode(canon_by_inst)
+        canon_by_ip = self._decode(canon_by_ip)
 
-        # Step 2: Check if IP already has a bucket (user reset their installation_id)
-        bucket_key = await self.redis.get(ip_key)
-        if bucket_key is not None:
-            bucket_key = bucket_key.decode() if isinstance(bucket_key, bytes) else bucket_key
-            await self.redis.set(inst_key, bucket_key, ex=self.TTL_MAPPING)
-            await self.redis.expire(ip_key, self.TTL_MAPPING)
-            return bucket_key
+        if canon_by_inst:
+            canon_id = canon_by_inst
+        elif canon_by_ip:
+            canon_id = canon_by_ip
+        else:
+            canon_id = inst_hash
 
-        # Step 3: Brand new identity — create fresh bucket
-        bucket_key = str(uuid.uuid4())
-        await self.redis.set(inst_key, bucket_key, ex=self.TTL_MAPPING)
-        await self.redis.set(ip_key, bucket_key, ex=self.TTL_MAPPING)
-        return bucket_key
+        # Keep both handles attached to the same bucket.
+        pipe = self.redis.pipeline()
+        pipe.set(inst_key, canon_id, ex=self.TTL_CANON_INST)
+        pipe.set(ip_key, canon_id, ex=self.TTL_CANON_IP)
+        await pipe.execute()
+        return canon_id
 
     async def get_remaining(self, installation_id: str, ip: str) -> tuple[bool, dict[str, int]]:
         bucket_key = await self.resolve_bucket(installation_id, ip)

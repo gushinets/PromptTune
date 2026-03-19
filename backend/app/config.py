@@ -6,22 +6,12 @@ from dotenv import load_dotenv
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = BACKEND_ROOT / ".env"
-ENV_FILE_OVERRIDE = os.getenv("PROMPTTUNE_ENV_FILE")
 
 
 def _load_env() -> None:
-    env_files: list[Path] = []
-    if ENV_FILE_OVERRIDE:
-        env_files.append(Path(ENV_FILE_OVERRIDE))
-    env_files.append(DEFAULT_ENV_FILE)
-
-    seen: set[Path] = set()
-    for env_file in env_files:
-        resolved = env_file.expanduser().resolve()
-        if resolved in seen or not resolved.exists():
-            continue
+    resolved = DEFAULT_ENV_FILE.expanduser().resolve()
+    if resolved.exists():
         load_dotenv(resolved, override=False)
-        seen.add(resolved)
 
 
 def _clean_env_value(value: str | None) -> str | None:
@@ -67,6 +57,8 @@ class BotConfig:
     free_req_per_min: int
     max_text_length: int
     allowed_origins: str
+    installation_id_salt: str
+    ip_salt: str
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -90,6 +82,9 @@ class BotConfig:
             free_req_per_min=_get_int_env("FREE_REQ_PER_MIN", 10),
             max_text_length=_get_int_env("MAX_TEXT_LENGTH", 8000),
             allowed_origins=_get_env("ALLOWED_ORIGINS", "*") or "*",
+            installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
+            or "prompttune-installation",
+            ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
         )
 
     def validate(self) -> None:
@@ -105,6 +100,10 @@ class BotConfig:
             raise ValueError(f"FREE_REQ_PER_MIN must be positive. Got: {self.free_req_per_min}")
         if self.max_text_length <= 0:
             raise ValueError(f"MAX_TEXT_LENGTH must be positive. Got: {self.max_text_length}")
+        if not self.installation_id_salt:
+            raise ValueError("INSTALLATION_ID_SALT must not be empty")
+        if not self.ip_salt:
+            raise ValueError("IP_SALT must not be empty")
 
     def get_provider_api_key(self) -> str | None:
         if self.llm_backend == "OPENAI":

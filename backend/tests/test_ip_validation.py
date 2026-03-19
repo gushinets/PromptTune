@@ -1,8 +1,11 @@
 """Tests for IP validation: 403 when IP present but no valid installation_id."""
 
+from hashlib import sha256
+
 import pytest
 from httpx import AsyncClient
 
+from app.config import settings
 from app.dependencies import get_client_ip
 
 
@@ -23,6 +26,9 @@ async def test_improve_returns_403_when_ip_present_and_installation_id_empty(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Your login is invalid"
+    ip_hash = sha256(f"192.168.1.1{settings.ip_salt}".encode()).hexdigest()
+    marker_key = f"flag:missing_inst:{ip_hash}"
+    mock_redis.set.assert_any_call(marker_key, "1", ex=2_592_000)
 
 
 @pytest.mark.asyncio
@@ -38,11 +44,14 @@ async def test_limits_returns_403_when_ip_present_and_installation_id_empty(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Your login is invalid"
+    ip_hash = sha256(f"10.0.0.1{settings.ip_salt}".encode()).hexdigest()
+    marker_key = f"flag:missing_inst:{ip_hash}"
+    mock_redis.set.assert_any_call(marker_key, "1", ex=2_592_000)
 
 
 @pytest.mark.asyncio
 async def test_prompts_returns_403_when_ip_present_and_installation_id_empty(
-    client: AsyncClient, mock_db
+    client: AsyncClient, mock_db, mock_redis
 ):
     """Vulnerability check: save prompt with IP but empty installation_id is rejected with 403."""
     response = await client.post(
@@ -58,6 +67,9 @@ async def test_prompts_returns_403_when_ip_present_and_installation_id_empty(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Your login is invalid"
+    ip_hash = sha256(f"172.16.0.1{settings.ip_salt}".encode()).hexdigest()
+    marker_key = f"flag:missing_inst:{ip_hash}"
+    mock_redis.set.assert_any_call(marker_key, "1", ex=2_592_000)
 
 
 @pytest.mark.asyncio

@@ -21,7 +21,7 @@ async def improve(
     redis: aioredis.Redis = Depends(get_redis),
     client_ip: str = Depends(get_client_ip),
 ):
-    ensure_installation_id_when_ip_present(client_ip, req.installation_id)
+    await ensure_installation_id_when_ip_present(client_ip, req.installation_id, redis)
 
     service = PromptService(db=db, redis=redis)
 
