@@ -1,7 +1,25 @@
+import logging
 import re
 import time
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from dataclasses import dataclass
 
-import httpx
+from litellm import acompletion
+from litellm.exceptions import (
+    APIConnectionError,
+    APIError,
+    AuthenticationError,
+    BadRequestError,
+    ContentPolicyViolationError,
+    ContextWindowExceededError,
+    InternalServerError,
+    NotFoundError,
+    OpenAIError,
+    PermissionDeniedError,
+    RateLimitError,
+    Timeout as LitellmTimeout,
+)
 
 from app.config import settings
 from app.security.redaction import redact_secrets
@@ -12,6 +30,29 @@ from app.services.errors import (
     UpstreamServiceError,
     UpstreamTimeoutError,
 )
+
+logger = logging.getLogger(__name__)
+
+# Persist LiteLLM usage logs to a file (so they are not dependent on console log configuration).
+_LOG_DIR = Path(__file__).resolve().parent / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
+_LOG_FILE = _LOG_DIR / "litellm.log"
+
+logger.setLevel(logging.INFO)
+_already_added = any(
+    isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", None) == str(_LOG_FILE)
+    for h in logger.handlers
+)
+if not _already_added:
+    _handler = RotatingFileHandler(
+        _LOG_FILE,
+        maxBytes=5 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    _handler.setLevel(logging.INFO)
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logger.addHandler(_handler)
 
 SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve the user's prompt
 to make it clearer, more specific, and more effective for AI assistants.
@@ -29,23 +70,23 @@ STRIP_PATTERNS = [
 ]
 
 
+@dataclass(frozen=True)
+class ImproveLLMResult:
+    improved_text: str
+    model: str
+    provider: str | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+    latency_ms: int
+    upstream_id: str | None
+
+
 def _normalize_response(text: str) -> str:
     text = text.strip()
     for pattern in STRIP_PATTERNS:
         text = pattern.sub("", text)
     return text.strip().strip('"').strip("'")
-
-
-def _resolve_model_name() -> str:
-    if settings.llm_backend == "OPENROUTER" and "/" not in settings.llm_model:
-        return f"openai/{settings.llm_model}"
-    return settings.llm_model
-
-
-def _resolve_api_url() -> str:
-    if settings.llm_backend == "OPENROUTER":
-        return "https://openrouter.ai/api/v1/chat/completions"
-    return "https://api.openai.com/v1/chat/completions"
 
 
 def _resolve_provider_api_key() -> str:
@@ -58,74 +99,170 @@ def _resolve_provider_api_key() -> str:
     raise UpstreamAuthError("Server OpenRouter API key is not configured")
 
 
-def _build_headers() -> dict[str, str]:
-    headers = {
-        "Authorization": f"Bearer {_resolve_provider_api_key()}",
-        "Content-Type": "application/json",
-    }
-    if settings.llm_backend == "OPENROUTER":
-        headers["HTTP-Referer"] = "https://prompttune.local"
-        headers["X-Title"] = "PromptTune"
-    return headers
+def _infer_provider_from_model(model_id: str) -> str | None:
+    if "/" in model_id:
+        return model_id.split("/", 1)[0].lower() or None
+    return None
 
 
-def _map_http_error(exc: httpx.HTTPStatusError) -> UpstreamServiceError:
-    status_code = exc.response.status_code
-    if status_code in (401, 403):
+def _usage_tokens(response: object) -> tuple[int | None, int | None, int | None]:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None, None, None
+    if isinstance(usage, dict):
+        return (
+            usage.get("prompt_tokens"),
+            usage.get("completion_tokens"),
+            usage.get("total_tokens"),
+        )
+    pt = getattr(usage, "prompt_tokens", None)
+    ct = getattr(usage, "completion_tokens", None)
+    tt = getattr(usage, "total_tokens", None)
+    return pt, ct, tt
+
+
+def _provider_from_response(response: object, model_id: str) -> str | None:
+    hidden = getattr(response, "_hidden_params", None) or {}
+    if isinstance(hidden, dict):
+        for key in ("custom_llm_provider", "litellm_provider", "api_base"):
+            val = hidden.get(key)
+            if isinstance(val, str) and val:
+                return val.lower()
+    return _infer_provider_from_model(model_id)
+
+
+def _map_litellm_error(exc: BaseException) -> UpstreamServiceError:
+    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
         return UpstreamAuthError("Provider rejected API key")
-    if status_code == 429:
+    if isinstance(exc, RateLimitError):
         return UpstreamRateLimitError("Provider rate limit exceeded")
+    if isinstance(exc, (LitellmTimeout, TimeoutError)):
+        return UpstreamTimeoutError("Provider timeout")
+    if isinstance(exc, APIConnectionError):
+        safe = redact_secrets(str(exc)) or "Provider connection failed"
+        return UpstreamServiceError(safe[:200])
 
-    safe_message = redact_secrets(exc.response.text) or "Provider request failed"
-    return UpstreamServiceError(f"Provider API error ({status_code}): {safe_message[:200]}")
+    if isinstance(exc, OpenAIError):
+        status = getattr(exc, "status_code", None)
+        if status in (401, 403):
+            return UpstreamAuthError("Provider rejected API key")
+        if status == 429:
+            return UpstreamRateLimitError("Provider rate limit exceeded")
+        body = getattr(exc, "message", None) or getattr(exc, "body", None) or str(exc)
+        safe = redact_secrets(str(body)) or "Provider request failed"
+        return UpstreamServiceError(f"Provider API error ({status or '?'}): {safe[:200]}")
+
+    if isinstance(
+        exc,
+        (
+            BadRequestError,
+            NotFoundError,
+            ContextWindowExceededError,
+            ContentPolicyViolationError,
+            InternalServerError,
+            APIError,
+        ),
+    ):
+        safe = redact_secrets(str(exc)) or "Provider request failed"
+        return UpstreamServiceError(safe[:200])
+
+    safe_message = redact_secrets(str(exc)) or "Provider request failed"
+    return UpstreamServiceError(safe_message[:200])
 
 
-async def _request_completion(text: str) -> dict:
-    payload = {
-        "model": _resolve_model_name(),
-        "messages": [
+class LiteLLMClient:
+    """Single entry point for chat completions via LiteLLM."""
+
+    async def improve_text(
+        self,
+        text: str,
+        *,
+        request_id: str,
+        installation_id: str,
+        site: str | None,
+    ) -> ImproveLLMResult:
+        model_id = settings.litellm_model_id()
+        api_key = _resolve_provider_api_key()
+        messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text},
-        ],
-        "max_tokens": 2048,
-        "temperature": 0.7,
-    }
+        ]
+        extra_headers: dict[str, str] | None = None
+        if settings.llm_backend == "OPENROUTER":
+            extra_headers = {
+                "HTTP-Referer": settings.openrouter_site_url or "https://prompttune.local",
+                "X-Title": settings.openrouter_app_name or "PromptTune",
+            }
 
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                _resolve_api_url(),
-                headers=_build_headers(),
-                json=payload,
+        start = time.monotonic()
+        try:
+            response = await acompletion(
+                model=model_id,
+                messages=messages,
+                api_key=api_key,
+                max_tokens=2048,
+                temperature=0.7,
+                timeout=settings.llm_request_timeout_seconds,
+                extra_headers=extra_headers,
             )
-        response.raise_for_status()
-    except httpx.TimeoutException as exc:
-        raise UpstreamTimeoutError("Provider timeout") from exc
-    except httpx.HTTPStatusError as exc:
-        raise _map_http_error(exc) from exc
-    except httpx.HTTPError as exc:
-        safe_message = redact_secrets(str(exc)) or "Provider request failed"
-        raise UpstreamServiceError(safe_message[:200]) from exc
+        except Exception as exc:
+            raise _map_litellm_error(exc) from exc
 
-    try:
-        data = response.json()
-        if not data.get("choices"):
+        latency_ms = int((time.monotonic() - start) * 1000)
+
+        if not getattr(response, "choices", None):
             raise UpstreamBadResponseError("Provider returned no choices")
-        return data
-    except ValueError as exc:
-        raise UpstreamBadResponseError("Provider returned invalid JSON") from exc
+
+        try:
+            raw = response.choices[0].message.content or ""
+        except (AttributeError, IndexError, TypeError) as exc:
+            raise UpstreamBadResponseError("Provider response missing message content") from exc
+
+        improved = _normalize_response(raw)
+        model_used = getattr(response, "model", None) or model_id
+        pt, ct, tt = _usage_tokens(response)
+        provider = _provider_from_response(response, model_used)
+        upstream_id = getattr(response, "id", None)
+
+        logger.info(
+            "llm_completion model=%s provider=%s prompt_tokens=%s completion_tokens=%s "
+            "total_tokens=%s latency_ms=%s request_id=%s installation_id=%s site=%s",
+            model_used,
+            provider,
+            pt,
+            ct,
+            tt,
+            latency_ms,
+            request_id,
+            installation_id,
+            site,
+        )
+
+        return ImproveLLMResult(
+            improved_text=improved,
+            model=model_used,
+            provider=provider,
+            prompt_tokens=pt,
+            completion_tokens=ct,
+            total_tokens=tt,
+            latency_ms=latency_ms,
+            upstream_id=upstream_id if isinstance(upstream_id, str) else None,
+        )
 
 
-async def improve_text(text: str) -> tuple[str, str, int]:
-    start = time.monotonic()
-    data = await _request_completion(text)
+_default_client = LiteLLMClient()
 
-    latency_ms = int((time.monotonic() - start) * 1000)
-    try:
-        raw = data["choices"][0]["message"]["content"] or ""
-    except (KeyError, IndexError, TypeError) as exc:
-        raise UpstreamBadResponseError("Provider response missing message content") from exc
-    improved = _normalize_response(raw)
-    model_used = data.get("model") or _resolve_model_name()
 
-    return improved, model_used, latency_ms
+async def improve_text(
+    text: str,
+    *,
+    request_id: str,
+    installation_id: str,
+    site: str | None,
+) -> ImproveLLMResult:
+    return await _default_client.improve_text(
+        text,
+        request_id=request_id,
+        installation_id=installation_id,
+        site=site,
+    )
