@@ -45,3 +45,5 @@ logs/
 
 # MCP
 .mcp.json
+
+.kiro/

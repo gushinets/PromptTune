@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
 import redis.asyncio as aioredis
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import ImproveRequest, ImproveResponse
-from app.dependencies import get_client_ip, get_db, get_redis
+from app.dependencies import (
+    ensure_installation_id_when_ip_present,
+    get_client_ip,
+    get_db,
+    get_redis,
+)
 from app.services.prompt_service import PromptService
 
 router = APIRouter()
@@ -16,6 +21,8 @@ async def improve(
     redis: aioredis.Redis = Depends(get_redis),
     client_ip: str = Depends(get_client_ip),
 ):
+    ensure_installation_id_when_ip_present(client_ip, req.installation_id)
+
     service = PromptService(db=db, redis=redis)
 
     allowed, remaining = await service.check_rate_limit(

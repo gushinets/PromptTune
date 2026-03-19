@@ -76,6 +76,11 @@ const ERROR_CONFIG: Record<
     title: "Rate limit exceeded.",
     Icon: AlertCircleIcon,
   },
+  auth: {
+    className: "error-auth",
+    title: "Invalid login.",
+    Icon: AlertCircleIcon,
+  },
   network: {
     className: "error-network",
     title: "Connection failed.",
