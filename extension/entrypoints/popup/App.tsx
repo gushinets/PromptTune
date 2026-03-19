@@ -5,9 +5,13 @@ import { ActionBar } from "./components/ActionBar";
 import { SiteIcons } from "./components/SiteIcons";
 import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
+import { RatingBar } from "./components/RatingBar";
 import { getAll, save, getInstallationId } from "@shared/storage";
 import { LIMITS, FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient } from "@shared/api-client";
+
+// TODO: Replace with actual upgrade URL
+const UPGRADE_URL = "https://forgekit.io/upgrade";
 
 type TabId = "improve" | "library";
 
@@ -64,6 +68,7 @@ export function App() {
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [rateLimit, setRateLimit] = useState({ remaining: 50, total: 50 });
   const [libraryCount, setLibraryCount] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
@@ -73,7 +78,21 @@ export function App() {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
 
+  // Close tooltip on click outside
+  useEffect(() => {
+    if (!showTooltip) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".rate-limit-wrapper")) {
+        setShowTooltip(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [showTooltip]);
+
   const isExhausted = rateLimit.remaining <= 0;
+  const isWarning = rateLimit.remaining > 0 && rateLimit.remaining <= 10;
 
   const handleImprove = useCallback(async () => {
     const trimmed = original.trim();
@@ -185,11 +204,41 @@ export function App() {
           <SparkleIcon className="header-icon" />
           <span className="header-title">PromptTune</span>
         </div>
-        <span
-          className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}
-        >
-          {rateLimit.remaining}/{rateLimit.total} today
-        </span>
+        <div className="rate-limit-wrapper">
+          <span
+            className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warn" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowTooltip((prev) => !prev);
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Rate limit info"
+          >
+            <span className="status-dot" />
+            {rateLimit.remaining}/{rateLimit.total} free today
+          </span>
+          {showTooltip && (
+            <div className="rate-limit-tooltip">
+              <p>
+                <strong>{rateLimit.remaining} free</strong> improvements left
+                today
+              </p>
+              <p>
+                Resets at midnight &middot;{" "}
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    browser.tabs.create({ url: UPGRADE_URL });
+                  }}
+                >
+                  Upgrade for unlimited
+                </a>
+              </p>
+            </div>
+          )}
+        </div>
       </header>
 
       <nav className="tab-bar">
@@ -225,6 +274,17 @@ export function App() {
                 onRetry={error.type === "network" ? handleImprove : undefined}
               />
             )}
+            {isExhausted && (
+              <div className="upgrade-banner">
+                <p>You&apos;ve used all 50 free improvements today.</p>
+                <button
+                  className="btn-upgrade"
+                  onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
+                >
+                  Upgrade for unlimited
+                </button>
+              </div>
+            )}
             <PromptForm
               original={original}
               improved={improved}
@@ -245,6 +305,7 @@ export function App() {
           <Library onCountChange={setLibraryCount} />
         )}
       </div>
+      <RatingBar />
     </div>
   );
 }
