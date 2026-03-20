@@ -22,6 +22,10 @@ async def test_readyz(client: AsyncClient, mock_redis, mock_db, monkeypatch):
     from app.api.v1 import health as health_module
 
     monkeypatch.setattr(health_module, "async_session_factory", lambda: _FakeSessionCtx())
+    if health_module.settings.llm_backend == "OPENROUTER":
+        monkeypatch.setattr(health_module.settings, "openrouter_api_key", "sk-test-placeholder")
+    else:
+        monkeypatch.setattr(health_module.settings, "openai_api_key", "sk-test-placeholder")
 
     response = await client.get("/readyz")
     assert response.status_code == 200
