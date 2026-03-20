@@ -64,6 +64,7 @@ export function App() {
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
+  const [limitsFailed, setLimitsFailed] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -75,7 +76,32 @@ export function App() {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
 
-<<<<<<< HEAD
+  useEffect(() => {
+    // Populate totals + remaining counts on popup open, so UI matches backend/env limits.
+    if (BACKEND_MODE !== "fastapi") {
+      setLimitsLoaded(true);
+      setLimitsFailed(false);
+      return;
+    }
+    browser.runtime
+      .sendMessage({ type: "GET_LIMITS" })
+      .then((res) => {
+        const rate_limit = res?.payload?.rate_limit;
+        if (!rate_limit) return;
+        setRateLimit({
+          remaining: rate_limit.per_day_remaining,
+          total: rate_limit.per_day_total,
+        });
+        setLimitsLoaded(true);
+        setLimitsFailed(false);
+      })
+      .catch(() => {
+        // Best-effort; fall back to 0/0 until we have a proper value.
+        setLimitsLoaded(true);
+        setLimitsFailed(true);
+      });
+  }, []);
+
   // Close tooltip on click outside
   useEffect(() => {
     if (!showTooltip) return;
@@ -89,32 +115,14 @@ export function App() {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [showTooltip]);
 
-  const isExhausted = rateLimit.remaining <= 0;
-  const isWarning = rateLimit.remaining > 0 && rateLimit.remaining <= 10;
-=======
-  useEffect(() => {
-    // Populate totals + remaining counts on popup open, so UI matches backend/env limits.
-    if (BACKEND_MODE !== "fastapi") return;
-    browser.runtime
-      .sendMessage({ type: "GET_LIMITS" })
-      .then((res) => {
-        const rate_limit = res?.payload?.rate_limit;
-        if (!rate_limit) return;
-        setRateLimit({
-          remaining: rate_limit.per_day_remaining,
-          total: rate_limit.per_day_total,
-        });
-        setLimitsLoaded(true);
-      })
-      .catch(() => {
-        // Best-effort; fall back to 0/0 until we have a proper value.
-        setLimitsLoaded(true);
-      });
-  }, []);
-
   const isExhausted =
-    BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
->>>>>>> origin/feature/integrate_front+back_for_rate_limit
+    BACKEND_MODE === "fastapi" && limitsLoaded && !limitsFailed
+      ? rateLimit.remaining <= 0
+      : false;
+  const isWarning =
+    BACKEND_MODE === "fastapi" && limitsLoaded && !limitsFailed
+      ? rateLimit.remaining > 0 && rateLimit.remaining <= 10
+      : false;
 
   const handleImprove = useCallback(async () => {
     const trimmed = original.trim();
@@ -243,11 +251,11 @@ export function App() {
           <SparkleIcon className="header-icon" />
           <span className="header-title">PromptTune</span>
         </div>
-<<<<<<< HEAD
         <div className="rate-limit-wrapper">
           <span
             className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warn" : ""}`}
             onClick={(e) => {
+              if (BACKEND_MODE !== "fastapi" || limitsFailed) return;
               e.stopPropagation();
               setShowTooltip((prev) => !prev);
             }}
@@ -255,10 +263,18 @@ export function App() {
             tabIndex={0}
             aria-label="Rate limit info"
           >
-            <span className="status-dot" />
-            {rateLimit.remaining}/{rateLimit.total} free today
-          </span>
-          {showTooltip && (
+          <span className="status-dot" />
+          {BACKEND_MODE !== "fastapi"
+            ? "Unlimited"
+            : !limitsLoaded
+              ? "Loading limits..."
+              : limitsFailed
+                ? "Limits unavailable"
+              : rateLimit.total > 0
+                ? `${rateLimit.remaining}/${rateLimit.total} free today`
+                : `${rateLimit.remaining} free today`}
+        </span>
+          {BACKEND_MODE === "fastapi" && limitsLoaded && !limitsFailed && showTooltip && (
             <div className="rate-limit-tooltip">
               <p>
                 <strong>{rateLimit.remaining} free</strong> improvements left
@@ -279,19 +295,6 @@ export function App() {
             </div>
           )}
         </div>
-=======
-        <span
-          className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}
-        >
-          {BACKEND_MODE !== "fastapi"
-            ? "Unlimited"
-            : !limitsLoaded
-              ? "Loading limits..."
-              : rateLimit.total > 0
-                ? `${rateLimit.remaining}/${rateLimit.total} today`
-                : `${rateLimit.remaining} today`}
-        </span>
->>>>>>> origin/feature/integrate_front+back_for_rate_limit
       </header>
 
       <nav className="tab-bar">

@@ -88,6 +88,8 @@ class RateLimiter:
         return allowed, {
             "per_minute_remaining": per_min_remaining,
             "per_day_remaining": per_day_remaining,
+            "per_minute_total": per_min,
+            "per_day_total": per_day,
         }
 
     async def check(self, installation_id: str, ip: str) -> tuple[bool, dict[str, int]]:
@@ -104,35 +106,52 @@ class RateLimiter:
         day_key = f"rl:{bucket_key}:d:{date_str}"
         min_key = f"rl:{bucket_key}:m:{minute_str}"
 
-        # Read current counts atomically
-        day_val, min_val = await self.redis.mget(day_key, min_key)
-        day_count = int(day_val or 0)
-        min_count = int(min_val or 0)
-
         per_day = settings.free_req_per_day
         per_min = settings.free_req_per_min
-
-        remaining = {
-            "per_day_remaining": max(0, per_day - day_count),
-            "per_minute_remaining": max(0, per_min - min_count),
-        }
-
-        if min_count >= per_min or day_count >= per_day:
-            return False, remaining
-
-        # Increment both counters in a pipeline
         day_ttl = self._seconds_until_midnight(now) + 3600
         min_ttl = 90
 
-        pipe = self.redis.pipeline()
-        pipe.incr(day_key)
-        pipe.expire(day_key, day_ttl)
-        pipe.incr(min_key)
-        pipe.expire(min_key, min_ttl)
-        await pipe.execute()
+        # Atomic check + increment to avoid race conditions under concurrency.
+        script = """
+        local day_key = KEYS[1]
+        local min_key = KEYS[2]
+        local per_day = tonumber(ARGV[1])
+        local per_min = tonumber(ARGV[2])
+        local day_ttl = tonumber(ARGV[3])
+        local min_ttl = tonumber(ARGV[4])
 
-        return True, {
-            "per_day_remaining": max(0, remaining["per_day_remaining"] - 1),
-            "per_minute_total": remaining["per_minute_total"],
-            "per_day_total": remaining["per_day_total"],
+        local day_count = tonumber(redis.call("GET", day_key) or "0")
+        local min_count = tonumber(redis.call("GET", min_key) or "0")
+
+        local day_remaining = per_day - day_count
+        local min_remaining = per_min - min_count
+
+        if day_remaining <= 0 or min_remaining <= 0 then
+            return {0, math.max(day_remaining, 0), math.max(min_remaining, 0)}
+        end
+
+        redis.call("INCR", day_key)
+        redis.call("EXPIRE", day_key, day_ttl)
+        redis.call("INCR", min_key)
+        redis.call("EXPIRE", min_key, min_ttl)
+
+        return {1, math.max(day_remaining - 1, 0), math.max(min_remaining - 1, 0)}
+        """
+
+        allowed, day_remaining, min_remaining = await self.redis.eval(
+            script,
+            2,
+            day_key,
+            min_key,
+            per_day,
+            per_min,
+            day_ttl,
+            min_ttl,
+        )
+
+        return bool(allowed), {
+            "per_day_remaining": int(day_remaining),
+            "per_minute_remaining": int(min_remaining),
+            "per_minute_total": per_min,
+            "per_day_total": per_day,
         }
