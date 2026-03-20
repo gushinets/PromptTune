@@ -133,5 +133,6 @@ class RateLimiter:
 
         return True, {
             "per_day_remaining": max(0, remaining["per_day_remaining"] - 1),
-            "per_minute_remaining": max(0, remaining["per_minute_remaining"] - 1),
+            "per_minute_total": remaining["per_minute_total"],
+            "per_day_total": remaining["per_day_total"],
         }

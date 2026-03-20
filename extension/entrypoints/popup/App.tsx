@@ -9,6 +9,9 @@ import { RatingBar } from "./components/RatingBar";
 import { getAll, save, getInstallationId } from "@shared/storage";
 import { LIMITS, FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient } from "@shared/api-client";
+import type { ImproveResponse as ImproveResponseBody } from "@shared/types";
+
+type ImproveResultMessage = { type: "IMPROVE_RESULT"; payload: ImproveResponseBody };
 
 // TODO: Replace with actual upgrade URL
 const UPGRADE_URL = "https://forgekit.io/upgrade";
@@ -18,13 +21,6 @@ type TabId = "improve" | "library";
 export interface ErrorInfo {
   type: "rate-limit" | "network" | "auth" | "generic";
   message: string;
-}
-
-interface ImproveResponse {
-  payload?: {
-    improved_text?: string;
-    rate_limit?: { per_day_remaining: number };
-  };
 }
 
 function SparkleIcon({ className }: { className?: string }) {
@@ -66,7 +62,8 @@ export function App() {
   const [improved, setImproved] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
-  const [rateLimit, setRateLimit] = useState({ remaining: 50, total: 50 });
+  const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
+  const [limitsLoaded, setLimitsLoaded] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
 
@@ -78,6 +75,7 @@ export function App() {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
 
+<<<<<<< HEAD
   // Close tooltip on click outside
   useEffect(() => {
     if (!showTooltip) return;
@@ -93,6 +91,30 @@ export function App() {
 
   const isExhausted = rateLimit.remaining <= 0;
   const isWarning = rateLimit.remaining > 0 && rateLimit.remaining <= 10;
+=======
+  useEffect(() => {
+    // Populate totals + remaining counts on popup open, so UI matches backend/env limits.
+    if (BACKEND_MODE !== "fastapi") return;
+    browser.runtime
+      .sendMessage({ type: "GET_LIMITS" })
+      .then((res) => {
+        const rate_limit = res?.payload?.rate_limit;
+        if (!rate_limit) return;
+        setRateLimit({
+          remaining: rate_limit.per_day_remaining,
+          total: rate_limit.per_day_total,
+        });
+        setLimitsLoaded(true);
+      })
+      .catch(() => {
+        // Best-effort; fall back to 0/0 until we have a proper value.
+        setLimitsLoaded(true);
+      });
+  }, []);
+
+  const isExhausted =
+    BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
+>>>>>>> origin/feature/integrate_front+back_for_rate_limit
 
   const handleImprove = useCallback(async () => {
     const trimmed = original.trim();
@@ -109,7 +131,10 @@ export function App() {
     if (isExhausted) {
       setError({
         type: "rate-limit",
-        message: "You've used all 50 requests today. Resets at midnight UTC.",
+        message:
+          rateLimit.total > 0
+            ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
+            : "You've used all requests today. Resets at midnight UTC.",
       });
       return;
     }
@@ -122,15 +147,16 @@ export function App() {
       const response = (await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
         payload: { text: trimmed },
-      })) as ImproveResponse;
+      })) as ImproveResultMessage;
 
       if (response?.payload?.improved_text) {
         setImproved(response.payload.improved_text);
         if (response.payload.rate_limit) {
           setRateLimit({
             remaining: response.payload.rate_limit.per_day_remaining,
-            total: rateLimit.total,
+            total: response.payload.rate_limit.per_day_total,
           });
+          setLimitsLoaded(true);
         }
       } else {
         throw new Error("Unexpected response from background.");
@@ -150,9 +176,13 @@ export function App() {
       } else if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
         setError({
           type: "rate-limit",
-          message: "You've used all 50 requests today. Resets at midnight UTC.",
+          message:
+            rateLimit.total > 0
+              ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
+              : "You've used all requests today. Resets at midnight UTC.",
         });
         setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+        setLimitsLoaded(true);
       } else if (
         message.includes("Failed to fetch") ||
         message.includes("NetworkError") ||
@@ -213,6 +243,7 @@ export function App() {
           <SparkleIcon className="header-icon" />
           <span className="header-title">PromptTune</span>
         </div>
+<<<<<<< HEAD
         <div className="rate-limit-wrapper">
           <span
             className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warn" : ""}`}
@@ -248,6 +279,19 @@ export function App() {
             </div>
           )}
         </div>
+=======
+        <span
+          className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}
+        >
+          {BACKEND_MODE !== "fastapi"
+            ? "Unlimited"
+            : !limitsLoaded
+              ? "Loading limits..."
+              : rateLimit.total > 0
+                ? `${rateLimit.remaining}/${rateLimit.total} today`
+                : `${rateLimit.remaining} today`}
+        </span>
+>>>>>>> origin/feature/integrate_front+back_for_rate_limit
       </header>
 
       <nav className="tab-bar">
