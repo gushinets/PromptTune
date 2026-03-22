@@ -26,6 +26,12 @@ export default defineBackground(() => {
         return { type: "IMPROVE_RESULT", payload: result };
       }
 
+      case "GET_LIMITS": {
+        const installationId = await getInstallationId();
+        const rate_limit = await apiClient.limits(installationId);
+        return { type: "LIMITS_RESULT", payload: { rate_limit } };
+      }
+
       case "OPEN_AND_PASTE": {
         const tab = await browser.tabs.create({ url: msg.payload.url });
         // Wait for tab to load, then send paste command

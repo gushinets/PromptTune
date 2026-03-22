@@ -4,17 +4,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ENV_FILE = BACKEND_ROOT / ".env"
-ENV_FILE_OVERRIDE = os.getenv("PROMPTTUNE_ENV_FILE")
 
 
 def _load_env() -> None:
-    env_files: list[Path] = []
-    if ENV_FILE_OVERRIDE:
-        env_files.append(Path(ENV_FILE_OVERRIDE))
-    env_files.append(DEFAULT_ENV_FILE)
+    env_files: list[Path] = [DEFAULT_ENV_FILE]
 
     seen: set[Path] = set()
     for env_file in env_files:
@@ -22,7 +17,6 @@ def _load_env() -> None:
         if resolved in seen or not resolved.exists():
             continue
         load_dotenv(resolved, override=False)
-        seen.add(resolved)
 
 
 def _clean_env_value(value: str | None) -> str | None:
@@ -78,12 +72,23 @@ class BotConfig:
     llm_request_timeout_seconds: float
     openrouter_site_url: str | None
     openrouter_app_name: str | None
+    logs_dir: str
+    log_file: str
+    log_max_size: int
+    log_backup_count: int
+    installation_id_salt: str
+    ip_salt: str
 
     @classmethod
     def from_env(cls) -> "BotConfig":
         """Load configuration from environment variables."""
         llm_backend = (_get_env("LLM_BACKEND", "OPENROUTER") or "OPENROUTER").upper()
         llm_model = _get_env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
+        logs_dir = _get_env("LOGS_DIR", str(BACKEND_ROOT / "logs"))
+        log_file = _get_env("LOG_FILE", "access.log")
+        log_max_size = _get_int_env("LOG_MAX_SIZE", 10 * 1024 * 1024)  # 10 MB
+        log_backup_count = _get_int_env("LOG_BACKUP_COUNT", 5)
+
 
         return cls(
             database_url=_get_env(
@@ -91,7 +96,8 @@ class BotConfig:
                 "postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune",
             )
             or "postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune",
-            redis_url=_get_env("REDIS_URL", "redis://localhost:6379/0") or "redis://localhost:6379/0",
+            redis_url=_get_env("REDIS_URL", "redis://localhost:6379/0")
+            or "redis://localhost:6379/0",
             llm_backend=llm_backend,
             llm_model=llm_model,
             openai_api_key=_get_env("OPENAI_API_KEY"),
@@ -103,6 +109,13 @@ class BotConfig:
             llm_request_timeout_seconds=_get_float_env("LLM_REQUEST_TIMEOUT_SECONDS", 60.0),
             openrouter_site_url=_get_env("OPENROUTER_SITE_URL"),
             openrouter_app_name=_get_env("OPENROUTER_APP_NAME"),
+            logs_dir=logs_dir,
+            log_file=log_file,
+            log_max_size=log_max_size,
+            log_backup_count=log_backup_count,
+            installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
+            or "prompttune-installation",
+            ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
         )
 
     def validate(self) -> None:
@@ -113,16 +126,20 @@ class BotConfig:
             )
 
         if self.free_req_per_day <= 0:
-            raise ValueError(
-                f"FREE_REQ_PER_DAY must be positive. Got: {self.free_req_per_day}"
-            )
+            raise ValueError(f"FREE_REQ_PER_DAY must be positive. Got: {self.free_req_per_day}")
         if self.free_req_per_min <= 0:
-            raise ValueError(
-                f"FREE_REQ_PER_MIN must be positive. Got: {self.free_req_per_min}"
-            )
+            raise ValueError(f"FREE_REQ_PER_MIN must be positive. Got: {self.free_req_per_min}")
         if self.max_text_length <= 0:
             raise ValueError(
                 f"MAX_TEXT_LENGTH must be positive. Got: {self.max_text_length}"
+            )
+        if self.log_max_size <= 0:
+            raise ValueError(
+                f"LOG_MAX_SIZE must be positive. Got: {self.log_max_size}"
+            )
+        if self.log_backup_count < 0:
+            raise ValueError(
+                f"LOG_BACKUP_COUNT must be non-negative. Got: {self.log_backup_count}"
             )
         if self.llm_request_timeout_seconds <= 0:
             raise ValueError(
@@ -139,6 +156,10 @@ class BotConfig:
         if "/" not in self.llm_model:
             return f"openrouter/openai/{self.llm_model}"
         return f"openrouter/{self.llm_model}"
+        if not self.installation_id_salt:
+            raise ValueError("INSTALLATION_ID_SALT must not be empty")
+        if not self.ip_salt:
+            raise ValueError("IP_SALT must not be empty")
 
     def get_provider_api_key(self) -> str | None:
         if self.llm_backend == "OPENAI":

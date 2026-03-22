@@ -7,8 +7,10 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.config import settings
 from app.db.session import engine
+from app.logging_config import setup_logging
 from app.middleware.request_id import RequestIdMiddleware
 from app.middleware.logging import LoggingMiddleware
+from app.middleware.request_id import RequestIdMiddleware
 from app.services.errors import (
     UpstreamAuthError,
     UpstreamBadResponseError,
@@ -21,6 +23,7 @@ from app.services.errors import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    setup_logging()
     yield
     # Shutdown
     await engine.dispose()

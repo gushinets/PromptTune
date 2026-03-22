@@ -51,7 +51,9 @@ VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook/improve-prompt
 cd backend
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -e ".[dev]"
+pip install -e ".[dev]"      # with dev dependencies (pytest, ruff)
+# OR
+pip install .                # runtime dependencies only
 uvicorn app.main:app --reload
 ```
 
@@ -70,6 +72,18 @@ OPENROUTER_API_KEY=REPLACE_ME # required when LLM_BACKEND=OPENROUTER
 # OPENAI_API_KEY=REPLACE_ME   # required when LLM_BACKEND=OPENAI
 DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune
 REDIS_URL=redis://localhost:6379/0
+```
+
+
+```env
+# Directory for log files (default: backend/logs)
+LOGS_DIR=logs
+# Log file name (default: access.log)
+LOG_FILE=access.log
+# Maximum log file size in bytes (default: 10485760 = 10 MB)
+LOG_MAX_SIZE=10485760
+# Number of backup log files to keep (default: 5)
+LOG_BACKUP_COUNT=5
 ```
 
 Notes:

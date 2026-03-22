@@ -37,15 +37,21 @@ def mock_litellm():
 @pytest.fixture
 def mock_redis():
     redis_mock = Mock()
-    pipe_read = Mock()
-    pipe_read.get = Mock()
-    pipe_read.execute = AsyncMock(return_value=[0, 0, 0, 0])
-    pipe_write = Mock()
-    pipe_write.incr = Mock()
-    pipe_write.expire = Mock()
-    pipe_write.execute = AsyncMock(return_value=[None] * 8)
-    redis_mock.pipeline = Mock(side_effect=[pipe_read, pipe_write])
+    # resolve_bucket uses redis.get, redis.set, redis.expire directly (all async)
+    redis_mock.get = AsyncMock(return_value=None)  # no existing bucket → new UUID
+    redis_mock.set = AsyncMock(return_value=True)
+    redis_mock.expire = AsyncMock(return_value=True)
+    # check() uses redis.mget to read counters (0 usage → allowed)
+    redis_mock.mget = AsyncMock(return_value=[None, None])
     redis_mock.ping = AsyncMock(return_value=True)
+
+    # Pipeline mock works for both get_remaining (GETs) and check (incr/expire)
+    pipe_mock = Mock()
+    pipe_mock.get = Mock()
+    pipe_mock.incr = Mock()
+    pipe_mock.expire = Mock()
+    pipe_mock.execute = AsyncMock(return_value=[1, True, 1, True])
+    redis_mock.pipeline = Mock(return_value=pipe_mock)
 
     async def override_get_redis():
         return redis_mock
