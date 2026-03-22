@@ -1,5 +1,10 @@
 import { API_BASE_URL, N8N_WEBHOOK_URL, BACKEND_MODE } from "./constants";
-import type { ImproveRequest, ImproveResponse, SavePromptRequest, SavePromptResponse } from "./types";
+import type {
+  ImproveRequest,
+  ImproveResponse,
+  SavePromptRequest,
+  SavePromptResponse,
+} from "./types";
 
 async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -13,6 +18,20 @@ async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
     throw new Error(`API ${res.status}: ${detail}`);
   }
 
+  return res.json();
+}
+
+async function get<TRes>(path: string, query: Record<string, string>): Promise<TRes> {
+  const url = new URL(`${API_BASE_URL}${path}`);
+  for (const [k, v] of Object.entries(query)) {
+    url.searchParams.set(k, v);
+  }
+
+  const res = await fetch(url.toString(), { method: "GET" });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => res.statusText);
+    throw new Error(`API ${res.status}: ${detail}`);
+  }
   return res.json();
 }
 
@@ -45,5 +64,23 @@ export const apiClient = {
 
   savePrompt(req: SavePromptRequest): Promise<SavePromptResponse> {
     return post("/v1/prompts", req);
+  },
+
+  limits(installation_id: string): Promise<{
+    per_minute_remaining: number;
+    per_day_remaining: number;
+    per_minute_total: number;
+    per_day_total: number;
+  }> {
+    if (BACKEND_MODE !== "fastapi") {
+      return Promise.resolve({
+        per_minute_remaining: 0,
+        per_day_remaining: 0,
+        per_minute_total: 0,
+        per_day_total: 0,
+      });
+    }
+
+    return get("/v1/limits", { installation_id });
   },
 };

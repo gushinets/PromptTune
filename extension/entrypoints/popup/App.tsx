@@ -5,22 +5,22 @@ import { ActionBar } from "./components/ActionBar";
 import { SiteIcons } from "./components/SiteIcons";
 import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
+import { RatingBar } from "./components/RatingBar";
 import { getAll, save, getInstallationId } from "@shared/storage";
 import { LIMITS, FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient } from "@shared/api-client";
+import type { ImproveResponse as ImproveResponseBody } from "@shared/types";
+
+type ImproveResultMessage = { type: "IMPROVE_RESULT"; payload: ImproveResponseBody };
+
+// TODO: Replace with actual upgrade URL
+const UPGRADE_URL = "https://forgekit.io/upgrade";
 
 type TabId = "improve" | "library";
 
 export interface ErrorInfo {
-  type: "rate-limit" | "network" | "generic";
+  type: "rate-limit" | "network" | "auth" | "generic";
   message: string;
-}
-
-interface ImproveResponse {
-  payload?: {
-    improved_text?: string;
-    rate_limit?: { per_day_remaining: number };
-  };
 }
 
 function SparkleIcon({ className }: { className?: string }) {
@@ -62,8 +62,10 @@ export function App() {
   const [improved, setImproved] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
-  const [rateLimit, setRateLimit] = useState({ remaining: 50, total: 50 });
+  const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
+  const [limitsLoaded, setLimitsLoaded] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
@@ -73,7 +75,28 @@ export function App() {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
 
-  const isExhausted = rateLimit.remaining <= 0;
+  useEffect(() => {
+    // Populate totals + remaining counts on popup open, so UI matches backend/env limits.
+    if (BACKEND_MODE !== "fastapi") return;
+    browser.runtime
+      .sendMessage({ type: "GET_LIMITS" })
+      .then((res) => {
+        const rate_limit = res?.payload?.rate_limit;
+        if (!rate_limit) return;
+        setRateLimit({
+          remaining: rate_limit.per_day_remaining,
+          total: rate_limit.per_day_total,
+        });
+        setLimitsLoaded(true);
+      })
+      .catch(() => {
+        // Best-effort; fall back to 0/0 until we have a proper value.
+        setLimitsLoaded(true);
+      });
+  }, []);
+
+  const isExhausted =
+    BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
 
   const handleImprove = useCallback(async () => {
     const trimmed = original.trim();
@@ -90,7 +113,10 @@ export function App() {
     if (isExhausted) {
       setError({
         type: "rate-limit",
-        message: "You've used all 50 requests today. Resets at midnight UTC.",
+        message:
+          rateLimit.total > 0
+            ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
+            : "You've used all requests today. Resets at midnight UTC.",
       });
       return;
     }
@@ -103,15 +129,16 @@ export function App() {
       const response = (await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
         payload: { text: trimmed },
-      })) as ImproveResponse;
+      })) as ImproveResultMessage;
 
       if (response?.payload?.improved_text) {
         setImproved(response.payload.improved_text);
         if (response.payload.rate_limit) {
           setRateLimit({
             remaining: response.payload.rate_limit.per_day_remaining,
-            total: rateLimit.total,
+            total: response.payload.rate_limit.per_day_total,
           });
+          setLimitsLoaded(true);
         }
       } else {
         throw new Error("Unexpected response from background.");
@@ -119,12 +146,25 @@ export function App() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
 
-      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+      if (
+        message.includes("403") ||
+        message.toLowerCase().includes("login is invalid")
+      ) {
+        setError({
+          type: "auth",
+          message:
+            "Your login is invalid. Try refreshing the extension or reinstalling.",
+        });
+      } else if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
         setError({
           type: "rate-limit",
-          message: "You've used all 50 requests today. Resets at midnight UTC.",
+          message:
+            rateLimit.total > 0
+              ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
+              : "You've used all requests today. Resets at midnight UTC.",
         });
         setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+        setLimitsLoaded(true);
       } else if (
         message.includes("Failed to fetch") ||
         message.includes("NetworkError") ||
@@ -188,7 +228,13 @@ export function App() {
         <span
           className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}
         >
-          {rateLimit.remaining}/{rateLimit.total} today
+          {BACKEND_MODE !== "fastapi"
+            ? "Unlimited"
+            : !limitsLoaded
+              ? "Loading limits..."
+              : rateLimit.total > 0
+                ? `${rateLimit.remaining}/${rateLimit.total} today`
+                : `${rateLimit.remaining} today`}
         </span>
       </header>
 
@@ -225,6 +271,17 @@ export function App() {
                 onRetry={error.type === "network" ? handleImprove : undefined}
               />
             )}
+            {isExhausted && (
+              <div className="upgrade-banner">
+                <p>You&apos;ve used all 50 free improvements today.</p>
+                <button
+                  className="btn-upgrade"
+                  onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
+                >
+                  Upgrade for unlimited
+                </button>
+              </div>
+            )}
             <PromptForm
               original={original}
               improved={improved}
@@ -245,6 +302,7 @@ export function App() {
           <Library onCountChange={setLibraryCount} />
         )}
       </div>
+      <RatingBar />
     </div>
   );
 }

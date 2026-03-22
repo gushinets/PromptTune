@@ -36,7 +36,7 @@ export function PromptForm({
       <textarea
         value={original}
         onChange={(e) => onOriginalChange(e.target.value)}
-        placeholder="Type or paste your prompt here..."
+        placeholder="e.g. Write a follow-up email to a client who didn't respond to my roof repair quote..."
         rows={4}
       />
 
@@ -67,13 +67,20 @@ export function PromptForm({
           <div className="skeleton-line" />
         </div>
       ) : (
-        <textarea
-          className="improved-textarea"
-          value={improved}
-          readOnly
-          placeholder="Improved version will appear here..."
-          rows={4}
-        />
+        <>
+          <textarea
+            className="improved-textarea"
+            value={improved}
+            readOnly
+            placeholder="Improved version will appear here..."
+            rows={4}
+          />
+          {improved && (
+            <p className="improve-hint">
+              ✦ Prompt optimized for clarity, specificity and structure
+            </p>
+          )}
+        </>
       )}
     </div>
   );
