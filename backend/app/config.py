@@ -9,8 +9,13 @@ DEFAULT_ENV_FILE = BACKEND_ROOT / ".env"
 
 
 def _load_env() -> None:
-    resolved = DEFAULT_ENV_FILE.expanduser().resolve()
-    if resolved.exists():
+    env_files: list[Path] = [DEFAULT_ENV_FILE]
+
+    seen: set[Path] = set()
+    for env_file in env_files:
+        resolved = env_file.expanduser().resolve()
+        if resolved in seen or not resolved.exists():
+            continue
         load_dotenv(resolved, override=False)
 
 

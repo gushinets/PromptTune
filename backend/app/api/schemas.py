@@ -14,6 +14,8 @@ class ImproveRequest(BaseModel):
 class RateLimitInfo(BaseModel):
     per_minute_remaining: int
     per_day_remaining: int
+    per_minute_total: int
+    per_day_total: int
 
 
 class ImproveResponse(BaseModel):
