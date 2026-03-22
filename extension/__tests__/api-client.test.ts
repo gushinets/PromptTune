@@ -38,4 +38,21 @@ describe("apiClient", () => {
       apiClient.improve({ text: "test", installation_id: "inst-1", client: "extension" }),
     ).rejects.toThrow("API 429");
   });
+
+  it("throws with 403 and login-invalid detail so popup can show auth toast", async () => {
+    const detail = JSON.stringify({ detail: "Your login is invalid" });
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+      text: () => Promise.resolve(detail),
+    });
+
+    const err = await apiClient
+      .improve({ text: "test", installation_id: "inst-1", client: "extension" })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/403/);
+    expect((err as Error).message).toMatch(/login is invalid/i);
+  });
 });

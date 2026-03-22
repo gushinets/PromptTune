@@ -16,7 +16,7 @@ const UPGRADE_URL = "https://forgekit.io/upgrade";
 type TabId = "improve" | "library";
 
 export interface ErrorInfo {
-  type: "rate-limit" | "network" | "generic";
+  type: "rate-limit" | "network" | "auth" | "generic";
   message: string;
 }
 
@@ -138,7 +138,16 @@ export function App() {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
 
-      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+      if (
+        message.includes("403") ||
+        message.toLowerCase().includes("login is invalid")
+      ) {
+        setError({
+          type: "auth",
+          message:
+            "Your login is invalid. Try refreshing the extension or reinstalling.",
+        });
+      } else if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
         setError({
           type: "rate-limit",
           message: "You've used all 50 requests today. Resets at midnight UTC.",
