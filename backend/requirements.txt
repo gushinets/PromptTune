@@ -1,12 +1,12 @@
-fastapi
-uvicorn[standard]
-sqlalchemy[asyncio]
-asyncpg
-redis[hiredis]
-litellm
-pydantic-settings
-python-dotenv
-httpx
-pytest
+fastapi == 0.135.1
+uvicorn[standard] == 0.42.0
+sqlalchemy[asyncio] == 2.0.48
+asyncpg == 0.31.0
+redis[hiredis] == 3.3.0
+litellm == 1.82.2
+pydantic-settings == 2.13.1
+python-dotenv == 1.2.2
+httpx == 0.28.1
+pytest == 9.0.2
 pytest-asyncio
-alembic
+alembic == 1.18.4

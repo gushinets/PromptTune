@@ -44,3 +44,5 @@ PROMPTS/
 
 # MCP
 .mcp.json
+
+.kiro/

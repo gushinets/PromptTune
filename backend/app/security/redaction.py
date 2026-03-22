@@ -1,6 +1,5 @@
 import re
 
-
 _AUTH_HEADER_RE = re.compile(r"(?i)(authorization\s*[:=]\s*)(bearer\s+)?[^\s,;]+")
 _BEARER_RE = re.compile(r"(?i)bearer\s+[^\s,;]+")
 _SK_KEY_RE = re.compile(r"\bsk(?:-or-v1|-proj)?-[A-Za-z0-9_-]+\b")
