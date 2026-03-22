@@ -41,6 +41,7 @@ backend/pytest-cache-files-*/
 backend/pytest-cache-files-*
 
 PROMPTS/    
+logs/
 
 # MCP
 .mcp.json
