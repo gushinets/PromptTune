@@ -224,6 +224,11 @@ class LiteLLMClient:
         provider = _provider_from_response(response, model_used)
         upstream_id = getattr(response, "id", None)
 
+        def _sanitize(value: str | None) -> str | None:
+            if value is None:
+                return None
+            return value.replace("\r", "").replace("\n", "")
+
         logger.info(
             "llm_completion model=%s provider=%s prompt_tokens=%s completion_tokens=%s "
             "total_tokens=%s latency_ms=%s request_id=%s installation_id=%s site=%s",
@@ -233,9 +238,9 @@ class LiteLLMClient:
             ct,
             tt,
             latency_ms,
-            request_id,
-            installation_id,
-            site,
+            _sanitize(request_id),
+            _sanitize(installation_id),
+            _sanitize(site),
         )
 
         return ImproveLLMResult(
