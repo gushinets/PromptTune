@@ -17,6 +17,7 @@ def _load_env() -> None:
         if resolved in seen or not resolved.exists():
             continue
         load_dotenv(resolved, override=False)
+        seen.add(resolved)
 
 
 def _clean_env_value(value: str | None) -> str | None:
@@ -89,7 +90,6 @@ class BotConfig:
         log_max_size = _get_int_env("LOG_MAX_SIZE", 10 * 1024 * 1024)  # 10 MB
         log_backup_count = _get_int_env("LOG_BACKUP_COUNT", 5)
 
-
         return cls(
             database_url=_get_env(
                 "DATABASE_URL",
@@ -130,13 +130,9 @@ class BotConfig:
         if self.free_req_per_min <= 0:
             raise ValueError(f"FREE_REQ_PER_MIN must be positive. Got: {self.free_req_per_min}")
         if self.max_text_length <= 0:
-            raise ValueError(
-                f"MAX_TEXT_LENGTH must be positive. Got: {self.max_text_length}"
-            )
+            raise ValueError(f"MAX_TEXT_LENGTH must be positive. Got: {self.max_text_length}")
         if self.log_max_size <= 0:
-            raise ValueError(
-                f"LOG_MAX_SIZE must be positive. Got: {self.log_max_size}"
-            )
+            raise ValueError(f"LOG_MAX_SIZE must be positive. Got: {self.log_max_size}")
         if self.log_backup_count < 0:
             raise ValueError(
                 f"LOG_BACKUP_COUNT must be non-negative. Got: {self.log_backup_count}"
@@ -158,6 +154,7 @@ class BotConfig:
         if "/" not in self.llm_model:
             return f"openrouter/openai/{self.llm_model}"
         return f"openrouter/{self.llm_model}"
+            raise ValueError(f"LOG_BACKUP_COUNT must be non-negative. Got: {self.log_backup_count}")
         if not self.installation_id_salt:
             raise ValueError("INSTALLATION_ID_SALT must not be empty")
         if not self.ip_salt:

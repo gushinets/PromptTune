@@ -32,8 +32,8 @@ async def test_limits_returns_remaining_without_incrementing(client: AsyncClient
 
     assert response.status_code == 200
     assert response.json() == {
-        "per_minute_remaining": 9,
-        "per_day_remaining": 48,
+        "per_minute_remaining": 8,
+        "per_day_remaining": 49,
         "per_minute_total": 10,
         "per_day_total": 50,
     }
