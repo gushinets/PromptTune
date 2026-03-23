@@ -48,6 +48,24 @@ def _resolve_api_url() -> str:
     return "https://api.openai.com/v1/chat/completions"
 
 
+def _build_payload(text: str) -> dict:
+    payload = {
+        "model": _resolve_model_name(),
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        "temperature": 0.7,
+    }
+
+    if settings.llm_backend == "OPENAI":
+        payload["max_completion_tokens"] = 2048
+    else:
+        payload["max_tokens"] = 2048
+
+    return payload
+
+
 def _resolve_provider_api_key() -> str:
     api_key = settings.get_provider_api_key()
     if api_key:
@@ -81,15 +99,7 @@ def _map_http_error(exc: httpx.HTTPStatusError) -> UpstreamServiceError:
 
 
 async def _request_completion(text: str) -> dict:
-    payload = {
-        "model": _resolve_model_name(),
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text},
-        ],
-        "max_tokens": 2048,
-        "temperature": 0.7,
-    }
+    payload = _build_payload(text)
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:

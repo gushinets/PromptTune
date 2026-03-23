@@ -1,7 +1,7 @@
 from httpx import HTTPStatusError, Request, Response
 
 from app.services.errors import UpstreamAuthError, UpstreamRateLimitError
-from app.services.llm import _map_http_error, _normalize_response
+from app.services.llm import _build_payload, _map_http_error, _normalize_response
 
 
 def test_strips_prefix():
@@ -40,3 +40,23 @@ def test_maps_rate_limit_http_error_to_safe_exception():
     mapped = _map_http_error(error)
 
     assert isinstance(mapped, UpstreamRateLimitError)
+
+
+def test_build_payload_uses_openai_completion_tokens(monkeypatch):
+    monkeypatch.setattr("app.services.llm.settings.llm_backend", "OPENAI")
+    monkeypatch.setattr("app.services.llm.settings.llm_model", "gpt-4o-mini")
+
+    payload = _build_payload("hello")
+
+    assert payload["max_completion_tokens"] == 2048
+    assert "max_tokens" not in payload
+
+
+def test_build_payload_uses_openrouter_max_tokens(monkeypatch):
+    monkeypatch.setattr("app.services.llm.settings.llm_backend", "OPENROUTER")
+    monkeypatch.setattr("app.services.llm.settings.llm_model", "gpt-4o-mini")
+
+    payload = _build_payload("hello")
+
+    assert payload["max_tokens"] == 2048
+    assert "max_completion_tokens" not in payload
