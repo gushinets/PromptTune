@@ -153,6 +153,8 @@ class BotConfig:
             if "/" not in self.llm_model:
                 return f"openai/{self.llm_model}"
             return self.llm_model
+        if self.llm_model.startswith("openrouter/"):
+            return self.llm_model
         if "/" not in self.llm_model:
             return f"openrouter/openai/{self.llm_model}"
         return f"openrouter/{self.llm_model}"
