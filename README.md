@@ -101,6 +101,8 @@ Notes:
 
 ```bash
 cd infra
-make dev           # Starts api, postgres, redis, caddy
-make down          # Stops all services
+make dev-up-d      # Starts api, postgres, redis for local development
+make dev-down      # Stops the local dev stack
 ```
+
+For VPS deployment behind Caddy at `api.anytoolai.store`, use the runbook in `docs/deployment.md`.

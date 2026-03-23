@@ -1,58 +1,63 @@
 ## Infra (Docker) quickstart
 
-This folder contains Docker Compose configurations for running the full PromptTune backend stack:
+This folder contains Docker Compose configurations for the PromptTune backend stack:
 - FastAPI (`api`)
 - PostgreSQL (`postgres`)
 - Redis (`redis`)
-- (prod only) Caddy reverse proxy (`caddy`)
+- production-only Caddy reverse proxy (`caddy`)
 
-### Setup
+## Setup
 
-Create an `infra/.env` file from one of the examples:
+Create `infra/.env` from an example:
 - `infra/.env.dev.example` for local development
-- `infra/.env.prod.example` for production-like settings
+- `infra/.env.prod.example` for VPS / production
 
-The compose files reference `env_file: .env`, so the `.env` file **must** exist in this folder.
-Use plain `KEY=value` lines only. Do not append inline comments on the same line as a value, because Docker may treat them as part of the value.
+The compose files use `env_file: .env`, so `infra/.env` must exist before starting either stack.
+Use plain `KEY=value` lines only. Do not append inline comments to values.
 
-### Provider keys (server-owned)
+## Provider keys
 
-The backend uses **server-owned provider keys**. Set one of:
-- `LLM_BACKEND=OPENROUTER` + `OPENROUTER_API_KEY=...`
-- `LLM_BACKEND=OPENAI` + `OPENAI_API_KEY=...`
+The backend uses server-owned provider keys. Set one of:
+- `LLM_BACKEND=OPENROUTER` and `OPENROUTER_API_KEY=...`
+- `LLM_BACKEND=OPENAI` and `OPENAI_API_KEY=...`
 
-Do not commit real keys. Use environment injection/secrets in CI/CD and production.
-After editing `infra/.env`, recreate the stack so Docker reloads the environment:
+Do not commit real keys.
+
+## Development commands
+
+Run these from `infra/`:
 
 ```bash
-docker compose -f docker-compose.base.yml -f docker-compose.dev.yml down
-docker compose -f docker-compose.base.yml -f docker-compose.dev.yml up --build -d
+make dev-up       # foreground api + postgres + redis
+make dev-up-d     # background api + postgres + redis
+make dev-migrate  # alembic upgrade head in a one-shot api container
+make dev-logs
+make dev-ps
+make dev-config
+make dev-down
 ```
 
-### Commands
-
-From `infra/`:
-
-- Start dev stack (foreground):
+Legacy aliases remain available:
 
 ```bash
 make dev
-```
-
-- Start dev stack (background):
-
-```bash
 make dev-d
-```
-
-- Apply migrations:
-
-```bash
+make logs
 make migrate
 ```
 
-- Stop everything:
+## Production commands
+
+Use the production stack only for VPS deployment. The canonical runbook lives in `docs/deployment.md`.
 
 ```bash
-make down
+make prod-db-up    # start postgres + redis only
+make prod-migrate  # apply alembic migrations using the prod env
+make prod-up       # build/start api + caddy
+make prod-logs
+make prod-ps
+make prod-config
+make prod-down
 ```
+
+`infra/.env.prod.example` keeps `ALLOWED_ORIGINS=*` on purpose for the MVP deploy until browser-extension IDs/origins are known.
