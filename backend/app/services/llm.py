@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 
@@ -12,6 +13,8 @@ from app.services.errors import (
     UpstreamServiceError,
     UpstreamTimeoutError,
 )
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """    **КОНТЕКСТ:** Мы собираемся создать один из лучших промптов для ChatGPT, когда-либо написанных. Лучшие промпты содержат всестороннюю информацию, чтобы полностью проинформировать большую языковую модель о: целях, необходимых областях экспертизы, предметной области, предпочтительном формате, целевой аудитории, ссылках, примерах и наилучшем подходе для достижения цели. Основываясь на этой и последующей информации, вы сможете написать этот выдающийся промпт.
 
@@ -76,6 +79,7 @@ STRIP_PATTERNS = [
     re.compile(r"^(Here'?s?\s+(the\s+)?improved\s+prompt:?\s*)", re.IGNORECASE),
     re.compile(r"^(Improved\s+prompt:?\s*)", re.IGNORECASE),
 ]
+EMPTY_COMPLETION_RETRIES = 1
 
 
 def _normalize_response(text: str) -> str:
@@ -85,29 +89,100 @@ def _normalize_response(text: str) -> str:
     return text.strip().strip('"').strip("'")
 
 
-def _extract_message_content(data: dict) -> str:
+def _first_choice(data: dict) -> dict:
     try:
-        content = data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
     except (KeyError, IndexError, TypeError) as exc:
-        raise UpstreamBadResponseError("Provider response missing message content") from exc
+        raise UpstreamBadResponseError("Provider returned no choices") from exc
 
+    if not isinstance(choice, dict):
+        raise UpstreamBadResponseError("Provider returned invalid choice payload")
+
+    return choice
+
+
+def _extract_text_part(item: object) -> str | None:
+    if isinstance(item, str):
+        return item
+
+    if not isinstance(item, dict):
+        return None
+
+    text = item.get("text")
+    if isinstance(text, str):
+        return text
+    if isinstance(text, dict):
+        value = text.get("value")
+        if isinstance(value, str):
+            return value
+
+    content = item.get("content")
     if isinstance(content, str):
         return content
 
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-                continue
-            if not isinstance(item, dict):
-                continue
-            text = item.get("text")
-            if isinstance(text, str):
-                parts.append(text)
+    return None
 
-        if parts:
-            return "\n".join(parts)
+
+def _provider_error_message(error: object) -> tuple[str, object] | None:
+    if isinstance(error, dict):
+        message = error.get("message")
+        code = error.get("code")
+        if isinstance(message, str) and message.strip():
+            safe_message = redact_secrets(message.strip()) or "Provider returned an error"
+            if code not in (None, ""):
+                return f"{safe_message} (provider_code={code})", code
+            return safe_message, code
+
+    if isinstance(error, str) and error.strip():
+        safe_message = redact_secrets(error.strip()) or "Provider returned an error"
+        return safe_message, None
+
+    return None
+
+
+def _classify_provider_error(message: str, code: object = None) -> UpstreamServiceError:
+    normalized_code = str(code).strip().lower() if code not in (None, "") else ""
+    normalized_message = message.lower()
+
+    if normalized_code in {"401", "403"} or any(
+        marker in normalized_message for marker in ("api key", "auth", "unauthorized", "forbidden")
+    ):
+        return UpstreamAuthError(message)
+
+    if normalized_code == "429" or "rate limit" in normalized_message:
+        return UpstreamRateLimitError(message)
+
+    return UpstreamServiceError(message)
+
+
+def _raise_provider_error(error: object) -> None:
+    resolved = _provider_error_message(error)
+    if not resolved:
+        return
+
+    message, code = resolved
+    raise _classify_provider_error(message, code)
+
+
+def _extract_message_content(data: dict) -> str:
+    choice = _first_choice(data)
+    _raise_provider_error(choice.get("error"))
+
+    message = choice.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            parts = [part for item in content if (part := _extract_text_part(item)) is not None]
+            if parts:
+                return "\n".join(parts)
+
+    legacy_text = choice.get("text")
+    if isinstance(legacy_text, str):
+        return legacy_text
 
     raise UpstreamBadResponseError("Provider response missing text content")
 
@@ -129,7 +204,17 @@ def _uses_gpt5_family() -> bool:
     return model_name.startswith("gpt-5")
 
 
-def _build_payload(text: str) -> dict:
+def _uses_reasoning_family() -> bool:
+    model_name = _resolve_model_name().split("/")[-1]
+    return model_name.startswith(("gpt-5", "o1", "o3", "o4"))
+
+
+def _default_completion_tokens() -> int:
+    return settings.llm_completion_tokens
+
+
+def _build_payload(text: str, completion_tokens: int | None = None) -> dict:
+    token_limit = completion_tokens or _default_completion_tokens()
     payload = {
         "model": _resolve_model_name(),
         "messages": [
@@ -141,10 +226,13 @@ def _build_payload(text: str) -> dict:
     if not _uses_gpt5_family():
         payload["temperature"] = 0.7
 
+    if _uses_reasoning_family():
+        payload["reasoning"] = {"effort": "low"}
+
     if settings.llm_backend == "OPENAI":
-        payload["max_completion_tokens"] = 2048
+        payload["max_completion_tokens"] = token_limit
     else:
-        payload["max_tokens"] = 2048
+        payload["max_tokens"] = token_limit
 
     return payload
 
@@ -181,8 +269,51 @@ def _map_http_error(exc: httpx.HTTPStatusError) -> UpstreamServiceError:
     return UpstreamServiceError(f"Provider API error ({status_code}): {safe_message[:200]}")
 
 
-async def _request_completion(text: str) -> dict:
-    payload = _build_payload(text)
+def _empty_completion_detail(data: dict) -> str:
+    choice = _first_choice(data)
+    _raise_provider_error(choice.get("error"))
+
+    message = choice.get("message")
+    if isinstance(message, dict):
+        refusal = message.get("refusal")
+        if isinstance(refusal, str) and refusal.strip():
+            safe_refusal = redact_secrets(refusal.strip()) or "Provider refused completion"
+            return f"Provider refused completion: {safe_refusal[:200]}"
+
+    finish_reason = choice.get("finish_reason")
+    if finish_reason == "tool_calls":
+        return "Provider returned tool calls instead of text"
+    if finish_reason == "content_filter":
+        return "Provider filtered the completion"
+    if finish_reason == "length":
+        return "Provider stopped before producing a text completion"
+
+    return "Provider returned empty completion"
+
+
+def _empty_completion_diagnostics(data: dict) -> str:
+    choice = _first_choice(data)
+    diagnostics: list[str] = []
+
+    finish_reason = choice.get("finish_reason")
+    if finish_reason:
+        diagnostics.append(f"finish_reason={finish_reason}")
+
+    native_finish_reason = choice.get("native_finish_reason")
+    if native_finish_reason:
+        diagnostics.append(f"native_finish_reason={native_finish_reason}")
+
+    usage = data.get("usage")
+    if isinstance(usage, dict):
+        completion_tokens = usage.get("completion_tokens")
+        if completion_tokens is not None:
+            diagnostics.append(f"completion_tokens={completion_tokens}")
+
+    return " ".join(diagnostics) or "no extra diagnostics"
+
+
+async def _request_completion(text: str, completion_tokens: int | None = None) -> dict:
+    payload = _build_payload(text, completion_tokens=completion_tokens)
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -202,8 +333,8 @@ async def _request_completion(text: str) -> dict:
 
     try:
         data = response.json()
-        if not data.get("choices"):
-            raise UpstreamBadResponseError("Provider returned no choices")
+        _raise_provider_error(data.get("error"))
+        _first_choice(data)
         return data
     except ValueError as exc:
         raise UpstreamBadResponseError("Provider returned invalid JSON") from exc
@@ -211,13 +342,48 @@ async def _request_completion(text: str) -> dict:
 
 async def improve_text(text: str) -> tuple[str, str, int]:
     start = time.monotonic()
-    data = await _request_completion(text)
+    completion_tokens = _default_completion_tokens()
 
-    latency_ms = int((time.monotonic() - start) * 1000)
-    raw = _extract_message_content(data)
-    improved = _normalize_response(raw)
-    if not improved:
-        raise UpstreamBadResponseError("Provider returned empty completion")
-    model_used = data.get("model") or _resolve_model_name()
+    for attempt in range(EMPTY_COMPLETION_RETRIES + 1):
+        data = await _request_completion(text, completion_tokens=completion_tokens)
 
-    return improved, model_used, latency_ms
+        raw = _extract_message_content(data)
+        improved = _normalize_response(raw)
+        if improved:
+            if len(improved) > settings.prompt_output_max_chars:
+                raise UpstreamBadResponseError(
+                    "Provider returned output exceeding configured maximum length "
+                    f"({settings.prompt_output_max_chars} characters)"
+                )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            model_used = data.get("model") or _resolve_model_name()
+            return improved, model_used, latency_ms
+
+        detail = _empty_completion_detail(data)
+        if detail == "Provider stopped before producing a text completion":
+            next_completion_tokens = min(
+                completion_tokens * 2,
+                settings.llm_completion_tokens_retry_max,
+            )
+            if next_completion_tokens > completion_tokens:
+                logger.warning(
+                    "Retrying provider request after completion token exhaustion attempt=%s tokens=%s %s",
+                    attempt + 1,
+                    next_completion_tokens,
+                    _empty_completion_diagnostics(data),
+                )
+                completion_tokens = next_completion_tokens
+                continue
+
+        if detail == "Provider returned empty completion" and attempt < EMPTY_COMPLETION_RETRIES:
+            logger.warning(
+                "Retrying provider request after empty completion attempt=%s tokens=%s %s",
+                attempt + 1,
+                completion_tokens,
+                _empty_completion_diagnostics(data),
+            )
+            continue
+
+        raise UpstreamBadResponseError(detail)
+
+    raise UpstreamBadResponseError("Provider returned empty completion")

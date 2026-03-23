@@ -14,7 +14,6 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const LIMITS = {
-  MAX_TEXT_LENGTH: 8000,
   MAX_LIBRARY_ENTRIES: 200,
 } as const;
 

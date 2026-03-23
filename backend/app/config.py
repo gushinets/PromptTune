@@ -61,7 +61,10 @@ class BotConfig:
     openrouter_api_key: str | None
     free_req_per_day: int
     free_req_per_min: int
-    max_text_length: int
+    prompt_input_max_chars: int
+    prompt_output_max_chars: int
+    llm_completion_tokens: int
+    llm_completion_tokens_retry_max: int
     allowed_origins: str
     logs_dir: str
     log_file: str
@@ -94,7 +97,10 @@ class BotConfig:
             openrouter_api_key=_get_env("OPENROUTER_API_KEY"),
             free_req_per_day=_get_int_env("FREE_REQ_PER_DAY", 50),
             free_req_per_min=_get_int_env("FREE_REQ_PER_MIN", 10),
-            max_text_length=_get_int_env("MAX_TEXT_LENGTH", 8000),
+            prompt_input_max_chars=_get_int_env("PROMPT_INPUT_MAX_CHARS", 8000),
+            prompt_output_max_chars=_get_int_env("PROMPT_OUTPUT_MAX_CHARS", 12000),
+            llm_completion_tokens=_get_int_env("LLM_COMPLETION_TOKENS", 8192),
+            llm_completion_tokens_retry_max=_get_int_env("LLM_COMPLETION_TOKENS_RETRY_MAX", 12288),
             allowed_origins=_get_env("ALLOWED_ORIGINS", "*") or "*",
             logs_dir=logs_dir,
             log_file=log_file,
@@ -116,8 +122,29 @@ class BotConfig:
             raise ValueError(f"FREE_REQ_PER_DAY must be positive. Got: {self.free_req_per_day}")
         if self.free_req_per_min <= 0:
             raise ValueError(f"FREE_REQ_PER_MIN must be positive. Got: {self.free_req_per_min}")
-        if self.max_text_length <= 0:
-            raise ValueError(f"MAX_TEXT_LENGTH must be positive. Got: {self.max_text_length}")
+        if self.prompt_input_max_chars <= 0:
+            raise ValueError(
+                f"PROMPT_INPUT_MAX_CHARS must be positive. Got: {self.prompt_input_max_chars}"
+            )
+        if self.prompt_output_max_chars <= 0:
+            raise ValueError(
+                f"PROMPT_OUTPUT_MAX_CHARS must be positive. Got: {self.prompt_output_max_chars}"
+            )
+        if self.llm_completion_tokens <= 0:
+            raise ValueError(
+                f"LLM_COMPLETION_TOKENS must be positive. Got: {self.llm_completion_tokens}"
+            )
+        if self.llm_completion_tokens_retry_max <= 0:
+            raise ValueError(
+                "LLM_COMPLETION_TOKENS_RETRY_MAX must be positive. "
+                f"Got: {self.llm_completion_tokens_retry_max}"
+            )
+        if self.llm_completion_tokens_retry_max < self.llm_completion_tokens:
+            raise ValueError(
+                "LLM_COMPLETION_TOKENS_RETRY_MAX must be greater than or equal to "
+                f"LLM_COMPLETION_TOKENS. Got: {self.llm_completion_tokens_retry_max} < "
+                f"{self.llm_completion_tokens}"
+            )
         if self.log_max_size <= 0:
             raise ValueError(f"LOG_MAX_SIZE must be positive. Got: {self.log_max_size}")
         if self.log_backup_count < 0:

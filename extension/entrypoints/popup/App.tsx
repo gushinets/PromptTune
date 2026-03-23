@@ -7,8 +7,8 @@ import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
 import { getAll, save, getInstallationId } from "@shared/storage";
-import { LIMITS, FEATURES, BACKEND_MODE } from "@shared/constants";
-import { apiClient } from "@shared/api-client";
+import { FEATURES, BACKEND_MODE } from "@shared/constants";
+import { apiClient, ApiError } from "@shared/api-client";
 import {
   describeUnexpectedBackgroundResponse,
   extractImproveResponse,
@@ -95,20 +95,79 @@ export function App() {
       });
   }, []);
 
-  const isExhausted =
-    BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
+  const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
+
+  const mapErrorToToast = useCallback(
+    (err: unknown): ErrorInfo => {
+      if (err instanceof ApiError) {
+        if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
+          return {
+            type: "auth",
+            message: "Your login is invalid. Try refreshing the extension or reinstalling.",
+          };
+        }
+        if (err.status === 429 || err.detail.toLowerCase().includes("rate limit")) {
+          return {
+            type: "rate-limit",
+            message:
+              rateLimit.total > 0
+                ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
+                : "You've used all requests today. Resets at midnight UTC.",
+          };
+        }
+        if (err.status === 422) {
+          return {
+            type: "generic",
+            message: err.detail,
+          };
+        }
+      }
+
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("403") || message.toLowerCase().includes("login is invalid")) {
+        return {
+          type: "auth",
+          message: "Your login is invalid. Try refreshing the extension or reinstalling.",
+        };
+      }
+      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+        return {
+          type: "rate-limit",
+          message:
+            rateLimit.total > 0
+              ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
+              : "You've used all requests today. Resets at midnight UTC.",
+        };
+      }
+      if (message.includes("422")) {
+        const validationDetail = message.replace(/^.*API 422:\s*/i, "").trim();
+        return {
+          type: "generic",
+          message: validationDetail || message,
+        };
+      }
+      if (
+        message.includes("Failed to fetch") ||
+        message.includes("NetworkError") ||
+        message.toLowerCase().includes("network")
+      ) {
+        return {
+          type: "network",
+          message: "Check your internet and try again.",
+        };
+      }
+
+      return {
+        type: "generic",
+        message: message || "Something went wrong. Please try again.",
+      };
+    },
+    [rateLimit.total],
+  );
 
   const handleImprove = useCallback(async () => {
     const trimmed = original.trim();
     if (!trimmed) return;
-
-    if (trimmed.length > LIMITS.MAX_TEXT_LENGTH) {
-      setError({
-        type: "generic",
-        message: `Prompt exceeds maximum length of ${LIMITS.MAX_TEXT_LENGTH.toLocaleString()} characters.`,
-      });
-      return;
-    }
 
     if (isExhausted) {
       setError({
@@ -148,54 +207,21 @@ export function App() {
         throw new Error(describeUnexpectedBackgroundResponse(response));
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      if (
-        message.includes("403") ||
-        message.toLowerCase().includes("login is invalid")
-      ) {
-        setError({
-          type: "auth",
-          message:
-            "Your login is invalid. Try refreshing the extension or reinstalling.",
-        });
-      } else if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
-        setError({
-          type: "rate-limit",
-          message:
-            rateLimit.total > 0
-              ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
-              : "You've used all requests today. Resets at midnight UTC.",
-        });
+      const info = mapErrorToToast(err);
+      setError(info);
+      if (info.type === "rate-limit") {
         setRateLimit((prev) => ({ ...prev, remaining: 0 }));
         setLimitsLoaded(true);
-      } else if (
-        message.includes("Failed to fetch") ||
-        message.includes("NetworkError") ||
-        message.toLowerCase().includes("network")
-      ) {
-        setError({
-          type: "network",
-          message: "Check your internet and try again.",
-        });
-      } else {
-        setError({
-          type: "generic",
-          message: message || "Something went wrong. Please try again.",
-        });
       }
     } finally {
       setLoading(false);
     }
-  }, [original, isExhausted, rateLimit.total]);
+  }, [original, isExhausted, mapErrorToToast, rateLimit.total]);
 
   const handleSave = useCallback(async () => {
     const originalTrimmed = original.trim();
     const improvedTrimmed = improved.trim();
     if (!originalTrimmed || !improvedTrimmed) return;
-
-    await save({ original: originalTrimmed, improved: improvedTrimmed });
-    refreshLibraryCount();
 
     if (BACKEND_MODE === "fastapi") {
       try {
@@ -212,11 +238,20 @@ export function App() {
           page_url: undefined,
           meta: { source: "popup" },
         });
-      } catch {
-        // Best-effort; ignore backend save errors for now.
+      } catch (err: unknown) {
+        const info = mapErrorToToast(err);
+        setError(info);
+        if (info.type === "rate-limit") {
+          setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+          setLimitsLoaded(true);
+        }
+        return;
       }
     }
-  }, [original, improved, refreshLibraryCount]);
+
+    await save({ original: originalTrimmed, improved: improvedTrimmed });
+    refreshLibraryCount();
+  }, [original, improved, refreshLibraryCount, mapErrorToToast]);
 
   const handleDismissError = useCallback(() => {
     setError(null);
@@ -229,9 +264,7 @@ export function App() {
           <SparkleIcon className="header-icon" />
           <span className="header-title">PromptTune</span>
         </div>
-        <span
-          className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}
-        >
+        <span className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}>
           {BACKEND_MODE !== "fastapi"
             ? "Unlimited"
             : !limitsLoaded
@@ -259,9 +292,7 @@ export function App() {
         >
           <BookmarkIcon className="tab-icon" />
           Library
-          {libraryCount > 0 && (
-            <span className="tab-badge">{libraryCount}</span>
-          )}
+          {libraryCount > 0 && <span className="tab-badge">{libraryCount}</span>}
         </button>
       </nav>
 
@@ -277,7 +308,7 @@ export function App() {
             )}
             {isExhausted && (
               <div className="upgrade-banner">
-                <p>You&apos;ve used all 50 free improvements today.</p>
+                <p>You&apos;ve used all free improvements today.</p>
                 <button
                   className="btn-upgrade"
                   onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
@@ -293,14 +324,8 @@ export function App() {
               onOriginalChange={setOriginal}
               onImprove={handleImprove}
             />
-            <ActionBar
-              improved={improved}
-              disabled={!improved}
-              onSave={handleSave}
-            />
-            {FEATURES.OPEN_AND_PASTE && (
-              <SiteIcons improved={improved} disabled={!improved} />
-            )}
+            <ActionBar improved={improved} disabled={!improved} onSave={handleSave} />
+            {FEATURES.OPEN_AND_PASTE && <SiteIcons improved={improved} disabled={!improved} />}
           </>
         ) : (
           <Library onCountChange={setLibraryCount} />

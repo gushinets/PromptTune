@@ -5,8 +5,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import SavePromptRequest, SavePromptResponse
+from app.api.validation import validate_prompt_save_lengths
 from app.db.models import PromptImprovement
-from app.dependencies import ensure_installation_id_when_ip_present, get_client_ip, get_db, get_redis
+from app.dependencies import (
+    ensure_installation_id_when_ip_present,
+    get_client_ip,
+    get_db,
+    get_redis,
+)
 
 router = APIRouter()
 
@@ -19,6 +25,10 @@ async def save_prompt(
     client_ip: str = Depends(get_client_ip),
 ):
     await ensure_installation_id_when_ip_present(client_ip, req.installation_id, redis)
+    validate_prompt_save_lengths(
+        original_text=req.original_text,
+        improved_text=req.improved_text,
+    )
 
     record = PromptImprovement(
         id=str(uuid.uuid4()),

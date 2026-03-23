@@ -6,6 +6,35 @@ import type {
   SavePromptResponse,
 } from "./types";
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: string;
+
+  constructor(status: number, detail: string) {
+    const safeDetail = detail.trim() || "Request failed";
+    super(`API ${status}: ${safeDetail}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = safeDetail;
+  }
+}
+
+function extractErrorDetail(raw: string, fallback: string): string {
+  const text = raw.trim();
+  if (!text) return fallback;
+
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail.trim();
+    }
+  } catch {
+    // ignore non-JSON responses and surface plain text as-is
+  }
+
+  return text;
+}
+
 async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
@@ -14,8 +43,8 @@ async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
   });
 
   if (!res.ok) {
-    const detail = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${res.status}: ${detail}`);
+    const rawDetail = await res.text().catch(() => res.statusText);
+    throw new ApiError(res.status, extractErrorDetail(rawDetail, res.statusText));
   }
 
   return res.json();
@@ -29,8 +58,8 @@ async function get<TRes>(path: string, query: Record<string, string>): Promise<T
 
   const res = await fetch(url.toString(), { method: "GET" });
   if (!res.ok) {
-    const detail = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${res.status}: ${detail}`);
+    const rawDetail = await res.text().catch(() => res.statusText);
+    throw new ApiError(res.status, extractErrorDetail(rawDetail, res.statusText));
   }
   return res.json();
 }
@@ -43,8 +72,8 @@ async function improveViaN8n(req: ImproveRequest): Promise<ImproveResponse> {
   });
 
   if (!res.ok) {
-    const detail = await res.text().catch(() => res.statusText);
-    throw new Error(`API ${res.status}: ${detail}`);
+    const rawDetail = await res.text().catch(() => res.statusText);
+    throw new ApiError(res.status, extractErrorDetail(rawDetail, res.statusText));
   }
 
   const data: { improved_prompt: string; model: string } = await res.json();
