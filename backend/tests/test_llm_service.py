@@ -122,7 +122,10 @@ async def test_improve_text_retries_after_empty_completion(monkeypatch):
 
     assert improved == "better result"
     assert model_used == "gpt-4o-mini"
-    assert seen_completion_tokens == [settings.llm_completion_tokens, settings.llm_completion_tokens]
+    assert seen_completion_tokens == [
+        settings.llm_completion_tokens,
+        settings.llm_completion_tokens,
+    ]
 
 
 @pytest.mark.asyncio
@@ -223,7 +226,7 @@ def test_build_payload_uses_openrouter_max_tokens(monkeypatch):
     assert "reasoning" not in payload
 
 
-def test_build_payload_uses_reasoning_budget_for_gpt5(monkeypatch):
+def test_build_payload_omits_temperature_for_gpt5(monkeypatch):
     monkeypatch.setattr("app.services.llm.settings.llm_backend", "OPENAI")
     monkeypatch.setattr("app.services.llm.settings.llm_model", "gpt-5-mini")
 
@@ -231,7 +234,7 @@ def test_build_payload_uses_reasoning_budget_for_gpt5(monkeypatch):
 
     assert payload["max_completion_tokens"] == settings.llm_completion_tokens
     assert "temperature" not in payload
-    assert payload["reasoning"] == {"effort": "low"}
+    assert "reasoning" not in payload
 
 
 @pytest.mark.asyncio

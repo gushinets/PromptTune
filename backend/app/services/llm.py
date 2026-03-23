@@ -204,11 +204,6 @@ def _uses_gpt5_family() -> bool:
     return model_name.startswith("gpt-5")
 
 
-def _uses_reasoning_family() -> bool:
-    model_name = _resolve_model_name().split("/")[-1]
-    return model_name.startswith(("gpt-5", "o1", "o3", "o4"))
-
-
 def _default_completion_tokens() -> int:
     return settings.llm_completion_tokens
 
@@ -225,9 +220,6 @@ def _build_payload(text: str, completion_tokens: int | None = None) -> dict:
 
     if not _uses_gpt5_family():
         payload["temperature"] = 0.7
-
-    if _uses_reasoning_family():
-        payload["reasoning"] = {"effort": "low"}
 
     if settings.llm_backend == "OPENAI":
         payload["max_completion_tokens"] = token_limit
