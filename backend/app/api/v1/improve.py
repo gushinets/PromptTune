@@ -31,14 +31,18 @@ async def improve(
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    result = await service.improve_prompt(
-        text=req.text,
-        installation_id=req.installation_id,
-        client=req.client,
-        client_version=req.client_version,
-        site=req.site,
-        page_url=req.page_url,
-    )
+    try:
+        result = await service.improve_prompt(
+            text=req.text,
+            installation_id=req.installation_id,
+            client=req.client,
+            client_version=req.client_version,
+            site=req.site,
+            page_url=req.page_url,
+        )
+    except Exception:
+        await service.refund_rate_limit(installation_id=req.installation_id, ip=client_ip)
+        raise
 
     return ImproveResponse(
         request_id=result.id,

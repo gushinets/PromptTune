@@ -1,12 +1,7 @@
 import browser from "webextension-polyfill";
 import { getAdapter } from "@adapters/registry";
+import { extractImproveResponse } from "@shared/response-utils";
 import type { Message } from "@shared/messages";
-
-interface ImproveActiveFieldResponse {
-  payload?: {
-    improved_text?: string;
-  };
-}
 
 export default defineContentScript({
   matches: [
@@ -61,17 +56,18 @@ export default defineContentScript({
           const text = adapter.getText(field);
           if (!text.trim()) return;
 
-          const response = (await browser.runtime.sendMessage({
+          const response = await browser.runtime.sendMessage({
             type: "IMPROVE_REQUEST",
             payload: {
               text,
               site: location.hostname,
               page_url: location.href,
             },
-          })) as ImproveActiveFieldResponse;
+          });
+          const result = extractImproveResponse(response);
 
-          if (response?.payload?.improved_text) {
-            adapter.setText(field, response.payload.improved_text);
+          if (result?.improved_text.trim()) {
+            adapter.setText(field, result.improved_text);
           }
           break;
         }

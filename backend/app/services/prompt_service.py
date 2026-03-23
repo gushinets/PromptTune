@@ -26,6 +26,10 @@ class PromptService:
         info = RateLimitInfo(**remaining) if remaining else None
         return allowed, info
 
+    async def refund_rate_limit(self, installation_id: str, ip: str) -> RateLimitInfo | None:
+        remaining = await self.rate_limiter.refund(installation_id, ip)
+        return RateLimitInfo(**remaining) if remaining else None
+
     async def improve_prompt(
         self,
         text: str,

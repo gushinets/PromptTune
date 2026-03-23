@@ -24,6 +24,7 @@ export default defineConfig({
     },
     permissions: ["storage", "tabs", "activeTab", "scripting", "commands"],
     host_permissions: [
+      "https://api.anytoolai.store/*",
       "https://chatgpt.com/*",
       "https://claude.ai/*",
       "https://www.perplexity.ai/*",

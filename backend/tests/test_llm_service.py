@@ -1,7 +1,15 @@
 from httpx import HTTPStatusError, Request, Response
 
-from app.services.errors import UpstreamAuthError, UpstreamRateLimitError
-from app.services.llm import _build_payload, _map_http_error, _normalize_response
+import pytest
+
+from app.services.errors import UpstreamAuthError, UpstreamBadResponseError, UpstreamRateLimitError
+from app.services.llm import (
+    _build_payload,
+    _extract_message_content,
+    _map_http_error,
+    _normalize_response,
+    improve_text,
+)
 
 
 def test_strips_prefix():
@@ -20,6 +28,37 @@ def test_preserves_clean_response():
 
 def test_strips_whitespace():
     assert _normalize_response("  padded  ") == "padded"
+
+
+def test_extracts_text_from_structured_content():
+    data = {
+        "choices": [
+            {
+                "message": {
+                    "content": [
+                        {"type": "text", "text": "first line"},
+                        {"type": "text", "text": "second line"},
+                    ]
+                }
+            }
+        ]
+    }
+
+    assert _extract_message_content(data) == "first line\nsecond line"
+
+
+@pytest.mark.asyncio
+async def test_improve_text_rejects_empty_completion(monkeypatch):
+    async def fake_request(_text: str):
+        return {
+            "choices": [{"message": {"content": '""'}}],
+            "model": "gpt-4o-mini",
+        }
+
+    monkeypatch.setattr("app.services.llm._request_completion", fake_request)
+
+    with pytest.raises(UpstreamBadResponseError, match="empty completion"):
+        await improve_text("hello")
 
 
 def test_maps_auth_http_error_to_safe_exception():

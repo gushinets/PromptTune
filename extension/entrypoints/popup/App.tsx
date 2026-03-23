@@ -9,9 +9,11 @@ import { RatingBar } from "./components/RatingBar";
 import { getAll, save, getInstallationId } from "@shared/storage";
 import { LIMITS, FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient } from "@shared/api-client";
-import type { ImproveResponse as ImproveResponseBody } from "@shared/types";
-
-type ImproveResultMessage = { type: "IMPROVE_RESULT"; payload: ImproveResponseBody };
+import {
+  describeUnexpectedBackgroundResponse,
+  extractImproveResponse,
+  extractRateLimitResponse,
+} from "@shared/response-utils";
 
 // TODO: Replace with actual upgrade URL
 const UPGRADE_URL = "https://forgekit.io/upgrade";
@@ -65,8 +67,6 @@ export function App() {
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
-  const [showTooltip, setShowTooltip] = useState(false);
-
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
   }, []);
@@ -81,7 +81,7 @@ export function App() {
     browser.runtime
       .sendMessage({ type: "GET_LIMITS" })
       .then((res) => {
-        const rate_limit = res?.payload?.rate_limit;
+        const rate_limit = extractRateLimitResponse(res);
         if (!rate_limit) return;
         setRateLimit({
           remaining: rate_limit.per_day_remaining,
@@ -126,22 +126,26 @@ export function App() {
     setImproved("");
 
     try {
-      const response = (await browser.runtime.sendMessage({
+      const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
         payload: { text: trimmed },
-      })) as ImproveResultMessage;
+      });
+      const result = extractImproveResponse(response);
 
-      if (response?.payload?.improved_text) {
-        setImproved(response.payload.improved_text);
-        if (response.payload.rate_limit) {
+      if (result) {
+        if (!result.improved_text.trim()) {
+          throw new Error("The backend returned an empty improved prompt.");
+        }
+        setImproved(result.improved_text);
+        if (result.rate_limit) {
           setRateLimit({
-            remaining: response.payload.rate_limit.per_day_remaining,
-            total: response.payload.rate_limit.per_day_total,
+            remaining: result.rate_limit.per_day_remaining,
+            total: result.rate_limit.per_day_total,
           });
           setLimitsLoaded(true);
         }
       } else {
-        throw new Error("Unexpected response from background.");
+        throw new Error(describeUnexpectedBackgroundResponse(response));
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

@@ -6,7 +6,7 @@ describe("apiClient", () => {
     vi.restoreAllMocks();
   });
 
-  it("improve sends POST and returns response", async () => {
+  it("improve sends POST to the production FastAPI backend by default", async () => {
     const mockResponse = { request_id: "r1", improved_text: "better prompt" };
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -21,8 +21,29 @@ describe("apiClient", () => {
 
     expect(result).toEqual(mockResponse);
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/v1/improve"),
+      "https://api.anytoolai.store/v1/improve",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("limits uses the production FastAPI backend by default", async () => {
+    const mockResponse = {
+      per_minute_remaining: 9,
+      per_day_remaining: 49,
+      per_minute_total: 10,
+      per_day_total: 50,
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(mockResponse),
+    });
+
+    const result = await apiClient.limits("inst-1");
+
+    expect(result).toEqual(mockResponse);
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.anytoolai.store/v1/limits?installation_id=inst-1",
+      { method: "GET" },
     );
   });
 

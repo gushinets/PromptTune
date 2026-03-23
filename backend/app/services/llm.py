@@ -85,6 +85,33 @@ def _normalize_response(text: str) -> str:
     return text.strip().strip('"').strip("'")
 
 
+def _extract_message_content(data: dict) -> str:
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise UpstreamBadResponseError("Provider response missing message content") from exc
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            text = item.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+
+        if parts:
+            return "\n".join(parts)
+
+    raise UpstreamBadResponseError("Provider response missing text content")
+
+
 def _resolve_model_name() -> str:
     if settings.llm_backend == "OPENROUTER" and "/" not in settings.llm_model:
         return f"openai/{settings.llm_model}"
@@ -187,11 +214,10 @@ async def improve_text(text: str) -> tuple[str, str, int]:
     data = await _request_completion(text)
 
     latency_ms = int((time.monotonic() - start) * 1000)
-    try:
-        raw = data["choices"][0]["message"]["content"] or ""
-    except (KeyError, IndexError, TypeError) as exc:
-        raise UpstreamBadResponseError("Provider response missing message content") from exc
+    raw = _extract_message_content(data)
     improved = _normalize_response(raw)
+    if not improved:
+        raise UpstreamBadResponseError("Provider returned empty completion")
     model_used = data.get("model") or _resolve_model_name()
 
     return improved, model_used, latency_ms
