@@ -78,14 +78,16 @@ class RateLimiter:
         per_min = settings.free_req_per_min
         per_day = settings.free_req_per_day
 
-        min_count = max(current["inst_min"], current["ip_min"])
-        day_count = max(current["inst_day"], current["ip_day"])
+        day_count = int(day_val or 0)
+        min_count = int(min_val or 0)
         remaining = {
             "per_minute_remaining": max(0, per_min - min_count),
             "per_day_remaining": max(0, per_day - day_count),
             "per_minute_total": per_min,
             "per_day_total": per_day,
         }
+        allowed = min_count < per_min and day_count < per_day
+        return allowed, remaining
 
     async def check(self, installation_id: str, ip: str) -> tuple[bool, dict[str, int]]:
         """Check and increment rate limits.
@@ -112,6 +114,8 @@ class RateLimiter:
         remaining = {
             "per_day_remaining": max(0, per_day - day_count),
             "per_minute_remaining": max(0, per_min - min_count),
+            "per_minute_total": per_min,
+            "per_day_total": per_day,
         }
 
         if min_count >= per_min or day_count >= per_day:
@@ -130,6 +134,7 @@ class RateLimiter:
 
         return True, {
             "per_day_remaining": max(0, remaining["per_day_remaining"] - 1),
+            "per_minute_remaining": max(0, remaining["per_minute_remaining"] - 1),
             "per_minute_total": remaining["per_minute_total"],
             "per_day_total": remaining["per_day_total"],
         }

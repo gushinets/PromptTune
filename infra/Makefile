@@ -42,7 +42,7 @@ prod-up:
 	$(PROD_COMPOSE) up --build -d api caddy
 
 prod-migrate:
-	$(PROD_COMPOSE) run --rm api alembic upgrade head
+	$(PROD_COMPOSE) run --rm --build api alembic upgrade head
 
 prod-logs:
 	$(PROD_COMPOSE) logs -f
