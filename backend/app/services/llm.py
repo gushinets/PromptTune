@@ -97,6 +97,11 @@ def _resolve_api_url() -> str:
     return "https://api.openai.com/v1/chat/completions"
 
 
+def _uses_gpt5_family() -> bool:
+    model_name = _resolve_model_name().split("/")[-1]
+    return model_name.startswith("gpt-5")
+
+
 def _build_payload(text: str) -> dict:
     payload = {
         "model": _resolve_model_name(),
@@ -104,8 +109,10 @@ def _build_payload(text: str) -> dict:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": text},
         ],
-        "temperature": 0.7,
     }
+
+    if not _uses_gpt5_family():
+        payload["temperature"] = 0.7
 
     if settings.llm_backend == "OPENAI":
         payload["max_completion_tokens"] = 2048

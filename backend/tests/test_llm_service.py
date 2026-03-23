@@ -49,6 +49,7 @@ def test_build_payload_uses_openai_completion_tokens(monkeypatch):
     payload = _build_payload("hello")
 
     assert payload["max_completion_tokens"] == 2048
+    assert payload["temperature"] == 0.7
     assert "max_tokens" not in payload
 
 
@@ -59,4 +60,15 @@ def test_build_payload_uses_openrouter_max_tokens(monkeypatch):
     payload = _build_payload("hello")
 
     assert payload["max_tokens"] == 2048
+    assert payload["temperature"] == 0.7
     assert "max_completion_tokens" not in payload
+
+
+def test_build_payload_omits_temperature_for_gpt5(monkeypatch):
+    monkeypatch.setattr("app.services.llm.settings.llm_backend", "OPENAI")
+    monkeypatch.setattr("app.services.llm.settings.llm_model", "gpt-5-mini")
+
+    payload = _build_payload("hello")
+
+    assert payload["max_completion_tokens"] == 2048
+    assert "temperature" not in payload
