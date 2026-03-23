@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
 import { ActionBar } from "./components/ActionBar";
@@ -17,6 +17,7 @@ import {
 
 // TODO: Replace with actual upgrade URL
 const UPGRADE_URL = "https://forgekit.io/upgrade";
+const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 
 type TabId = "improve" | "library";
 
@@ -67,6 +68,7 @@ export function App() {
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
   }, []);
@@ -96,6 +98,26 @@ export function App() {
   }, []);
 
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
+  const isWarning =
+    BACKEND_MODE === "fastapi" && limitsLoaded
+      ? rateLimit.remaining > 0 && rateLimit.remaining <= 10
+      : false;
+  const showRateLimitTooltip = BACKEND_MODE === "fastapi";
+  const rateLimitBadgeText =
+    BACKEND_MODE !== "fastapi"
+      ? "Unlimited"
+      : !limitsLoaded
+        ? "Loading limits..."
+        : rateLimit.total > 0
+          ? `${rateLimit.remaining}/${rateLimit.total} today`
+          : `${rateLimit.remaining} today`;
+
+  const handleTooltipBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (!event.currentTarget.contains(nextTarget)) {
+      setShowTooltip(false);
+    }
+  }, []);
 
   const mapErrorToToast = useCallback(
     (err: unknown): ErrorInfo => {
@@ -264,15 +286,57 @@ export function App() {
           <SparkleIcon className="header-icon" />
           <span className="header-title">PromptTune</span>
         </div>
-        <span className={`rate-limit-badge${isExhausted ? " exhausted" : ""}`}>
-          {BACKEND_MODE !== "fastapi"
-            ? "Unlimited"
-            : !limitsLoaded
-              ? "Loading limits..."
-              : rateLimit.total > 0
-                ? `${rateLimit.remaining}/${rateLimit.total} today`
-                : `${rateLimit.remaining} today`}
-        </span>
+        <div
+          className="rate-limit-wrapper"
+          onMouseEnter={() => {
+            if (showRateLimitTooltip) setShowTooltip(true);
+          }}
+          onMouseLeave={() => setShowTooltip(false)}
+          onFocus={() => {
+            if (showRateLimitTooltip) setShowTooltip(true);
+          }}
+          onBlur={handleTooltipBlur}
+        >
+          <button
+            type="button"
+            className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warn" : ""}`}
+            aria-describedby={showTooltip ? RATE_LIMIT_TOOLTIP_ID : undefined}
+            aria-expanded={showRateLimitTooltip ? showTooltip : undefined}
+          >
+            {showRateLimitTooltip && <span className="status-dot" />}
+            {rateLimitBadgeText}
+          </button>
+          {showRateLimitTooltip && showTooltip && (
+            <div className="rate-limit-tooltip" id={RATE_LIMIT_TOOLTIP_ID} role="tooltip">
+              {!limitsLoaded ? (
+                <p>Loading your daily free request balance.</p>
+              ) : (
+                <>
+                  <p>
+                    <strong>
+                      {rateLimit.total > 0 ? `${rateLimit.remaining} free` : rateLimit.remaining}
+                    </strong>{" "}
+                    improvements left today
+                  </p>
+                  <p>
+                    {rateLimit.total > 0 ? `Daily limit: ${rateLimit.total}. ` : ""}
+                    Resets at midnight UTC.{" "}
+                    <a
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        browser.tabs.create({ url: UPGRADE_URL });
+                      }}
+                    >
+                      Upgrade for unlimited
+                    </a>
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       <nav className="tab-bar">
