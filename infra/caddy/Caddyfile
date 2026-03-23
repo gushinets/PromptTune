@@ -1,31 +1,18 @@
 {
-	# Replace with your domain for production
-	# email your@email.com
+	# Optional: set an email for ACME notifications.
+	# email ops@anytoolai.store
 }
 
-# Development: localhost
-:80 {
-	reverse_proxy api:8000
-
-	# Limit request body to 1MB
+api.anytoolai.store {
+	encode zstd gzip
 	request_body {
 		max_size 1MB
 	}
 
+	reverse_proxy api:8000
+
 	log {
 		output stdout
+		format console
 	}
 }
-
-# Production: uncomment and set your domain
-# your-domain.com {
-# 	reverse_proxy api:8000
-#
-# 	request_body {
-# 		max_size 1MB
-# 	}
-#
-# 	log {
-# 		output stdout
-# 	}
-# }
