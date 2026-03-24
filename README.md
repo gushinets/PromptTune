@@ -24,28 +24,21 @@ npm run build      # Production build
 
 The extension supports two backends, controlled by the `VITE_BACKEND_MODE` env var:
 
-| Mode | Description | Default |
-|------|-------------|---------|
-| `n8n` | Calls an n8n webhook (current default) | `http://localhost:5678/webhook/improve-prompt` |
-| `fastapi` | Calls the FastAPI backend | `http://localhost:8000/v1/improve` |
+| Mode | Description | Default target |
+|------|-------------|----------------|
+| `fastapi` | Calls the live FastAPI backend | `https://api.anytoolai.store/v1/improve` |
+| `n8n` | Calls an n8n webhook override | `http://localhost:5678/webhook/improve-prompt` |
 
-#### n8n (default)
+#### FastAPI (default)
 
-Requires an n8n instance with the "Prompt Improver API" workflow active.
-
-```bash
-cd extension
-npm run dev
-```
-
-Env vars (optional, shown with defaults):
+The extension now defaults to the production backend:
 
 ```
-VITE_BACKEND_MODE=n8n
-VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook/improve-prompt
+VITE_BACKEND_MODE=fastapi
+VITE_API_BASE_URL=https://api.anytoolai.store
 ```
 
-#### FastAPI
+To point the extension at a local FastAPI instance instead, override:
 
 ```bash
 cd backend
@@ -62,6 +55,22 @@ Then set env vars for the extension:
 ```
 VITE_BACKEND_MODE=fastapi
 VITE_API_BASE_URL=http://localhost:8000
+```
+
+#### n8n override
+
+Requires an n8n instance with the "Prompt Improver API" workflow active.
+
+```bash
+cd extension
+npm run dev
+```
+
+Env vars:
+
+```
+VITE_BACKEND_MODE=n8n
+VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook/improve-prompt
 ```
 
 Backend env vars (in `backend/.env`, **do not commit**):
@@ -89,6 +98,7 @@ LOG_BACKUP_COUNT=5
 Notes:
 - The backend uses **server-owned provider keys**; the extension does **not** send provider keys in request headers.
 - The extension automatically includes `client=\"extension\"` and `client_version=<manifest version>` on `/v1/improve` calls.
+- The built extension manifest includes `https://api.anytoolai.store/*` in `host_permissions`.
 
 ##### Smoke test (local)
 - Start Postgres + Redis (or use Docker via `infra/`).

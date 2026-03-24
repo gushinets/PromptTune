@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 
 
 class ImproveRequest(BaseModel):
-    text: str = Field(..., max_length=8000)
+    text: str
     installation_id: str = Field(..., max_length=64)
     client: str | None = Field(None, max_length=64)
     client_version: str | None = Field(None, max_length=64)
@@ -28,8 +28,8 @@ class SavePromptRequest(BaseModel):
     installation_id: str = Field(..., max_length=64)
     client: str = Field(..., max_length=64)
     client_version: str | None = Field(None, max_length=64)
-    original_text: str = Field(..., max_length=8000)
-    improved_text: str = Field(..., max_length=8000)
+    original_text: str
+    improved_text: str
     site: str | None = Field(None, max_length=128)
     page_url: str | None = Field(None, max_length=2048)
     meta: dict | None = None

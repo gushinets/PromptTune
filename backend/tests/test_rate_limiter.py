@@ -18,6 +18,10 @@ class RedisPipelineMock:
         self.ops.append(("incr", (key,)))
         return self
 
+    def decr(self, key: str):
+        self.ops.append(("decr", (key,)))
+        return self
+
     def expire(self, key: str, ttl: int):
         self.ops.append(("expire", (key, ttl)))
         return self
@@ -34,6 +38,9 @@ class RedisPipelineMock:
                 results.append(value)
             elif op == "incr":
                 value = await self.redis.incr(*args)
+                results.append(value)
+            elif op == "decr":
+                value = await self.redis.decr(*args)
                 results.append(value)
             elif op == "expire":
                 value = await self.redis.expire(*args)
@@ -64,6 +71,11 @@ class InMemoryRedisMock:
 
     async def incr(self, key: str):
         next_value = int(self.store.get(key, "0")) + 1
+        self.store[key] = str(next_value)
+        return next_value
+
+    async def decr(self, key: str):
+        next_value = max(0, int(self.store.get(key, "0")) - 1)
         self.store[key] = str(next_value)
         return next_value
 
@@ -189,3 +201,16 @@ async def test_daily_reset_on_next_day():
     from app.config import settings
 
     assert day2_remaining["per_day_remaining"] == settings.free_req_per_day
+
+
+@pytest.mark.asyncio
+async def test_refund_restores_consumed_quota():
+    redis_mock = InMemoryRedisMock()
+    limiter = RateLimiter(redis_mock)
+
+    allowed, consumed = await limiter.check("inst-1", "1.2.3.4")
+    refunded = await limiter.refund("inst-1", "1.2.3.4")
+
+    assert allowed is True
+    assert refunded["per_day_remaining"] == consumed["per_day_remaining"] + 1
+    assert refunded["per_minute_remaining"] == consumed["per_minute_remaining"] + 1

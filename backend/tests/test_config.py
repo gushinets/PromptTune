@@ -26,3 +26,30 @@ def test_provider_config_error_reports_missing_selected_key(monkeypatch):
     config = BotConfig.from_env()
 
     assert config.provider_config_error() == "OPENAI_API_KEY is required when LLM_BACKEND=OPENAI"
+
+
+def test_prompt_and_completion_limits_defaults(monkeypatch):
+    monkeypatch.delenv("PROMPT_INPUT_MAX_CHARS", raising=False)
+    monkeypatch.delenv("PROMPT_OUTPUT_MAX_CHARS", raising=False)
+    monkeypatch.delenv("LLM_COMPLETION_TOKENS", raising=False)
+    monkeypatch.delenv("LLM_COMPLETION_TOKENS_RETRY_MAX", raising=False)
+
+    config = BotConfig.from_env()
+
+    assert config.prompt_input_max_chars == 8000
+    assert config.prompt_output_max_chars == 12000
+    assert config.llm_completion_tokens == 8192
+    assert config.llm_completion_tokens_retry_max == 12288
+
+
+def test_validate_rejects_retry_budget_lower_than_normal():
+    config = BotConfig.from_env()
+    config.llm_completion_tokens = 9000
+    config.llm_completion_tokens_retry_max = 8000
+
+    try:
+        config.validate()
+    except ValueError as exc:
+        assert "LLM_COMPLETION_TOKENS_RETRY_MAX must be greater than or equal" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")

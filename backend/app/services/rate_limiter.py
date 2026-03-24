@@ -138,3 +138,31 @@ class RateLimiter:
             "per_minute_total": remaining["per_minute_total"],
             "per_day_total": remaining["per_day_total"],
         }
+
+    async def refund(self, installation_id: str, ip: str) -> dict[str, int]:
+        """Refund one request from both day and minute buckets when generation fails."""
+        bucket_key = await self.resolve_bucket(installation_id, ip)
+        now = self.now()
+
+        day_key = f"rl:{bucket_key}:d:{now.strftime('%Y%m%d')}"
+        min_key = f"rl:{bucket_key}:m:{now.strftime('%Y%m%d%H%M')}"
+
+        day_val, min_val = await self.redis.mget(day_key, min_key)
+        day_count = int(day_val or 0)
+        min_count = int(min_val or 0)
+
+        pipe = self.redis.pipeline()
+        if day_count > 0:
+            pipe.decr(day_key)
+        if min_count > 0:
+            pipe.decr(min_key)
+        await pipe.execute()
+
+        per_day = settings.free_req_per_day
+        per_min = settings.free_req_per_min
+        return {
+            "per_day_remaining": max(0, per_day - max(0, day_count - 1)),
+            "per_minute_remaining": max(0, per_min - max(0, min_count - 1)),
+            "per_minute_total": per_min,
+            "per_day_total": per_day,
+        }

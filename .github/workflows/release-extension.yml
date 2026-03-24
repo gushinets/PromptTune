@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      VITE_BACKEND_MODE: fastapi
+      VITE_API_BASE_URL: https://api.anytoolai.store
     defaults:
       run:
         working-directory: extension
