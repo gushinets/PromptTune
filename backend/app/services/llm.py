@@ -4,6 +4,7 @@ import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from dataclasses import dataclass
+from typing import Any
 
 from litellm import acompletion
 from litellm.exceptions import (
@@ -131,6 +132,8 @@ class ImproveLLMResult:
     total_tokens: int | None
     latency_ms: int
     upstream_id: str | None
+    attempt_count: int
+    completion_tokens_budget_used: int
 
 
 def _normalize_response(text: str) -> str:
@@ -138,6 +141,47 @@ def _normalize_response(text: str) -> str:
     for pattern in STRIP_PATTERNS:
         text = pattern.sub("", text)
     return text.strip().strip('"').strip("'")
+
+
+def _choice_finish_reason(response: object) -> str | None:
+    try:
+        choices = getattr(response, "choices", None) or []
+        if not choices:
+            return None
+        choice0 = choices[0]
+        if isinstance(choice0, dict):
+            value = choice0.get("finish_reason")
+        else:
+            value = getattr(choice0, "finish_reason", None)
+        return value if isinstance(value, str) else None
+    except Exception:
+        return None
+
+
+def _empty_completion_detail(response: object) -> str:
+    reason = (_choice_finish_reason(response) or "").lower()
+    if reason in ("length", "max_tokens"):
+        return "token_exhaustion"
+    return "empty_completion"
+
+
+def _empty_completion_diagnostics(response: object) -> dict[str, str | None]:
+    return {"finish_reason": _choice_finish_reason(response)}
+
+
+def _should_retry_empty_completion(detail: str, attempt: int, max_attempts: int) -> bool:
+    if attempt >= max_attempts:
+        return False
+    if detail == "token_exhaustion":
+        return True
+    return attempt <= EMPTY_COMPLETION_RETRIES
+
+
+def _resolve_model_name(response: object, model_id: str) -> str:
+    model_used = getattr(response, "model", None)
+    if isinstance(model_used, str) and model_used.strip():
+        return model_used
+    return model_id
 
 
 def _resolve_provider_api_key() -> str:
@@ -183,6 +227,11 @@ def _provider_from_response(response: object, model_id: str) -> str | None:
 
 
 def _map_litellm_error(exc: BaseException) -> UpstreamServiceError:
+    safe_message = redact_secrets(str(exc)) or "Provider request failed"
+    lowered = safe_message.lower()
+    if "temperature" in lowered and ("not support" in lowered or "unsupported" in lowered):
+        logger.error("temperature is not supported for model: %s", safe_message[:200])
+
     if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
         return UpstreamAuthError("Provider rejected API key")
     if isinstance(exc, RateLimitError):
@@ -214,10 +263,8 @@ def _map_litellm_error(exc: BaseException) -> UpstreamServiceError:
             APIError,
         ),
     ):
-        safe = redact_secrets(str(exc)) or "Provider request failed"
-        return UpstreamServiceError(safe[:200])
+        return UpstreamServiceError(safe_message[:200])
 
-    safe_message = redact_secrets(str(exc)) or "Provider request failed"
     return UpstreamServiceError(safe_message[:200])
 
 
@@ -245,32 +292,72 @@ class LiteLLMClient:
                 "X-Title": settings.openrouter_app_name or "PromptTune",
             }
 
-        start = time.monotonic()
-        try:
-            response = await acompletion(
-                model=model_id,
-                messages=messages,
-                api_key=api_key,
-                max_tokens=2048,
-                temperature=0.7,
-                timeout=settings.llm_request_timeout_seconds,
-                extra_headers=extra_headers,
-            )
-        except Exception as exc:
-            raise _map_litellm_error(exc) from exc
+        completion_tokens = settings.llm_completion_tokens
+        max_attempts = max(1, settings.llm_max_retries)
+        response: Any = None
+        improved: str = ""
+        attempt = 0
+        latency_ms = 0
+        while attempt < max_attempts:
+            attempt += 1
+            start = time.monotonic()
+            request_kwargs: dict[str, Any] = {
+                "model": model_id,
+                "messages": messages,
+                "api_key": api_key,
+                "max_tokens": completion_tokens,
+                "timeout": settings.llm_request_timeout_seconds,
+                "extra_headers": extra_headers,
+            }
+            if settings.llm_temperature is not None:
+                request_kwargs["temperature"] = settings.llm_temperature
+            try:
+                response = await acompletion(**request_kwargs)
+            except Exception as exc:
+                raise _map_litellm_error(exc) from exc
 
-        latency_ms = int((time.monotonic() - start) * 1000)
+            latency_ms = int((time.monotonic() - start) * 1000)
 
-        if not getattr(response, "choices", None):
-            raise UpstreamBadResponseError("Provider returned no choices")
+            if not getattr(response, "choices", None):
+                raise UpstreamBadResponseError("Provider returned no choices")
 
-        try:
-            raw = response.choices[0].message.content or ""
-        except (AttributeError, IndexError, TypeError) as exc:
-            raise UpstreamBadResponseError("Provider response missing message content") from exc
+            try:
+                raw = response.choices[0].message.content or ""
+            except (AttributeError, IndexError, TypeError) as exc:
+                raise UpstreamBadResponseError("Provider response missing message content") from exc
 
-        improved = _normalize_response(raw)
-        model_used = getattr(response, "model", None) or model_id
+            improved = _normalize_response(raw)
+            if not improved.strip():
+                detail = _empty_completion_detail(response)
+                diagnostics = _empty_completion_diagnostics(response)
+                if not _should_retry_empty_completion(detail, attempt, max_attempts):
+                    raise UpstreamBadResponseError(
+                        f"Provider returned empty completion ({detail})"
+                    )
+                if detail == "token_exhaustion":
+                    completion_tokens = min(
+                        completion_tokens * 2,
+                        settings.llm_completion_tokens_retry_max,
+                    )
+                logger.warning(
+                    "llm_empty_completion_retry model=%s attempt=%s detail=%s diagnostics=%s",
+                    model_id,
+                    attempt,
+                    detail,
+                    diagnostics,
+                )
+                continue
+
+            if len(improved) > settings.prompt_output_max_chars:
+                raise UpstreamBadResponseError(
+                    f"Provider output exceeds max length {settings.prompt_output_max_chars}"
+                )
+            break
+
+        if response is None:
+            raise UpstreamBadResponseError("Provider returned empty completion")
+
+        model_used = _resolve_model_name(response, model_id)
         pt, ct, tt = _usage_tokens(response)
         provider = _provider_from_response(response, model_used)
         upstream_id = getattr(response, "id", None)
@@ -282,13 +369,16 @@ class LiteLLMClient:
 
         logger.info(
             "llm_completion model=%s provider=%s prompt_tokens=%s completion_tokens=%s "
-            "total_tokens=%s latency_ms=%s request_id=%s installation_id=%s site=%s",
+            "total_tokens=%s latency_ms=%s attempt_count=%s completion_tokens_budget_used=%s "
+            "request_id=%s installation_id=%s site=%s",
             model_used,
             provider,
             pt,
             ct,
             tt,
             latency_ms,
+            attempt,
+            completion_tokens,
             _sanitize(request_id),
             _sanitize(installation_id),
             _sanitize(site),
@@ -303,6 +393,8 @@ class LiteLLMClient:
             total_tokens=tt,
             latency_ms=latency_ms,
             upstream_id=upstream_id if isinstance(upstream_id, str) else None,
+            attempt_count=attempt,
+            completion_tokens_budget_used=completion_tokens,
         )
 
 

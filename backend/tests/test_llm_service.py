@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from litellm.exceptions import AuthenticationError, RateLimitError
 
-from app.services.errors import UpstreamAuthError, UpstreamRateLimitError
+from app.services.errors import UpstreamAuthError, UpstreamBadResponseError, UpstreamRateLimitError
 from app.services.llm import LiteLLMClient, SYSTEM_PROMPT, _normalize_response, improve_text
 
 
@@ -52,6 +52,8 @@ async def test_improve_text_includes_system_prompt_and_user_message():
     assert kwargs["messages"][0]["role"] == "system"
     assert kwargs["messages"][0]["content"] == SYSTEM_PROMPT
     assert kwargs["messages"][1] == {"role": "user", "content": "hello"}
+    assert kwargs["max_tokens"] > 0
+    assert ("temperature" in kwargs) is False
     assert result.improved_text == "out"
     assert result.model == "gpt-4o-mini"
     assert result.prompt_tokens == 1
@@ -125,3 +127,140 @@ async def test_improve_text_logs_do_not_include_api_key(caplog):
 
     joined = " ".join(r.message for r in caplog.records)
     assert fake_key not in joined
+
+
+@pytest.mark.asyncio
+async def test_improve_text_uses_temperature_from_settings():
+    mock_response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="out"))],
+        model="gpt-4o-mini",
+        usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
+        id="id-1",
+        _hidden_params={},
+    )
+    with (
+        patch("app.services.llm.settings.llm_temperature", 0.3),
+        patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch("app.services.llm.acompletion", new_callable=AsyncMock) as ac,
+    ):
+        ac.return_value = mock_response
+        await improve_text(
+            "hello",
+            request_id="req-a",
+            installation_id="inst-b",
+            site="example.com",
+        )
+    assert ac.await_args.kwargs["temperature"] == 0.3
+
+
+@pytest.mark.asyncio
+async def test_improve_text_retries_token_exhaustion_with_higher_budget():
+    first_response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(content=""),
+                finish_reason="length",
+            )
+        ],
+        model="gpt-4o-mini",
+        usage=None,
+        id="id-1",
+        _hidden_params={},
+    )
+    second_response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+        model="gpt-4o-mini",
+        usage=None,
+        id="id-2",
+        _hidden_params={},
+    )
+    with (
+        patch("app.services.llm.settings.llm_completion_tokens", 100),
+        patch("app.services.llm.settings.llm_completion_tokens_retry_max", 180),
+        patch("app.services.llm.settings.llm_max_retries", 2),
+        patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch(
+            "app.services.llm.acompletion",
+            new=AsyncMock(side_effect=[first_response, second_response]),
+        ) as ac,
+    ):
+        result = await improve_text(
+            "hello",
+            request_id="req-a",
+            installation_id="inst-b",
+            site="example.com",
+        )
+    assert ac.await_count == 2
+    assert ac.await_args_list[0].kwargs["max_tokens"] == 100
+    assert ac.await_args_list[1].kwargs["max_tokens"] == 180
+    assert result.attempt_count == 2
+    assert result.completion_tokens_budget_used == 180
+
+
+@pytest.mark.asyncio
+async def test_improve_text_empty_completion_raises_error():
+    empty_response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=""))],
+        model="gpt-4o-mini",
+        usage=None,
+        id="id-1",
+        _hidden_params={},
+    )
+    with (
+        patch("app.services.llm.settings.llm_max_retries", 1),
+        patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch("app.services.llm.acompletion", new=AsyncMock(return_value=empty_response)),
+    ):
+        with pytest.raises(UpstreamBadResponseError):
+            await improve_text(
+                "hello",
+                request_id="req-a",
+                installation_id="inst-b",
+                site="example.com",
+            )
+
+
+@pytest.mark.asyncio
+async def test_improve_text_too_large_completion_raises_error():
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="x" * 30))],
+        model="gpt-4o-mini",
+        usage=None,
+        id="id-1",
+        _hidden_params={},
+    )
+    with (
+        patch("app.services.llm.settings.prompt_output_max_chars", 10),
+        patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch("app.services.llm.acompletion", new=AsyncMock(return_value=response)),
+    ):
+        with pytest.raises(UpstreamBadResponseError):
+            await improve_text(
+                "hello",
+                request_id="req-a",
+                installation_id="inst-b",
+                site="example.com",
+            )
+
+
+@pytest.mark.asyncio
+async def test_improve_logs_unsupported_temperature_error(caplog):
+    import logging
+
+    caplog.set_level(logging.ERROR)
+    with (
+        patch("app.services.llm.settings.llm_temperature", 0.8),
+        patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch(
+            "app.services.llm.acompletion",
+            new=AsyncMock(side_effect=Exception("temperature is not supported for model openai/o1")),
+        ),
+    ):
+        with pytest.raises(Exception):
+            await improve_text(
+                "hello",
+                request_id="req-a",
+                installation_id="inst-b",
+                site="example.com",
+            )
+    assert "temperature is not supported for model" in " ".join(r.message for r in caplog.records)

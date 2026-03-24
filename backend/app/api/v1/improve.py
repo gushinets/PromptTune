@@ -10,6 +10,7 @@ from app.dependencies import (
     get_db,
     get_redis,
 )
+from app.services.errors import UpstreamServiceError
 from app.services.prompt_service import PromptService
 
 router = APIRouter()
@@ -42,7 +43,7 @@ async def improve(
             site=req.site,
             page_url=req.page_url,
         )
-    except Exception:
+    except UpstreamServiceError:
         await service.refund_rate_limit(installation_id=req.installation_id, ip=client_ip)
         raise
 

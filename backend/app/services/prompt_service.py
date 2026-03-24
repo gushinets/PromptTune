@@ -55,6 +55,8 @@ class PromptService:
                 "provider": llm_result.provider,
                 "latency_ms": llm_result.latency_ms,
                 "upstream_id": llm_result.upstream_id,
+                "attempt_count": llm_result.attempt_count,
+                "completion_tokens_budget_used": llm_result.completion_tokens_budget_used,
                 "tokens": {
                     "prompt": llm_result.prompt_tokens,
                     "completion": llm_result.completion_tokens,

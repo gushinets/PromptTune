@@ -89,7 +89,7 @@ async def test_improve_returns_structured_upstream_auth_error(
     with patch(
         "app.services.prompt_service.improve_text",
         new=AsyncMock(side_effect=UpstreamAuthError("Server OpenAI API key is not configured")),
-    ):
+    ), patch("app.api.v1.improve.PromptService.refund_rate_limit", new=AsyncMock()) as refund_mock:
         response = await client.post(
             "/v1/improve",
             json={
@@ -104,6 +104,7 @@ async def test_improve_returns_structured_upstream_auth_error(
         "detail": "Server OpenAI API key is not configured",
         "error_code": "UPSTREAM_AUTH_ERROR",
     }
+    refund_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -130,6 +131,27 @@ async def test_improve_refunds_quota_when_provider_returns_empty_completion(
         "error_code": "UPSTREAM_BAD_RESPONSE",
     }
     refund_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_improve_does_not_refund_on_non_upstream_error(
+    client: AsyncClient, mock_db, mock_redis
+):
+    with patch(
+        "app.services.prompt_service.improve_text",
+        new=AsyncMock(side_effect=RuntimeError("boom")),
+    ), patch("app.api.v1.improve.PromptService.refund_rate_limit", new=AsyncMock()) as refund_mock:
+        with pytest.raises(RuntimeError):
+            await client.post(
+                "/v1/improve",
+                headers={"X-Forwarded-For": "1.2.3.4"},
+                json={
+                    "text": "write me a poem",
+                    "installation_id": "test-inst-1",
+                    "client": "manual-test",
+                },
+            )
+    refund_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
