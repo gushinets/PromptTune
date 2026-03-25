@@ -34,26 +34,39 @@ from app.services.errors import (
 
 logger = logging.getLogger(__name__)
 
-# Persist LiteLLM usage logs to a file (so they are not dependent on console log configuration).
+# Target path for LiteLLM usage logs (handler is attached by setup_file_logging()).
 _LOG_DIR = Path(__file__).resolve().parent / "logs"
-_LOG_DIR.mkdir(parents=True, exist_ok=True)
 _LOG_FILE = _LOG_DIR / "litellm.log"
 
 logger.setLevel(logging.INFO)
-_already_added = any(
-    isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", None) == str(_LOG_FILE)
-    for h in logger.handlers
-)
-if not _already_added:
-    _handler = RotatingFileHandler(
-        _LOG_FILE,
-        maxBytes=5 * 1024 * 1024,
-        backupCount=5,
-        encoding="utf-8",
+
+
+def setup_file_logging() -> None:
+    """Attach a rotating file handler for this module's logger.
+
+    Safe to call from application startup: does nothing if a matching handler
+    already exists; on filesystem errors (e.g. read-only container) logs to
+    file are skipped and the process continues.
+    """
+    _already_added = any(
+        isinstance(h, RotatingFileHandler) and getattr(h, "baseFilename", None) == str(_LOG_FILE)
+        for h in logger.handlers
     )
-    _handler.setLevel(logging.INFO)
-    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
-    logger.addHandler(_handler)
+    if _already_added:
+        return
+    try:
+        _LOG_DIR.mkdir(parents=True, exist_ok=True)
+        _handler = RotatingFileHandler(
+            _LOG_FILE,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        _handler.setLevel(logging.INFO)
+        _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        logger.addHandler(_handler)
+    except OSError:
+        logger.warning("Failed to enable file logging for LiteLLM: %s", exc)
 
 
 SYSTEM_PROMPT = """    **КОНТЕКСТ:** Мы собираемся создать один из лучших промптов для ChatGPT, когда-либо написанных. Лучшие промпты содержат всестороннюю информацию, чтобы полностью проинформировать большую языковую модель о: целях, необходимых областях экспертизы, предметной области, предпочтительном формате, целевой аудитории, ссылках, примерах и наилучшем подходе для достижения цели. Основываясь на этой и последующей информации, вы сможете написать этот выдающийся промпт.
@@ -322,9 +335,16 @@ class LiteLLMClient:
                 raise UpstreamBadResponseError("Provider returned no choices")
 
             try:
-                raw = response.choices[0].message.content or ""
+                raw = response.choices[0].message.content
             except (AttributeError, IndexError, TypeError) as exc:
                 raise UpstreamBadResponseError("Provider response missing message content") from exc
+
+            if raw is None:
+                raw = ""
+            elif not isinstance(raw, str):
+                raise UpstreamBadResponseError(
+                    f"Provider message content must be a string, got {type(raw).__name__}"
+                )
 
             improved = _normalize_response(raw)
             if not improved.strip():
