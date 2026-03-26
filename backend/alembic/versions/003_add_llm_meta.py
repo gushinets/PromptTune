@@ -20,4 +20,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("prompt_improvements", "llm_meta")
+    pass

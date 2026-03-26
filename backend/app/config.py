@@ -85,10 +85,6 @@ class BotConfig:
     llm_request_timeout_seconds: float
     openrouter_site_url: str | None
     openrouter_app_name: str | None
-    logs_dir: str
-    log_file: str
-    log_max_size: int
-    log_backup_count: int
     installation_id_salt: str
     ip_salt: str
 
@@ -97,10 +93,6 @@ class BotConfig:
         """Load configuration from environment variables."""
         llm_backend = (_get_env("LLM_BACKEND", "OPENROUTER") or "OPENROUTER").upper()
         llm_model = _get_env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
-        logs_dir = _get_env("LOGS_DIR", str(BACKEND_ROOT / "logs"))
-        log_file = _get_env("LOG_FILE", "access.log")
-        log_max_size = _get_int_env("LOG_MAX_SIZE", 10 * 1024 * 1024)  # 10 MB
-        log_backup_count = _get_int_env("LOG_BACKUP_COUNT", 5)
 
         return cls(
             database_url=_get_env(
@@ -126,10 +118,6 @@ class BotConfig:
             llm_request_timeout_seconds=_get_float_env("LLM_REQUEST_TIMEOUT_SECONDS", 60.0),
             openrouter_site_url=_get_env("OPENROUTER_SITE_URL"),
             openrouter_app_name=_get_env("OPENROUTER_APP_NAME"),
-            logs_dir=logs_dir,
-            log_file=log_file,
-            log_max_size=log_max_size,
-            log_backup_count=log_backup_count,
             installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
             or "prompttune-installation",
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
@@ -174,12 +162,6 @@ class BotConfig:
         if self.llm_temperature is not None and not (0 <= self.llm_temperature <= 2):
             raise ValueError(
                 f"LLM_TEMPERATURE must be in range [0, 2]. Got: {self.llm_temperature}"
-            )
-        if self.log_max_size <= 0:
-            raise ValueError(f"LOG_MAX_SIZE must be positive. Got: {self.log_max_size}")
-        if self.log_backup_count < 0:
-            raise ValueError(
-                f"LOG_BACKUP_COUNT must be non-negative. Got: {self.log_backup_count}"
             )
         if self.llm_request_timeout_seconds <= 0:
             raise ValueError(
