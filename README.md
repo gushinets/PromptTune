@@ -20,6 +20,25 @@ npm run dev        # WXT dev mode (Chrome)
 npm run build      # Production build
 ```
 
+#### Build shareable zip files
+
+```bash
+cd extension
+npm install
+npm run zip          # Chrome / Edge package
+npm run zip:firefox  # Firefox package
+```
+
+Generated files:
+
+- `extension/.output/prompttune-extension-0.1.0-chrome.zip`
+- `extension/.output/prompttune-extension-0.1.0-firefox.zip`
+- `extension/.output/prompttune-extension-0.1.0-sources.zip` (generated with the Firefox build)
+
+Notes:
+- `npm run zip` builds the Chrome Manifest V3 package used by Chrome and Edge.
+- If you need the extension to point at a non-default backend, set the relevant `VITE_*` env vars before running the zip command.
+
 ### Backend
 
 The extension supports two backends, controlled by the `VITE_BACKEND_MODE` env var:
