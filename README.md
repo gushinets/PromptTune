@@ -41,14 +41,27 @@ VITE_API_BASE_URL=https://api.anytoolai.store
 To point the extension at a local FastAPI instance instead, override:
 
 ```bash
-cd backend
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -e ".[dev]"      # with dev dependencies (pytest, ruff)
-# OR
-pip install .                # runtime dependencies only
+pip install -e "backend[dev]" # with dev dependencies (pytest, ruff)
+# OR runtime only
+pip install -e backend
+cd backend
 uvicorn app.main:app --reload
 ```
+
+Backend dependency policy and validation:
+- Use `backend/pyproject.toml` as the single source of truth for Python dependencies.
+- Do not maintain `backend/requirements.in` or `backend/requirements.txt`.
+- From `backend/`, run:
+  - `pip install -e .` (runtime)
+  - `pip install -e ".[dev]"` (dev/test/lint)
+  - `pytest -q`
+  - `ruff check .`
+  - `ruff format --check .`
+- One-time sanity check:
+  - `pip install -e "backend[dev]"`
+  - `python -c "from importlib.metadata import version; print(version('litellm'))"` (expected: `1.82.2`)
 
 Then set env vars for the extension:
 
