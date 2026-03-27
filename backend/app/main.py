@@ -17,12 +17,14 @@ from app.services.errors import (
     UpstreamServiceError,
     UpstreamTimeoutError,
 )
+from app.services.llm import setup_file_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
+    setup_file_logging()
     yield
     # Shutdown
     await engine.dispose()

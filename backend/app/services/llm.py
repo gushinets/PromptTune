@@ -1,8 +1,25 @@
 import logging
 import re
+import sys
 import time
+from dataclasses import dataclass
+from typing import Any
 
-import httpx
+from litellm import acompletion
+from litellm.exceptions import (
+    APIConnectionError,
+    APIError,
+    AuthenticationError,
+    BadRequestError,
+    ContentPolicyViolationError,
+    ContextWindowExceededError,
+    InternalServerError,
+    NotFoundError,
+    OpenAIError,
+    PermissionDeniedError,
+    RateLimitError,
+    Timeout as LitellmTimeout,
+)
 
 from app.config import settings
 from app.security.redaction import redact_secrets
@@ -15,6 +32,28 @@ from app.services.errors import (
 )
 
 logger = logging.getLogger(__name__)
+
+logger.setLevel(logging.INFO)
+
+
+def setup_file_logging() -> None:
+    """Attach a stdout stream handler for this module's logger.
+
+    Safe to call from application startup: does nothing if a matching handler
+    already exists.
+    """
+    _already_added = any(
+        isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout
+        for h in logger.handlers
+    )
+    if _already_added:
+        return
+
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setLevel(logging.INFO)
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    logger.addHandler(_handler)
+
 
 SYSTEM_PROMPT = """    **КОНТЕКСТ:** Мы собираемся создать один из лучших промптов для ChatGPT, когда-либо написанных. Лучшие промпты содержат всестороннюю информацию, чтобы полностью проинформировать большую языковую модель о: целях, необходимых областях экспертизы, предметной области, предпочтительном формате, целевой аудитории, ссылках, примерах и наилучшем подходе для достижения цели. Основываясь на этой и последующей информации, вы сможете написать этот выдающийся промпт.
 
@@ -82,6 +121,20 @@ STRIP_PATTERNS = [
 EMPTY_COMPLETION_RETRIES = 1
 
 
+@dataclass(frozen=True)
+class ImproveLLMResult:
+    improved_text: str
+    model: str
+    provider: str | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+    latency_ms: int
+    upstream_id: str | None
+    attempt_count: int
+    completion_tokens_budget_used: int
+
+
 def _normalize_response(text: str) -> str:
     text = text.strip()
     for pattern in STRIP_PATTERNS:
@@ -89,144 +142,45 @@ def _normalize_response(text: str) -> str:
     return text.strip().strip('"').strip("'")
 
 
-def _first_choice(data: dict) -> dict:
+def _choice_finish_reason(response: object) -> str | None:
     try:
-        choice = data["choices"][0]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise UpstreamBadResponseError("Provider returned no choices") from exc
-
-    if not isinstance(choice, dict):
-        raise UpstreamBadResponseError("Provider returned invalid choice payload")
-
-    return choice
-
-
-def _extract_text_part(item: object) -> str | None:
-    if isinstance(item, str):
-        return item
-
-    if not isinstance(item, dict):
+        choices = getattr(response, "choices", None) or []
+        if not choices:
+            return None
+        choice0 = choices[0]
+        if isinstance(choice0, dict):
+            value = choice0.get("finish_reason")
+        else:
+            value = getattr(choice0, "finish_reason", None)
+        return value if isinstance(value, str) else None
+    except Exception:
         return None
 
-    text = item.get("text")
-    if isinstance(text, str):
-        return text
-    if isinstance(text, dict):
-        value = text.get("value")
-        if isinstance(value, str):
-            return value
 
-    content = item.get("content")
-    if isinstance(content, str):
-        return content
-
-    return None
+def _empty_completion_detail(response: object) -> str:
+    reason = (_choice_finish_reason(response) or "").lower()
+    if reason in ("length", "max_tokens"):
+        return "token_exhaustion"
+    return "empty_completion"
 
 
-def _provider_error_message(error: object) -> tuple[str, object] | None:
-    if isinstance(error, dict):
-        message = error.get("message")
-        code = error.get("code")
-        if isinstance(message, str) and message.strip():
-            safe_message = redact_secrets(message.strip()) or "Provider returned an error"
-            if code not in (None, ""):
-                return f"{safe_message} (provider_code={code})", code
-            return safe_message, code
-
-    if isinstance(error, str) and error.strip():
-        safe_message = redact_secrets(error.strip()) or "Provider returned an error"
-        return safe_message, None
-
-    return None
+def _empty_completion_diagnostics(response: object) -> dict[str, str | None]:
+    return {"finish_reason": _choice_finish_reason(response)}
 
 
-def _classify_provider_error(message: str, code: object = None) -> UpstreamServiceError:
-    normalized_code = str(code).strip().lower() if code not in (None, "") else ""
-    normalized_message = message.lower()
-
-    if normalized_code in {"401", "403"} or any(
-        marker in normalized_message for marker in ("api key", "auth", "unauthorized", "forbidden")
-    ):
-        return UpstreamAuthError(message)
-
-    if normalized_code == "429" or "rate limit" in normalized_message:
-        return UpstreamRateLimitError(message)
-
-    return UpstreamServiceError(message)
+def _should_retry_empty_completion(detail: str, attempt: int, max_attempts: int) -> bool:
+    if attempt >= max_attempts:
+        return False
+    if detail == "token_exhaustion":
+        return True
+    return attempt <= EMPTY_COMPLETION_RETRIES
 
 
-def _raise_provider_error(error: object) -> None:
-    resolved = _provider_error_message(error)
-    if not resolved:
-        return
-
-    message, code = resolved
-    raise _classify_provider_error(message, code)
-
-
-def _extract_message_content(data: dict) -> str:
-    choice = _first_choice(data)
-    _raise_provider_error(choice.get("error"))
-
-    message = choice.get("message")
-    if isinstance(message, dict):
-        content = message.get("content")
-
-        if isinstance(content, str):
-            return content
-
-        if isinstance(content, list):
-            parts = [part for item in content if (part := _extract_text_part(item)) is not None]
-            if parts:
-                return "\n".join(parts)
-
-    legacy_text = choice.get("text")
-    if isinstance(legacy_text, str):
-        return legacy_text
-
-    raise UpstreamBadResponseError("Provider response missing text content")
-
-
-def _resolve_model_name() -> str:
-    if settings.llm_backend == "OPENROUTER" and "/" not in settings.llm_model:
-        return f"openai/{settings.llm_model}"
-    return settings.llm_model
-
-
-def _resolve_api_url() -> str:
-    if settings.llm_backend == "OPENROUTER":
-        return "https://openrouter.ai/api/v1/chat/completions"
-    return "https://api.openai.com/v1/chat/completions"
-
-
-def _uses_gpt5_family() -> bool:
-    model_name = _resolve_model_name().split("/")[-1]
-    return model_name.startswith("gpt-5")
-
-
-def _default_completion_tokens() -> int:
-    return settings.llm_completion_tokens
-
-
-def _build_payload(text: str, completion_tokens: int | None = None) -> dict:
-    token_limit = completion_tokens or _default_completion_tokens()
-    payload = {
-        "model": _resolve_model_name(),
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text},
-        ],
-    }
-
-    if not _uses_gpt5_family():
-        payload["temperature"] = 0.7
-
-    if settings.llm_backend == "OPENAI":
-        payload["max_completion_tokens"] = token_limit
-    else:
-        payload["max_tokens"] = token_limit
-
-    return payload
+def _resolve_model_name(response: object, model_id: str) -> str:
+    model_used = getattr(response, "model", None)
+    if isinstance(model_used, str) and model_used.strip():
+        return model_used
+    return model_id
 
 
 def _resolve_provider_api_key() -> str:
@@ -239,143 +193,230 @@ def _resolve_provider_api_key() -> str:
     raise UpstreamAuthError("Server OpenRouter API key is not configured")
 
 
-def _build_headers() -> dict[str, str]:
-    headers = {
-        "Authorization": f"Bearer {_resolve_provider_api_key()}",
-        "Content-Type": "application/json",
-    }
-    if settings.llm_backend == "OPENROUTER":
-        headers["HTTP-Referer"] = "https://prompttune.local"
-        headers["X-Title"] = "PromptTune"
-    return headers
+def _infer_provider_from_model(model_id: str) -> str | None:
+    if "/" in model_id:
+        return model_id.split("/", 1)[0].lower() or None
+    return None
 
 
-def _map_http_error(exc: httpx.HTTPStatusError) -> UpstreamServiceError:
-    status_code = exc.response.status_code
-    if status_code in (401, 403):
-        return UpstreamAuthError("Provider rejected API key")
-    if status_code == 429:
-        return UpstreamRateLimitError("Provider rate limit exceeded")
-
-    safe_message = redact_secrets(exc.response.text) or "Provider request failed"
-    return UpstreamServiceError(f"Provider API error ({status_code}): {safe_message[:200]}")
-
-
-def _empty_completion_detail(data: dict) -> str:
-    choice = _first_choice(data)
-    _raise_provider_error(choice.get("error"))
-
-    message = choice.get("message")
-    if isinstance(message, dict):
-        refusal = message.get("refusal")
-        if isinstance(refusal, str) and refusal.strip():
-            safe_refusal = redact_secrets(refusal.strip()) or "Provider refused completion"
-            return f"Provider refused completion: {safe_refusal[:200]}"
-
-    finish_reason = choice.get("finish_reason")
-    if finish_reason == "tool_calls":
-        return "Provider returned tool calls instead of text"
-    if finish_reason == "content_filter":
-        return "Provider filtered the completion"
-    if finish_reason == "length":
-        return "Provider stopped before producing a text completion"
-
-    return "Provider returned empty completion"
-
-
-def _empty_completion_diagnostics(data: dict) -> str:
-    choice = _first_choice(data)
-    diagnostics: list[str] = []
-
-    finish_reason = choice.get("finish_reason")
-    if finish_reason:
-        diagnostics.append(f"finish_reason={finish_reason}")
-
-    native_finish_reason = choice.get("native_finish_reason")
-    if native_finish_reason:
-        diagnostics.append(f"native_finish_reason={native_finish_reason}")
-
-    usage = data.get("usage")
+def _usage_tokens(response: object) -> tuple[int | None, int | None, int | None]:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None, None, None
     if isinstance(usage, dict):
-        completion_tokens = usage.get("completion_tokens")
-        if completion_tokens is not None:
-            diagnostics.append(f"completion_tokens={completion_tokens}")
-
-    return " ".join(diagnostics) or "no extra diagnostics"
-
-
-async def _request_completion(text: str, completion_tokens: int | None = None) -> dict:
-    payload = _build_payload(text, completion_tokens=completion_tokens)
-
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                _resolve_api_url(),
-                headers=_build_headers(),
-                json=payload,
-            )
-        response.raise_for_status()
-    except httpx.TimeoutException as exc:
-        raise UpstreamTimeoutError("Provider timeout") from exc
-    except httpx.HTTPStatusError as exc:
-        raise _map_http_error(exc) from exc
-    except httpx.HTTPError as exc:
-        safe_message = redact_secrets(str(exc)) or "Provider request failed"
-        raise UpstreamServiceError(safe_message[:200]) from exc
-
-    try:
-        data = response.json()
-        _raise_provider_error(data.get("error"))
-        _first_choice(data)
-        return data
-    except ValueError as exc:
-        raise UpstreamBadResponseError("Provider returned invalid JSON") from exc
+        return (
+            usage.get("prompt_tokens"),
+            usage.get("completion_tokens"),
+            usage.get("total_tokens"),
+        )
+    pt = getattr(usage, "prompt_tokens", None)
+    ct = getattr(usage, "completion_tokens", None)
+    tt = getattr(usage, "total_tokens", None)
+    return pt, ct, tt
 
 
-async def improve_text(text: str) -> tuple[str, str, int]:
-    start = time.monotonic()
-    completion_tokens = _default_completion_tokens()
+def _provider_from_response(response: object, model_id: str) -> str | None:
+    hidden = getattr(response, "_hidden_params", None) or {}
+    if isinstance(hidden, dict):
+        for key in ("custom_llm_provider", "litellm_provider", "api_base"):
+            val = hidden.get(key)
+            if isinstance(val, str) and val:
+                return val.lower()
+    return _infer_provider_from_model(model_id)
 
-    for attempt in range(EMPTY_COMPLETION_RETRIES + 1):
-        data = await _request_completion(text, completion_tokens=completion_tokens)
 
-        raw = _extract_message_content(data)
-        improved = _normalize_response(raw)
-        if improved:
-            if len(improved) > settings.prompt_output_max_chars:
-                raise UpstreamBadResponseError(
-                    "Provider returned output exceeding configured maximum length "
-                    f"({settings.prompt_output_max_chars} characters)"
-                )
+def _map_litellm_error(exc: BaseException) -> UpstreamServiceError:
+    safe_message = redact_secrets(str(exc)) or "Provider request failed"
+    lowered = safe_message.lower()
+    if "temperature" in lowered and ("not support" in lowered or "unsupported" in lowered):
+        logger.error("temperature is not supported for model: %s", safe_message[:200])
+
+    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+        return UpstreamAuthError("Provider rejected API key")
+    if isinstance(exc, RateLimitError):
+        return UpstreamRateLimitError("Provider rate limit exceeded")
+    if isinstance(exc, (LitellmTimeout, TimeoutError)):
+        return UpstreamTimeoutError("Provider timeout")
+    if isinstance(exc, APIConnectionError):
+        safe = redact_secrets(str(exc)) or "Provider connection failed"
+        return UpstreamServiceError(safe[:200])
+
+    if isinstance(exc, OpenAIError):
+        status = getattr(exc, "status_code", None)
+        if status in (401, 403):
+            return UpstreamAuthError("Provider rejected API key")
+        if status == 429:
+            return UpstreamRateLimitError("Provider rate limit exceeded")
+        body = getattr(exc, "message", None) or getattr(exc, "body", None) or str(exc)
+        safe = redact_secrets(str(body)) or "Provider request failed"
+        return UpstreamServiceError(f"Provider API error ({status or '?'}): {safe[:200]}")
+
+    if isinstance(
+        exc,
+        (
+            BadRequestError,
+            NotFoundError,
+            ContextWindowExceededError,
+            ContentPolicyViolationError,
+            InternalServerError,
+            APIError,
+        ),
+    ):
+        return UpstreamServiceError(safe_message[:200])
+
+    return UpstreamServiceError(safe_message[:200])
+
+
+class LiteLLMClient:
+    """Single entry point for chat completions via LiteLLM."""
+
+    async def improve_text(
+        self,
+        text: str,
+        *,
+        request_id: str,
+        installation_id: str,
+        site: str | None,
+    ) -> ImproveLLMResult:
+        model_id = settings.litellm_model_id()
+        api_key = _resolve_provider_api_key()
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ]
+        extra_headers: dict[str, str] | None = None
+        if settings.llm_backend == "OPENROUTER":
+            extra_headers = {
+                "HTTP-Referer": settings.openrouter_site_url or "https://prompttune.local",
+                "X-Title": settings.openrouter_app_name or "PromptTune",
+            }
+
+        completion_tokens = settings.llm_completion_tokens
+        max_attempts = max(1, settings.llm_max_retries)
+        response: Any = None
+        improved: str = ""
+        attempt = 0
+        latency_ms = 0
+        while attempt < max_attempts:
+            attempt += 1
+            start = time.monotonic()
+            request_kwargs: dict[str, Any] = {
+                "model": model_id,
+                "messages": messages,
+                "api_key": api_key,
+                "max_tokens": completion_tokens,
+                "timeout": settings.llm_request_timeout_seconds,
+                "extra_headers": extra_headers,
+            }
+            if settings.llm_temperature is not None:
+                request_kwargs["temperature"] = settings.llm_temperature
+            try:
+                response = await acompletion(**request_kwargs)
+            except Exception as exc:
+                raise _map_litellm_error(exc) from exc
+
             latency_ms = int((time.monotonic() - start) * 1000)
-            model_used = data.get("model") or _resolve_model_name()
-            return improved, model_used, latency_ms
 
-        detail = _empty_completion_detail(data)
-        if detail == "Provider stopped before producing a text completion":
-            next_completion_tokens = min(
-                completion_tokens * 2,
-                settings.llm_completion_tokens_retry_max,
-            )
-            if next_completion_tokens > completion_tokens:
-                logger.warning(
-                    "Retrying provider request after completion token exhaustion attempt=%s tokens=%s %s",
-                    attempt + 1,
-                    next_completion_tokens,
-                    _empty_completion_diagnostics(data),
+            if not getattr(response, "choices", None):
+                raise UpstreamBadResponseError("Provider returned no choices")
+
+            try:
+                raw = response.choices[0].message.content
+            except (AttributeError, IndexError, TypeError) as exc:
+                raise UpstreamBadResponseError("Provider response missing message content") from exc
+
+            if raw is None:
+                raw = ""
+            elif not isinstance(raw, str):
+                raise UpstreamBadResponseError(
+                    f"Provider message content must be a string, got {type(raw).__name__}"
                 )
-                completion_tokens = next_completion_tokens
+
+            improved = _normalize_response(raw)
+            if not improved.strip():
+                detail = _empty_completion_detail(response)
+                diagnostics = _empty_completion_diagnostics(response)
+                if not _should_retry_empty_completion(detail, attempt, max_attempts):
+                    raise UpstreamBadResponseError(
+                        f"Provider returned empty completion ({detail})"
+                    )
+                if detail == "token_exhaustion":
+                    completion_tokens = min(
+                        completion_tokens * 2,
+                        settings.llm_completion_tokens_retry_max,
+                    )
+                logger.warning(
+                    "llm_empty_completion_retry model=%s attempt=%s detail=%s diagnostics=%s",
+                    model_id,
+                    attempt,
+                    detail,
+                    diagnostics,
+                )
                 continue
 
-        if detail == "Provider returned empty completion" and attempt < EMPTY_COMPLETION_RETRIES:
-            logger.warning(
-                "Retrying provider request after empty completion attempt=%s tokens=%s %s",
-                attempt + 1,
-                completion_tokens,
-                _empty_completion_diagnostics(data),
-            )
-            continue
+            if len(improved) > settings.prompt_output_max_chars:
+                raise UpstreamBadResponseError(
+                    f"Provider output exceeds max length {settings.prompt_output_max_chars}"
+                )
+            break
 
-        raise UpstreamBadResponseError(detail)
+        if response is None:
+            raise UpstreamBadResponseError("Provider returned empty completion")
 
-    raise UpstreamBadResponseError("Provider returned empty completion")
+        model_used = _resolve_model_name(response, model_id)
+        pt, ct, tt = _usage_tokens(response)
+        provider = _provider_from_response(response, model_used)
+        upstream_id = getattr(response, "id", None)
+
+        def _sanitize(value: str | None) -> str | None:
+            if value is None:
+                return None
+            return value.replace("\r", "").replace("\n", "")
+
+        logger.info(
+            "llm_completion model=%s provider=%s prompt_tokens=%s completion_tokens=%s "
+            "total_tokens=%s latency_ms=%s attempt_count=%s completion_tokens_budget_used=%s "
+            "request_id=%s installation_id=%s site=%s",
+            model_used,
+            provider,
+            pt,
+            ct,
+            tt,
+            latency_ms,
+            attempt,
+            completion_tokens,
+            _sanitize(request_id),
+            _sanitize(installation_id),
+            _sanitize(site),
+        )
+
+        return ImproveLLMResult(
+            improved_text=improved,
+            model=model_used,
+            provider=provider,
+            prompt_tokens=pt,
+            completion_tokens=ct,
+            total_tokens=tt,
+            latency_ms=latency_ms,
+            upstream_id=upstream_id if isinstance(upstream_id, str) else None,
+            attempt_count=attempt,
+            completion_tokens_budget_used=completion_tokens,
+        )
+
+
+_default_client = LiteLLMClient()
+
+
+async def improve_text(
+    text: str,
+    *,
+    request_id: str,
+    installation_id: str,
+    site: str | None,
+) -> ImproveLLMResult:
+    return await _default_client.improve_text(
+        text,
+        request_id=request_id,
+        installation_id=installation_id,
+        site=site,
+    )

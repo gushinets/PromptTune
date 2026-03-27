@@ -46,6 +46,20 @@ def _get_int_env(name: str, default: int) -> int:
     return int(value)
 
 
+def _get_float_env(name: str, default: float) -> float:
+    value = _get_env(name)
+    if value is None:
+        return default
+    return float(value)
+
+
+def _get_optional_float_env(name: str) -> float | None:
+    value = _get_env(name)
+    if value is None:
+        return None
+    return float(value)
+
+
 _load_env()
 
 
@@ -65,11 +79,12 @@ class BotConfig:
     prompt_output_max_chars: int
     llm_completion_tokens: int
     llm_completion_tokens_retry_max: int
+    llm_max_retries: int
+    llm_temperature: float | None
     allowed_origins: str
-    logs_dir: str
-    log_file: str
-    log_max_size: int
-    log_backup_count: int
+    llm_request_timeout_seconds: float
+    openrouter_site_url: str | None
+    openrouter_app_name: str | None
     installation_id_salt: str
     ip_salt: str
 
@@ -78,10 +93,6 @@ class BotConfig:
         """Load configuration from environment variables."""
         llm_backend = (_get_env("LLM_BACKEND", "OPENROUTER") or "OPENROUTER").upper()
         llm_model = _get_env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
-        logs_dir = _get_env("LOGS_DIR", str(BACKEND_ROOT / "logs"))
-        log_file = _get_env("LOG_FILE", "access.log")
-        log_max_size = _get_int_env("LOG_MAX_SIZE", 10 * 1024 * 1024)  # 10 MB
-        log_backup_count = _get_int_env("LOG_BACKUP_COUNT", 5)
 
         return cls(
             database_url=_get_env(
@@ -101,11 +112,12 @@ class BotConfig:
             prompt_output_max_chars=_get_int_env("PROMPT_OUTPUT_MAX_CHARS", 12000),
             llm_completion_tokens=_get_int_env("LLM_COMPLETION_TOKENS", 8192),
             llm_completion_tokens_retry_max=_get_int_env("LLM_COMPLETION_TOKENS_RETRY_MAX", 12288),
+            llm_max_retries=_get_int_env("LLM_MAX_RETRIES", 2),
+            llm_temperature=_get_optional_float_env("LLM_TEMPERATURE"),
             allowed_origins=_get_env("ALLOWED_ORIGINS", "*") or "*",
-            logs_dir=logs_dir,
-            log_file=log_file,
-            log_max_size=log_max_size,
-            log_backup_count=log_backup_count,
+            llm_request_timeout_seconds=_get_float_env("LLM_REQUEST_TIMEOUT_SECONDS", 60.0),
+            openrouter_site_url=_get_env("OPENROUTER_SITE_URL"),
+            openrouter_app_name=_get_env("OPENROUTER_APP_NAME"),
             installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
             or "prompttune-installation",
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
@@ -145,10 +157,29 @@ class BotConfig:
                 f"LLM_COMPLETION_TOKENS. Got: {self.llm_completion_tokens_retry_max} < "
                 f"{self.llm_completion_tokens}"
             )
-        if self.log_max_size <= 0:
-            raise ValueError(f"LOG_MAX_SIZE must be positive. Got: {self.log_max_size}")
-        if self.log_backup_count < 0:
-            raise ValueError(f"LOG_BACKUP_COUNT must be non-negative. Got: {self.log_backup_count}")
+        if self.llm_max_retries <= 0:
+            raise ValueError(f"LLM_MAX_RETRIES must be positive. Got: {self.llm_max_retries}")
+        if self.llm_temperature is not None and not (0 <= self.llm_temperature <= 2):
+            raise ValueError(
+                f"LLM_TEMPERATURE must be in range [0, 2]. Got: {self.llm_temperature}"
+            )
+        if self.llm_request_timeout_seconds <= 0:
+            raise ValueError(
+                "LLM_REQUEST_TIMEOUT_SECONDS must be positive. "
+                f"Got: {self.llm_request_timeout_seconds}"
+            )
+
+    def litellm_model_id(self) -> str:
+        """Model string passed to LiteLLM (provider-prefixed)."""
+        if self.llm_backend == "OPENAI":
+            if "/" not in self.llm_model:
+                return f"openai/{self.llm_model}"
+            return self.llm_model
+        if self.llm_model.startswith("openrouter/"):
+            return self.llm_model
+        if "/" not in self.llm_model:
+            return f"openrouter/openai/{self.llm_model}"
+        return f"openrouter/{self.llm_model}"
         if not self.installation_id_salt:
             raise ValueError("INSTALLATION_ID_SALT must not be empty")
         if not self.ip_salt:
@@ -175,5 +206,14 @@ class BotConfig:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
 
+def _apply_openrouter_litellm_env(cfg: BotConfig) -> None:
+    """LiteLLM OpenRouter integration reads OR_SITE_URL / OR_APP_NAME from the environment."""
+    if cfg.llm_backend != "OPENROUTER":
+        return
+    os.environ["OR_SITE_URL"] = cfg.openrouter_site_url or "https://prompttune.local"
+    os.environ["OR_APP_NAME"] = cfg.openrouter_app_name or "PromptTune"
+
+
 settings = BotConfig.from_env()
 settings.validate()
+_apply_openrouter_litellm_env(settings)

@@ -44,7 +44,25 @@ class PromptService:
         request_id = str(uuid.uuid4())
 
         try:
-            improved_text, model_used, latency_ms = await improve_text(text)
+            llm_result = await improve_text(
+                text,
+                request_id=request_id,
+                installation_id=installation_id,
+                site=site,
+            )
+            llm_meta = {
+                "model": llm_result.model,
+                "provider": llm_result.provider,
+                "latency_ms": llm_result.latency_ms,
+                "upstream_id": llm_result.upstream_id,
+                "attempt_count": llm_result.attempt_count,
+                "completion_tokens_budget_used": llm_result.completion_tokens_budget_used,
+                "tokens": {
+                    "prompt": llm_result.prompt_tokens,
+                    "completion": llm_result.completion_tokens,
+                    "total": llm_result.total_tokens,
+                },
+            }
             record = PromptImprovement(
                 id=request_id,
                 installation_id=installation_id,
@@ -53,9 +71,10 @@ class PromptService:
                 site=site,
                 page_url=page_url,
                 original_text=text,
-                improved_text=improved_text,
-                model=model_used,
-                latency_ms=latency_ms,
+                improved_text=llm_result.improved_text,
+                model=llm_result.model,
+                latency_ms=llm_result.latency_ms,
+                llm_meta=llm_meta,
                 status="ok",
             )
         except UpstreamServiceError as exc:

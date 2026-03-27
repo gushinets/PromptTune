@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -19,13 +20,16 @@ async def client() -> AsyncGenerator[AsyncClient]:
 
 @pytest.fixture
 def mock_litellm():
-    mock_response = {
-        "choices": [{"message": {"content": "better result"}}],
-        "model": "gpt-4o-mini",
-    }
+    mock_response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="better result"))],
+        model="gpt-4o-mini",
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        id="chatcmpl-test",
+        _hidden_params={"custom_llm_provider": "openrouter"},
+    )
 
-    with patch(
-        "app.services.llm._request_completion", new=AsyncMock(return_value=mock_response)
+    with patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"), patch(
+        "app.services.llm.acompletion", new=AsyncMock(return_value=mock_response)
     ) as m:
         yield m
 
