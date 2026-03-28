@@ -1,6 +1,17 @@
 import { defineConfig } from "wxt";
 import path from "node:path";
 
+const DEFAULT_API_BASE_URL = "https://api.anytoolai.store";
+
+function getApiHostPermission(): string {
+  try {
+    const apiBaseUrl = process.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL;
+    return `${new URL(apiBaseUrl).origin}/*`;
+  } catch {
+    return `${new URL(DEFAULT_API_BASE_URL).origin}/*`;
+  }
+}
+
 export default defineConfig({
   srcDir: ".",
   modules: ["@wxt-dev/module-react"],
@@ -24,7 +35,7 @@ export default defineConfig({
     },
     permissions: ["storage", "tabs", "activeTab", "scripting", "commands"],
     host_permissions: [
-      "https://api.anytoolai.store/*",
+      getApiHostPermission(),
       "https://chatgpt.com/*",
       "https://claude.ai/*",
       "https://www.perplexity.ai/*",

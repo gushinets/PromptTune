@@ -30,7 +30,7 @@ dev-config:
 	$(DEV_COMPOSE) config
 
 dev-migrate:
-	$(DEV_COMPOSE) run --rm api alembic upgrade head
+	$(DEV_COMPOSE) run --rm --build api alembic upgrade head
 
 dev-down:
 	$(DEV_COMPOSE) down

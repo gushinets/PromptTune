@@ -50,6 +50,8 @@ make migrate
 
 Use the production stack only for VPS deployment. The canonical runbook lives in `docs/deployment.md`.
 
+These `make` targets are convenience wrappers. If `make` is not installed on the VPS, run the equivalent `docker compose -f docker-compose.base.yml -f docker-compose.prod.yml ...` commands directly.
+
 ```bash
 make prod-db-up    # start postgres + redis only
 make prod-migrate  # apply alembic migrations using the prod env

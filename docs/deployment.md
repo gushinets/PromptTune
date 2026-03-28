@@ -27,6 +27,7 @@ Before the first deploy, verify all of the following:
 - `api.anytoolai.store` points to the VPS public IP
 - inbound `80/tcp` and `443/tcp` are open
 - Docker Engine and Docker Compose are already installed on the VPS
+- `make` is installed, or you will use the raw `docker compose` commands shown below instead of the `make` shortcuts
 - no other reverse proxy or web server is bound to `80` or `443`
 - the repo is checked out on the VPS
 - you have one provider key ready:
@@ -67,6 +68,13 @@ cd /path/to/PromptTune/infra
 make prod-config
 ```
 
+If `make` is not installed:
+
+```bash
+cd /path/to/PromptTune/infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config
+```
+
 This should render a valid Docker Compose configuration with no missing env values or syntax errors.
 
 ## 3. First deploy
@@ -78,6 +86,15 @@ cd /path/to/PromptTune/infra
 make prod-db-up
 make prod-migrate
 make prod-up
+```
+
+If `make` is not installed:
+
+```bash
+cd /path/to/PromptTune/infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d postgres redis
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml run --rm --build api alembic upgrade head
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up --build -d api caddy
 ```
 
 What each step does:
@@ -94,6 +111,14 @@ Check container state:
 cd /path/to/PromptTune/infra
 make prod-ps
 make prod-logs
+```
+
+If `make` is not installed:
+
+```bash
+cd /path/to/PromptTune/infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml ps
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml logs -f
 ```
 
 Health checks:
@@ -145,6 +170,17 @@ make prod-migrate
 make prod-up
 ```
 
+If `make` is not installed:
+
+```bash
+cd /path/to/PromptTune
+git pull
+cd infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml run --rm --build api alembic upgrade head
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up --build -d api caddy
+```
+
 Notes:
 
 - `prod-migrate` is safe to run on every deploy; if there are no new migrations it becomes a no-op
@@ -173,6 +209,15 @@ curl -i https://api.anytoolai.store/healthz
 curl -i https://api.anytoolai.store/readyz
 ```
 
+If `make` is not installed:
+
+```bash
+cd /path/to/PromptTune/infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml ps
+curl -i https://api.anytoolai.store/healthz
+curl -i https://api.anytoolai.store/readyz
+```
+
 ## 8. Shutdown
 
 To stop the production stack:
@@ -180,6 +225,13 @@ To stop the production stack:
 ```bash
 cd /path/to/PromptTune/infra
 make prod-down
+```
+
+If `make` is not installed:
+
+```bash
+cd /path/to/PromptTune/infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml down
 ```
 
 ## Caddy notes
