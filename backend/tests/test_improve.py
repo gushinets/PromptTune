@@ -140,17 +140,20 @@ async def test_improve_does_not_refund_on_non_upstream_error(
     with patch(
         "app.services.prompt_service.improve_text",
         new=AsyncMock(side_effect=RuntimeError("boom")),
-    ), patch("app.api.v1.improve.PromptService.refund_rate_limit", new=AsyncMock()) as refund_mock:
-        with pytest.raises(RuntimeError):
-            await client.post(
-                "/v1/improve",
-                headers={"X-Forwarded-For": "1.2.3.4"},
-                json={
-                    "text": "write me a poem",
-                    "installation_id": "test-inst-1",
-                    "client": "manual-test",
-                },
-            )
+    ), patch(
+        "app.api.v1.improve.PromptService.refund_rate_limit",
+        new=AsyncMock(),
+    ) as refund_mock, pytest.raises(RuntimeError):
+        await client.post(
+            "/v1/improve",
+            headers={"X-Forwarded-For": "1.2.3.4"},
+            json={
+                "text": "write me a poem",
+                "installation_id": "test-inst-1",
+                "client": "manual-test",
+            },
+        )
+
     refund_mock.assert_not_awaited()
 
 

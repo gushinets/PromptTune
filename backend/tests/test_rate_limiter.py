@@ -1,6 +1,6 @@
-import pytest
-
 from datetime import UTC, datetime
+
+import pytest
 
 from app.services.rate_limiter import RateLimiter
 
