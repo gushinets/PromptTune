@@ -60,7 +60,22 @@ def setup_file_logging() -> None:
 
 def _load_system_prompt() -> str:
     path = Path(__file__).with_name("system_prompt.txt")
-    return path.read_text(encoding="utf-8")
+    if not path.is_file():
+        logger.error("system_prompt_missing path=%s", path)
+        raise RuntimeError(
+            f"System prompt file not found: {path}. "
+            "Add system_prompt.txt next to llm.py with non-empty instructions."
+        )
+    raw = path.read_text(encoding="utf-8")
+    content = raw.strip()
+    if not content:
+        logger.error("system_prompt_empty path=%s", path)
+        raise RuntimeError(
+            f"System prompt file is empty: {path}. "
+            "Add non-empty instructions to system_prompt.txt."
+        )
+    logger.info("system_prompt_loaded path=%s chars=%s", path, len(content))
+    return content
 
 
 SYSTEM_PROMPT = _load_system_prompt()
