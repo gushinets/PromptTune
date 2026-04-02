@@ -40,11 +40,7 @@ export function PromptForm({
         rows={4}
       />
 
-      <button
-        className="btn-improve"
-        onClick={onImprove}
-        disabled={!original.trim() || loading}
-      >
+      <button className="btn-improve" onClick={onImprove} disabled={!original.trim() || loading}>
         {loading ? (
           <>
             <span className="spinner" />

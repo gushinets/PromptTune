@@ -44,7 +44,7 @@ export function Library({ onCountChange }: LibraryProps) {
       (e) =>
         e.original.toLowerCase().includes(q) ||
         e.improved.toLowerCase().includes(q) ||
-        (e.site?.toLowerCase().includes(q) ?? false)
+        (e.site?.toLowerCase().includes(q) ?? false),
     );
   }, [entries, searchQuery]);
 
@@ -58,11 +58,7 @@ export function Library({ onCountChange }: LibraryProps) {
         <p className="empty-state">No prompts match your search.</p>
       ) : (
         filtered.map((entry) => (
-          <LibraryItem
-            key={entry.id}
-            entry={entry}
-            onDelete={handleDelete}
-          />
+          <LibraryItem key={entry.id} entry={entry} onDelete={handleDelete} />
         ))
       )}
 

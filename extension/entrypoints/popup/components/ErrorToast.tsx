@@ -109,11 +109,7 @@ export function ErrorToast({ error, onDismiss, onRetry }: ErrorToastProps) {
           </button>
         )}
       </div>
-      <button
-        className="error-toast-dismiss"
-        onClick={onDismiss}
-        aria-label="Dismiss"
-      >
+      <button className="error-toast-dismiss" onClick={onDismiss} aria-label="Dismiss">
         <CloseIcon />
       </button>
     </div>
