@@ -1,7 +1,5 @@
 import { vi } from "vitest";
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
 // Mock webextension-polyfill
 vi.mock("webextension-polyfill", () => ({
   default: {
@@ -13,7 +11,6 @@ vi.mock("webextension-polyfill", () => ({
     },
     runtime: {
       sendMessage: vi.fn().mockResolvedValue(undefined),
-      getManifest: vi.fn().mockReturnValue({ version: "0.1.0" }),
       onMessage: { addListener: vi.fn() },
     },
     tabs: {

@@ -3,7 +3,7 @@ import { useState } from "react";
 interface ActionBarProps {
   improved: string;
   disabled: boolean;
-  onSave: () => Promise<boolean>;
+  onSave: () => Promise<void>;
 }
 
 function CopyIcon({ className }: { className?: string }) {
@@ -66,8 +66,7 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
   };
 
   const handleSave = async () => {
-    const didSave = await onSave();
-    if (!didSave) return;
+    await onSave();
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };
