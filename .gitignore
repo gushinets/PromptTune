@@ -42,7 +42,7 @@ backend/pytest-cache-files-*
 
 PROMPTS/    
 logs/
-
+build/
 # MCP
 .mcp.json
 
