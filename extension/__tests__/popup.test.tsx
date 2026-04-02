@@ -168,7 +168,9 @@ describe("App", () => {
     expect(savePromptSpy).toHaveBeenCalledTimes(1);
     expect(findButton(container, "Save").textContent).toContain("Save to Library");
     expect(container.textContent).not.toContain("Saved!");
-    expect(container.textContent).toContain("You've used all 10 requests today. Resets at midnight UTC.");
+    expect(container.textContent).toContain(
+      "You've used all 10 requests today. Resets at midnight UTC.",
+    );
     expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalled();
   });
 });

@@ -26,7 +26,13 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
-      - run: npm run test
+      - run: npm run test:coverage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-coverage
+          path: extension/coverage/
+
       - run: npm run build
 
       - uses: actions/upload-artifact@v4

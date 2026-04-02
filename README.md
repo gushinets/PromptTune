@@ -20,6 +20,15 @@ npm run dev        # WXT dev mode (Chrome)
 npm run build      # Production build
 ```
 
+#### Run extension tests
+
+```bash
+cd extension
+npm install
+npm run test           # Fast test run
+npm run test:coverage  # Coverage report in extension/coverage/
+```
+
 #### Build shareable zip files
 
 ```bash

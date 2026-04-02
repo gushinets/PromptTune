@@ -16,10 +16,7 @@ export function RatingBar() {
   return (
     <div className="rating-bar">
       <span className="rating-label">Rate us</span>
-      <div
-        className="rating-stars"
-        onMouseLeave={() => setHoveredStar(null)}
-      >
+      <div className="rating-stars" onMouseLeave={() => setHoveredStar(null)}>
         {[1, 2, 3, 4, 5].map((star) => (
           <span
             key={star}

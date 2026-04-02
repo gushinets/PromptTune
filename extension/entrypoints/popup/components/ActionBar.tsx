@@ -74,11 +74,7 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
 
   return (
     <div className="action-bar">
-      <button
-        className="btn-secondary"
-        onClick={handleCopy}
-        disabled={disabled}
-      >
+      <button className="btn-secondary" onClick={handleCopy} disabled={disabled}>
         {copied ? (
           <>
             <CheckIcon className="btn-icon" />
@@ -91,11 +87,7 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
           </>
         )}
       </button>
-      <button
-        className="btn-secondary"
-        onClick={handleSave}
-        disabled={disabled || saved}
-      >
+      <button className="btn-secondary" onClick={handleSave} disabled={disabled || saved}>
         {saved ? (
           <>
             <CheckIcon className="btn-icon" />
