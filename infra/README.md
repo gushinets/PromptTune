@@ -14,7 +14,16 @@ Create `infra/.env` from the single template:
 cp .env.example .env
 ```
 
-Edit values as needed (for production, set a strong `POSTGRES_PASSWORD` and align `DATABASE_URL`).
+For production, edit at least:
+
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL` so the password matches `POSTGRES_PASSWORD`
+- `LLM_BACKEND`
+- `OPENROUTER_API_KEY` or `OPENAI_API_KEY`
+- `INSTALLATION_ID_SALT`
+- `IP_SALT`
+
+Keep `REDIS_URL=redis://redis:6379/0` and `ALLOWED_ORIGINS=*` for the MVP deploy.
 
 The compose files use `env_file: .env`, so `infra/.env` must exist before starting either stack.
 Use plain `KEY=value` lines only. Do not append inline comments to values.
@@ -37,7 +46,7 @@ make dev-up-d     # background api + postgres + redis
 make dev-migrate  # alembic upgrade head in a one-shot api container
 make dev-logs
 make dev-ps
-make dev-config
+make dev-config   # validate dev compose config without printing resolved env values
 make dev-down
 ```
 
@@ -62,8 +71,10 @@ make prod-migrate  # apply alembic migrations using the prod env
 make prod-up       # build/start api + caddy
 make prod-logs
 make prod-ps
-make prod-config
+make prod-config   # validate prod compose config without printing resolved env values
 make prod-down
 ```
+
+Both config targets use `docker compose ... config --quiet`, so success produces no output.
 
 `infra/.env.example` documents `ALLOWED_ORIGINS=*` for the MVP deploy until browser-extension IDs/origins are known.
