@@ -67,6 +67,7 @@ export function App() {
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
+  const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const refreshLibraryCount = useCallback(() => {
@@ -84,16 +85,20 @@ export function App() {
       .sendMessage({ type: "GET_LIMITS" })
       .then((res) => {
         const rate_limit = extractRateLimitResponse(res);
-        if (!rate_limit) return;
+        if (!rate_limit) {
+          setLimitsUnavailable(true);
+          return;
+        }
         setRateLimit({
           remaining: rate_limit.per_day_remaining,
           total: rate_limit.per_day_total,
         });
+        setLimitsUnavailable(false);
         setLimitsLoaded(true);
       })
       .catch(() => {
-        // Best-effort; fall back to 0/0 until we have a proper value.
-        setLimitsLoaded(true);
+        // Best-effort; allow improving even if the balance lookup fails.
+        setLimitsUnavailable(true);
       });
   }, []);
 
@@ -107,7 +112,9 @@ export function App() {
     BACKEND_MODE !== "fastapi"
       ? "Unlimited"
       : !limitsLoaded
-        ? "Loading limits..."
+        ? limitsUnavailable
+          ? "Limits unavailable"
+          : "Loading limits..."
         : rateLimit.total > 0
           ? `${rateLimit.remaining}/${rateLimit.total} today`
           : `${rateLimit.remaining} today`;
@@ -223,6 +230,7 @@ export function App() {
             remaining: result.rate_limit.per_day_remaining,
             total: result.rate_limit.per_day_total,
           });
+          setLimitsUnavailable(false);
           setLimitsLoaded(true);
         }
       } else {
@@ -233,6 +241,7 @@ export function App() {
       setError(info);
       if (info.type === "rate-limit") {
         setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+        setLimitsUnavailable(false);
         setLimitsLoaded(true);
       }
     } finally {
@@ -240,10 +249,10 @@ export function App() {
     }
   }, [original, isExhausted, mapErrorToToast, rateLimit.total]);
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (): Promise<boolean> => {
     const originalTrimmed = original.trim();
     const improvedTrimmed = improved.trim();
-    if (!originalTrimmed || !improvedTrimmed) return;
+    if (!originalTrimmed || !improvedTrimmed) return false;
 
     if (BACKEND_MODE === "fastapi") {
       try {
@@ -265,14 +274,16 @@ export function App() {
         setError(info);
         if (info.type === "rate-limit") {
           setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+          setLimitsUnavailable(false);
           setLimitsLoaded(true);
         }
-        return;
+        return false;
       }
     }
 
     await save({ original: originalTrimmed, improved: improvedTrimmed });
     refreshLibraryCount();
+    return true;
   }, [original, improved, refreshLibraryCount, mapErrorToToast]);
 
   const handleDismissError = useCallback(() => {
@@ -308,8 +319,13 @@ export function App() {
           </button>
           {showRateLimitTooltip && showTooltip && (
             <div className="rate-limit-tooltip" id={RATE_LIMIT_TOOLTIP_ID} role="tooltip">
-              {!limitsLoaded ? (
+              {!limitsLoaded && !limitsUnavailable ? (
                 <p>Loading your daily free request balance.</p>
+              ) : !limitsLoaded ? (
+                <p>
+                  We couldn&apos;t load your current balance. Improvements still work, and the next
+                  successful request will refresh this count.
+                </p>
               ) : (
                 <>
                   <p>
