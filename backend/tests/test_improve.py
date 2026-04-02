@@ -86,10 +86,13 @@ async def test_improve_works_without_client_field(
 async def test_improve_returns_structured_upstream_auth_error(
     client: AsyncClient, mock_db, mock_redis
 ):
-    with patch(
-        "app.services.prompt_service.improve_text",
-        new=AsyncMock(side_effect=UpstreamAuthError("Server OpenAI API key is not configured")),
-    ), patch("app.api.v1.improve.PromptService.refund_rate_limit", new=AsyncMock()) as refund_mock:
+    with (
+        patch(
+            "app.services.prompt_service.improve_text",
+            new=AsyncMock(side_effect=UpstreamAuthError("Server OpenAI API key is not configured")),
+        ),
+        patch("app.api.v1.improve.PromptService.refund_rate_limit", new=AsyncMock()) as refund_mock,
+    ):
         response = await client.post(
             "/v1/improve",
             json={
@@ -111,10 +114,15 @@ async def test_improve_returns_structured_upstream_auth_error(
 async def test_improve_refunds_quota_when_provider_returns_empty_completion(
     client: AsyncClient, mock_db, mock_redis
 ):
-    with patch(
-        "app.services.prompt_service.improve_text",
-        new=AsyncMock(side_effect=UpstreamBadResponseError("Provider returned empty completion")),
-    ), patch("app.api.v1.improve.PromptService.refund_rate_limit", new=AsyncMock()) as refund_mock:
+    with (
+        patch(
+            "app.services.prompt_service.improve_text",
+            new=AsyncMock(
+                side_effect=UpstreamBadResponseError("Provider returned empty completion")
+            ),
+        ),
+        patch("app.api.v1.improve.PromptService.refund_rate_limit", new=AsyncMock()) as refund_mock,
+    ):
         response = await client.post(
             "/v1/improve",
             headers={"X-Forwarded-For": "1.2.3.4"},
@@ -137,13 +145,17 @@ async def test_improve_refunds_quota_when_provider_returns_empty_completion(
 async def test_improve_does_not_refund_on_non_upstream_error(
     client: AsyncClient, mock_db, mock_redis
 ):
-    with patch(
-        "app.services.prompt_service.improve_text",
-        new=AsyncMock(side_effect=RuntimeError("boom")),
-    ), patch(
-        "app.api.v1.improve.PromptService.refund_rate_limit",
-        new=AsyncMock(),
-    ) as refund_mock, pytest.raises(RuntimeError):
+    with (
+        patch(
+            "app.services.prompt_service.improve_text",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ),
+        patch(
+            "app.api.v1.improve.PromptService.refund_rate_limit",
+            new=AsyncMock(),
+        ) as refund_mock,
+        pytest.raises(RuntimeError),
+    ):
         await client.post(
             "/v1/improve",
             headers={"X-Forwarded-For": "1.2.3.4"},

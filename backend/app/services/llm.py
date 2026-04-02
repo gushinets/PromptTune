@@ -71,8 +71,7 @@ def _load_system_prompt() -> str:
     if not content:
         logger.error("system_prompt_empty path=%s", path)
         raise RuntimeError(
-            f"System prompt file is empty: {path}. "
-            "Add non-empty instructions to system_prompt.txt."
+            f"System prompt file is empty: {path}. Add non-empty instructions to system_prompt.txt."
         )
     logger.info("system_prompt_loaded path=%s chars=%s", path, len(content))
     return content

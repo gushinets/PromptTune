@@ -16,10 +16,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute(
-        "ALTER TABLE prompt_improvements "
-        "ADD COLUMN IF NOT EXISTS llm_meta JSON"
-    )
+    op.execute("ALTER TABLE prompt_improvements ADD COLUMN IF NOT EXISTS llm_meta JSON")
 
 
 def downgrade() -> None:

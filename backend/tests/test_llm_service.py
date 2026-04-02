@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from litellm.exceptions import AuthenticationError, RateLimitError
 
-from app.services.errors import UpstreamAuthError, UpstreamBadResponseError, UpstreamRateLimitError
+from app.services.errors import (
+    UpstreamAuthError,
+    UpstreamBadResponseError,
+    UpstreamRateLimitError,
+    UpstreamServiceError,
+)
 from app.services.llm import SYSTEM_PROMPT, LiteLLMClient, _normalize_response, improve_text
 
 
@@ -63,7 +68,7 @@ async def test_improve_text_includes_system_prompt_and_user_message():
     assert result.total_tokens == 3
 
 
-@pytest.mark.asyncio #SIM117 fix
+@pytest.mark.asyncio  # SIM117 fix
 async def test_improve_text_maps_authentication_error():
     client = LiteLLMClient()
     with (
@@ -73,7 +78,8 @@ async def test_improve_text_maps_authentication_error():
             new=AsyncMock(
                 side_effect=AuthenticationError("nope", "openrouter", "openrouter/openai/x")
             ),
-        ),pytest.raises(UpstreamAuthError)
+        ),
+        pytest.raises(UpstreamAuthError),
     ):
         await client.improve_text(
             "x",
@@ -83,7 +89,7 @@ async def test_improve_text_maps_authentication_error():
         )
 
 
-@pytest.mark.asyncio #SIM117 fix
+@pytest.mark.asyncio  # SIM117 fix
 async def test_improve_text_maps_rate_limit_error():
     client = LiteLLMClient()
     with (
@@ -91,7 +97,8 @@ async def test_improve_text_maps_rate_limit_error():
         patch(
             "app.services.llm.acompletion",
             new=AsyncMock(side_effect=RateLimitError("slow down", "openrouter", "m")),
-        ),pytest.raises(UpstreamRateLimitError)
+        ),
+        pytest.raises(UpstreamRateLimitError),
     ):
         await client.improve_text(
             "x",
@@ -197,7 +204,7 @@ async def test_improve_text_retries_token_exhaustion_with_higher_budget():
     assert result.completion_tokens_budget_used == 180
 
 
-@pytest.mark.asyncio #SIM117 fix
+@pytest.mark.asyncio  # SIM117 fix
 async def test_improve_text_empty_completion_raises_error():
     empty_response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content=""))],
@@ -219,7 +226,8 @@ async def test_improve_text_empty_completion_raises_error():
             site="example.com",
         )
 
-@pytest.mark.asyncio #SIM117 fix
+
+@pytest.mark.asyncio  # SIM117 fix
 async def test_improve_text_too_large_completion_raises_error():
     response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content="x" * 30))],
@@ -242,7 +250,7 @@ async def test_improve_text_too_large_completion_raises_error():
         )
 
 
-@pytest.mark.asyncio #B017 fix
+@pytest.mark.asyncio  # B017 fix
 async def test_improve_logs_unsupported_temperature_error(caplog):
     caplog.set_level(logging.ERROR)
 
@@ -252,12 +260,10 @@ async def test_improve_logs_unsupported_temperature_error(caplog):
         patch(
             "app.services.llm.acompletion",
             new=AsyncMock(
-                side_effect=RuntimeError(
-                    "temperature is not supported for model openai/o1"
-                )
+                side_effect=RuntimeError("temperature is not supported for model openai/o1")
             ),
         ),
-        pytest.raises(RuntimeError),
+        pytest.raises(UpstreamServiceError),
     ):
         await improve_text(
             "hello",
@@ -266,6 +272,4 @@ async def test_improve_logs_unsupported_temperature_error(caplog):
             site="example.com",
         )
 
-    assert "temperature is not supported for model" in " ".join(
-        r.message for r in caplog.records
-    )
+    assert "temperature is not supported for model" in " ".join(r.message for r in caplog.records)
