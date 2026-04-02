@@ -46,14 +46,25 @@ cp .env.example .env
 Edit `infra/.env` and set:
 
 - `POSTGRES_PASSWORD`
+- `DATABASE_URL` so the password in the URL matches `POSTGRES_PASSWORD`
 - `LLM_BACKEND`
-- `OPENROUTER_API_KEY` or `OPENAI_API_KEY`
+- `OPENROUTER_API_KEY` or `OPENAI_API_KEY` to match `LLM_BACKEND`
+- `INSTALLATION_ID_SALT`
+- `IP_SALT`
+
+Production example:
+
+- `POSTGRES_PASSWORD=CHANGE_ME_STRONG_PASSWORD`
+- `DATABASE_URL=postgresql+asyncpg://prompttune:CHANGE_ME_STRONG_PASSWORD@postgres:5432/prompttune`
+- `INSTALLATION_ID_SALT=CHANGE_ME_INSTALLATION_SALT`
+- `IP_SALT=CHANGE_ME_IP_SALT`
 
 Keep these values as-is for the MVP deploy:
 
-- `DATABASE_URL=postgresql+asyncpg://prompttune:<POSTGRES_PASSWORD>@postgres:5432/prompttune`
 - `REDIS_URL=redis://redis:6379/0`
 - `ALLOWED_ORIGINS=*`
+
+The password inside `DATABASE_URL` must match `POSTGRES_PASSWORD` or the API and migration containers will fail to connect to Postgres.
 
 Why `ALLOWED_ORIGINS=*` for now:
 
@@ -72,10 +83,10 @@ If `make` is not installed:
 
 ```bash
 cd /path/to/PromptTune/infra
-docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
 ```
 
-This should render a valid Docker Compose configuration with no missing env values or syntax errors.
+This validates the Compose configuration without printing resolved env values. On success it exits with no output.
 
 ## 3. First deploy
 
@@ -176,13 +187,14 @@ If `make` is not installed:
 cd /path/to/PromptTune
 git pull
 cd infra
-docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml run --rm --build api alembic upgrade head
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up --build -d api caddy
 ```
 
 Notes:
 
+- `prod-config` validates the production Compose file without printing resolved env values
 - `prod-migrate` is safe to run on every deploy; if there are no new migrations it becomes a no-op
 - `prod-up` rebuilds the `api` image from the current repo checkout and restarts the production services
 
@@ -193,12 +205,14 @@ Code/config rollback procedure:
 ```bash
 cd /path/to/PromptTune
 git log --oneline -n 5
-git checkout <previous-good-commit>
+git switch --detach <previous-good-commit>
 cd infra
 make prod-up
 ```
 
 If the failed deploy included a schema migration, a code rollback may not be enough on its own. This MVP does not include automated off-box backups, so treat irreversible schema changes carefully.
+
+This leaves the repo in detached HEAD state. Before the next normal deploy, switch back to your deployment branch (for example `git switch main`) and then run `git pull`.
 
 After rollback, verify again:
 
@@ -257,10 +271,8 @@ If you want ACME notification emails, uncomment and set the `email` line in the 
 
 ## Follow-up after extension publication
 
-This backend deploy intentionally stops at temporary permissive CORS.
+This backend deploy intentionally stops at temporary permissive CORS. The extension already defaults to `https://api.anytoolai.store` and derives the matching API host permission from `VITE_API_BASE_URL`.
 
-After the browser extensions are published, tighten the client side and server side:
+After the browser extensions are published, the remaining follow-up is:
 
-- add `https://api.anytoolai.store/*` to extension `host_permissions`
-- set the extension production API base URL to `https://api.anytoolai.store`
 - replace `ALLOWED_ORIGINS=*` with explicit extension/site origin handling

@@ -53,3 +53,27 @@ def test_validate_rejects_retry_budget_lower_than_normal():
         assert "LLM_COMPLETION_TOKENS_RETRY_MAX must be greater than or equal" in str(exc)
     else:
         raise AssertionError("Expected ValueError")
+
+
+def test_validate_rejects_empty_installation_id_salt():
+    config = BotConfig.from_env()
+    config.installation_id_salt = ""
+
+    try:
+        config.validate()
+    except ValueError as exc:
+        assert str(exc) == "INSTALLATION_ID_SALT must not be empty"
+    else:
+        raise AssertionError("Expected ValueError")
+
+
+def test_validate_rejects_empty_ip_salt():
+    config = BotConfig.from_env()
+    config.ip_salt = ""
+
+    try:
+        config.validate()
+    except ValueError as exc:
+        assert str(exc) == "IP_SALT must not be empty"
+    else:
+        raise AssertionError("Expected ValueError")

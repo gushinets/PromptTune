@@ -27,7 +27,7 @@ dev-ps:
 	$(DEV_COMPOSE) ps
 
 dev-config:
-	$(DEV_COMPOSE) config
+	$(DEV_COMPOSE) config --quiet
 
 dev-migrate:
 	$(DEV_COMPOSE) run --rm --build api alembic upgrade head
@@ -51,7 +51,7 @@ prod-ps:
 	$(PROD_COMPOSE) ps
 
 prod-config:
-	$(PROD_COMPOSE) config
+	$(PROD_COMPOSE) config --quiet
 
 prod-down:
 	$(PROD_COMPOSE) down

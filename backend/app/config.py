@@ -168,6 +168,10 @@ class BotConfig:
                 "LLM_REQUEST_TIMEOUT_SECONDS must be positive. "
                 f"Got: {self.llm_request_timeout_seconds}"
             )
+        if not self.installation_id_salt:
+            raise ValueError("INSTALLATION_ID_SALT must not be empty")
+        if not self.ip_salt:
+            raise ValueError("IP_SALT must not be empty")
 
     def litellm_model_id(self) -> str:
         """Model string passed to LiteLLM (provider-prefixed)."""
@@ -180,10 +184,6 @@ class BotConfig:
         if "/" not in self.llm_model:
             return f"openrouter/openai/{self.llm_model}"
         return f"openrouter/{self.llm_model}"
-        if not self.installation_id_salt:
-            raise ValueError("INSTALLATION_ID_SALT must not be empty")
-        if not self.ip_salt:
-            raise ValueError("IP_SALT must not be empty")
 
     def get_provider_api_key(self) -> str | None:
         if self.llm_backend == "OPENAI":

@@ -89,6 +89,16 @@ VITE_BACKEND_MODE=fastapi
 VITE_API_BASE_URL=http://localhost:8000
 ```
 
+Backend env vars for local FastAPI runs (create `backend/.env`, do not commit; copy the needed keys from `infra/.env.example` and switch `DATABASE_URL` / `REDIS_URL` to localhost):
+
+```env
+LLM_BACKEND=OPENROUTER        # or OPENAI
+OPENROUTER_API_KEY=REPLACE_ME # required when LLM_BACKEND=OPENROUTER
+# OPENAI_API_KEY=REPLACE_ME   # required when LLM_BACKEND=OPENAI
+DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune
+REDIS_URL=redis://localhost:6379/0
+```
+
 #### n8n override
 
 Requires an n8n instance with the "Prompt Improver API" workflow active.
@@ -103,15 +113,6 @@ Env vars:
 ```
 VITE_BACKEND_MODE=n8n
 VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook/improve-prompt
-```
-
-
-```env
-LLM_BACKEND=OPENROUTER        # or OPENAI
-OPENROUTER_API_KEY=REPLACE_ME # required when LLM_BACKEND=OPENROUTER
-# OPENAI_API_KEY=REPLACE_ME   # required when LLM_BACKEND=OPENAI
-DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune
-REDIS_URL=redis://localhost:6379/0
 ```
 
 Notes:
