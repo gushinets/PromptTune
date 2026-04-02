@@ -40,7 +40,7 @@ On the VPS:
 
 ```bash
 cd /path/to/PromptTune/infra
-cp .env.prod.example .env
+cp .env.example .env
 ```
 
 Edit `infra/.env` and set:
