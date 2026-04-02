@@ -5,6 +5,12 @@
 
 /* --- Colour Tokens (Dark only) --- */
 :root {
+  --font-display:
+    "Cabinet Grotesk", "Aptos Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "DM Sans", "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "DM Mono", "Cascadia Mono", "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+
   /* Backgrounds — layered depth */
   --bg: #0f0c29;
   --bg2: #1a1550;
@@ -55,7 +61,7 @@
 body {
   width: 340px;
   min-height: 540px;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg);
   color: var(--txt);
   font-size: 13px;
@@ -117,7 +123,7 @@ body {
 }
 
 .header-title {
-  font-family: "Cabinet Grotesk", sans-serif;
+  font-family: var(--font-display);
   font-size: 15px;
   font-weight: 900;
   color: var(--txt);
@@ -134,7 +140,7 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-family: "DM Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   color: var(--green);
@@ -189,7 +195,7 @@ body {
 }
 
 .rate-limit-tooltip p {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   color: rgba(240, 239, 248, 0.9);
   line-height: 1.5;
@@ -230,7 +236,7 @@ body {
 }
 
 .upgrade-banner p {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
   color: var(--amber);
   font-weight: 500;
@@ -243,7 +249,7 @@ body {
   color: #fff;
   border: none;
   border-radius: 8px;
-  font-family: "Cabinet Grotesk", sans-serif;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -276,7 +282,7 @@ body {
   justify-content: center;
   gap: 6px;
   padding: 10px 0;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
   color: var(--txt3);
@@ -307,7 +313,7 @@ body {
 }
 
 .tab-badge {
-  font-family: "DM Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   background: var(--acc-grad);
@@ -337,7 +343,7 @@ body {
    Section Labels
    ========================================= */
 .section-label {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -359,7 +365,7 @@ textarea {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: var(--txt);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
   resize: vertical;
@@ -389,7 +395,7 @@ button {
   padding: 10px 16px;
   border: none;
   border-radius: 8px;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -422,7 +428,7 @@ button:disabled {
   color: #fff;
   border: none;
   border-radius: 10px;
-  font-family: "Cabinet Grotesk", sans-serif;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -478,7 +484,7 @@ button:disabled {
 
 /* --- Improve hint --- */
 .improve-hint {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-style: italic;
   color: var(--txt3);
@@ -685,7 +691,7 @@ button:disabled {
 }
 
 .site-icon-label {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 9px;
   color: var(--txt3);
   text-align: center;
@@ -790,7 +796,7 @@ button:disabled {
 }
 
 .error-toast-retry {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
   color: var(--amber);
@@ -863,7 +869,7 @@ button:disabled {
   border: none;
   background: none;
   color: var(--txt);
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
   outline: none;
 }
@@ -890,7 +896,7 @@ button:disabled {
 .filter-pill {
   padding: 4px 12px;
   border-radius: 100px;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 500;
   border: 1px solid var(--border);
@@ -953,7 +959,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 600;
   color: var(--txt);
@@ -983,7 +989,7 @@ button:disabled {
 }
 
 .library-item-time {
-  font-family: "DM Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--txt3);
 }
@@ -1047,7 +1053,7 @@ button:disabled {
    Library — Storage Stats Footer
    ========================================= */
 .storage-stats {
-  font-family: "DM Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--txt3);
   text-align: center;
@@ -1078,7 +1084,7 @@ button:disabled {
 }
 
 .rating-label {
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   font-size: 11px;
   color: var(--txt3);
   font-weight: 500;
