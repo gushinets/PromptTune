@@ -38,6 +38,7 @@ async def test_improve_text_includes_system_prompt_and_user_message():
     )
     with (
         patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch("app.services.llm.settings.llm_temperature", None),
         patch("app.services.llm.acompletion", new_callable=AsyncMock) as ac,
     ):
         ac.return_value = mock_response
