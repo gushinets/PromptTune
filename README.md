@@ -105,7 +105,6 @@ VITE_BACKEND_MODE=n8n
 VITE_N8N_WEBHOOK_URL=http://localhost:5678/webhook/improve-prompt
 ```
 
-Backend env vars (in `backend/.env`, **do not commit**):
 
 ```env
 LLM_BACKEND=OPENROUTER        # or OPENAI

@@ -15,7 +15,7 @@
 ## Key Changes
 
 - Backend config:
-  - Add the 4 settings above to the main settings object and `.env.example`.
+  - Add the 4 settings above to the main settings object and `infra/.env.example`.
   - Remove old prompt/token constants and old config names instead of preserving compatibility.
   - Validate at startup:
     - all values are positive

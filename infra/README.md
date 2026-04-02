@@ -8,9 +8,13 @@ This folder contains Docker Compose configurations for the PromptTune backend st
 
 ## Setup
 
-Create `infra/.env` from an example:
-- `infra/.env.dev.example` for local development
-- `infra/.env.prod.example` for VPS / production
+Create `infra/.env` from the single template:
+
+```bash
+cp .env.example .env
+```
+
+Edit values as needed (for production, set a strong `POSTGRES_PASSWORD` and align `DATABASE_URL`).
 
 The compose files use `env_file: .env`, so `infra/.env` must exist before starting either stack.
 Use plain `KEY=value` lines only. Do not append inline comments to values.
@@ -62,4 +66,4 @@ make prod-config
 make prod-down
 ```
 
-`infra/.env.prod.example` keeps `ALLOWED_ORIGINS=*` on purpose for the MVP deploy until browser-extension IDs/origins are known.
+`infra/.env.example` documents `ALLOWED_ORIGINS=*` for the MVP deploy until browser-extension IDs/origins are known.
