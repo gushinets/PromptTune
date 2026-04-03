@@ -28,9 +28,10 @@ def mock_litellm():
         _hidden_params={"custom_llm_provider": "openrouter"},
     )
 
-    with patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"), patch(
-        "app.services.llm.acompletion", new=AsyncMock(return_value=mock_response)
-    ) as m:
+    with (
+        patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch("app.services.llm.acompletion", new=AsyncMock(return_value=mock_response)) as m,
+    ):
         yield m
 
 

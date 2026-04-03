@@ -9,8 +9,7 @@ def validate_improve_text_length(text: str) -> None:
     raise HTTPException(
         status_code=422,
         detail=(
-            "Input text exceeds maximum length of "
-            f"{settings.prompt_input_max_chars} characters."
+            f"Input text exceeds maximum length of {settings.prompt_input_max_chars} characters."
         ),
     )
 

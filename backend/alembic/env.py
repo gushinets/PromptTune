@@ -7,13 +7,12 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from app.config import settings  # noqa: E402
+from app.db.models import Base  # noqa: E402
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
-
-from app.config import settings
-from app.db.models import Base
 
 config = context.config
 if config.config_file_name is not None:
