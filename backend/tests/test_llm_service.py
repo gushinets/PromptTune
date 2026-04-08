@@ -28,8 +28,10 @@ from app.services.llm import (
     _should_retry_empty_completion,
     _usage_tokens,
     improve_text,
-    logger as llm_logger,
     setup_file_logging,
+)
+from app.services.llm import (
+    logger as llm_logger,
 )
 
 
@@ -336,16 +338,20 @@ def test_resolve_model_name_falls_back_to_model_id():
 
 
 def test_resolve_provider_api_key_missing_openai():
-    with patch("app.services.llm.settings.get_provider_api_key", return_value=None), patch(
-        "app.services.llm.settings.llm_backend", "OPENAI"
-    ), pytest.raises(UpstreamAuthError, match="OpenAI API key"):
+    with (
+        patch("app.services.llm.settings.get_provider_api_key", return_value=None),
+        patch("app.services.llm.settings.llm_backend", "OPENAI"),
+        pytest.raises(UpstreamAuthError, match="OpenAI API key"),
+    ):
         _resolve_provider_api_key()
 
 
 def test_resolve_provider_api_key_missing_openrouter():
-    with patch("app.services.llm.settings.get_provider_api_key", return_value=None), patch(
-        "app.services.llm.settings.llm_backend", "OPENROUTER"
-    ), pytest.raises(UpstreamAuthError, match="OpenRouter API key"):
+    with (
+        patch("app.services.llm.settings.get_provider_api_key", return_value=None),
+        patch("app.services.llm.settings.llm_backend", "OPENROUTER"),
+        pytest.raises(UpstreamAuthError, match="OpenRouter API key"),
+    ):
         _resolve_provider_api_key()
 
 
