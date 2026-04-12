@@ -88,7 +88,48 @@ docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --qu
 
 This validates the Compose configuration without printing resolved env values. On success it exits with no output.
 
-## 3. First deploy
+## 3. Recommended guarded deploy
+
+For routine production deploys, use the guarded script:
+
+```bash
+cd /path/to/PromptTune/infra
+make prod-preflight
+make prod-deploy
+```
+
+Or run the script directly:
+
+```bash
+cd /path/to/PromptTune/infra
+./scripts/deploy-prod.sh --preflight-only
+./scripts/deploy-prod.sh
+```
+
+What the script adds on top of the raw Compose flow:
+
+- checks that `infra/.env` exists and required production keys are set
+- validates the production Compose config
+- checks free space on `/` and Docker's root directory before rebuilding images
+- warns if the repo checkout is dirty so you know exactly what is being deployed
+- builds the `api` image once, reuses it for migrations, then restarts `api` and `caddy`
+- verifies `healthz`, `readyz`, and `/v1/limits` after the rollout
+- prunes dangling Docker images and build cache after a successful deploy to recover disk space
+
+Useful options:
+
+- `--preflight-only` validates without changing containers
+- `--skip-smoke` skips the post-deploy HTTP checks
+- `--base-url https://...` overrides the default smoke-test host
+- `--min-free-mb 2048` raises or lowers the free-space threshold
+
+Environment overrides:
+
+- `BASE_URL`
+- `MIN_FREE_MB`
+- `LIMITS_INSTALLATION_ID`
+
+## 4. First deploy
 
 Run the production deployment in this order:
 
@@ -114,7 +155,9 @@ What each step does:
 - `prod-migrate` runs `alembic upgrade head` in a one-shot `api` container using the same `DATABASE_URL` as the app
 - `prod-up` builds and starts `api` and `caddy`
 
-## 4. Verify the deploy
+This manual sequence remains available as the low-level fallback behind the guarded script.
+
+## 5. Verify the deploy
 
 Check container state:
 
@@ -144,7 +187,7 @@ Expected result:
 - both endpoints return `200 OK`
 - `readyz` only returns `200` after Postgres and Redis are reachable
 
-## 5. Verify CORS for MVP browser traffic
+## 6. Verify CORS for MVP browser traffic
 
 The backend currently allows all origins so browser requests can work before the final extension IDs are known.
 
@@ -168,7 +211,7 @@ Application request smoke test:
 curl -i https://api.anytoolai.store/v1/limits?installation_id=test-installation
 ```
 
-## 6. Redeploy after changes
+## 7. Redeploy after changes
 
 When new backend or infra changes are pulled onto the VPS:
 
@@ -176,9 +219,7 @@ When new backend or infra changes are pulled onto the VPS:
 cd /path/to/PromptTune
 git pull
 cd infra
-make prod-config
-make prod-migrate
-make prod-up
+make prod-deploy
 ```
 
 If `make` is not installed:
@@ -187,18 +228,16 @@ If `make` is not installed:
 cd /path/to/PromptTune
 git pull
 cd infra
-docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
-docker compose -f docker-compose.base.yml -f docker-compose.prod.yml run --rm --build api alembic upgrade head
-docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up --build -d api caddy
+./scripts/deploy-prod.sh
 ```
 
 Notes:
 
-- `prod-config` validates the production Compose file without printing resolved env values
-- `prod-migrate` is safe to run on every deploy; if there are no new migrations it becomes a no-op
-- `prod-up` rebuilds the `api` image from the current repo checkout and restarts the production services
+- `prod-deploy` runs the preflight checks first and then executes the rollout
+- the script deploys the current local checkout; run `git pull` first if you want the latest remote changes
+- migrations remain safe to run on every deploy; if there are no new revisions they become a no-op
 
-## 7. Rollback
+## 8. Rollback
 
 Code/config rollback procedure:
 
@@ -232,7 +271,7 @@ curl -i https://api.anytoolai.store/healthz
 curl -i https://api.anytoolai.store/readyz
 ```
 
-## 8. Shutdown
+## 9. Shutdown
 
 To stop the production stack:
 

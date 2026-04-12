@@ -65,6 +65,15 @@ Use the production stack only for VPS deployment. The canonical runbook lives in
 
 These `make` targets are convenience wrappers. If `make` is not installed on the VPS, run the equivalent `docker compose -f docker-compose.base.yml -f docker-compose.prod.yml ...` commands directly.
 
+Recommended guarded flow:
+
+```bash
+make prod-preflight  # env/config/free-space checks only
+make prod-deploy     # preflight + db/redis + build + migrate + restart + smoke checks
+```
+
+The deploy script lives at `infra/scripts/deploy-prod.sh`. It deploys the current checkout exactly as-is, warns if the git worktree is dirty, builds the `api` image once, then reuses that image for the migration step and final restart. After a successful deploy it prunes dangling Docker images and build cache to recover space on small VPS disks.
+
 ```bash
 make prod-db-up    # start postgres + redis only
 make prod-migrate  # apply alembic migrations using the prod env
@@ -72,6 +81,8 @@ make prod-up       # build/start api + caddy
 make prod-logs
 make prod-ps
 make prod-config   # validate prod compose config without printing resolved env values
+make prod-preflight
+make prod-deploy
 make prod-down
 ```
 

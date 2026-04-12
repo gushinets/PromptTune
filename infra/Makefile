@@ -4,7 +4,8 @@ PROD_COMPOSE = docker compose -f docker-compose.base.yml -f docker-compose.prod.
 .PHONY: \
 	dev dev-d logs migrate \
 	dev-up dev-up-d dev-logs dev-ps dev-config dev-migrate dev-down \
-	prod-db-up prod-up prod-migrate prod-logs prod-ps prod-config prod-down
+	prod-db-up prod-up prod-migrate prod-logs prod-ps prod-config prod-down \
+	prod-preflight prod-deploy
 
 dev: dev-up
 
@@ -52,6 +53,12 @@ prod-ps:
 
 prod-config:
 	$(PROD_COMPOSE) config --quiet
+
+prod-preflight:
+	./scripts/deploy-prod.sh --preflight-only
+
+prod-deploy:
+	./scripts/deploy-prod.sh
 
 prod-down:
 	$(PROD_COMPOSE) down
