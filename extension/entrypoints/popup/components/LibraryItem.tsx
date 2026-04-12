@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "@shared/i18n";
 import type { LibraryEntry } from "@shared/storage";
 
 interface LibraryItemProps {
@@ -14,32 +15,9 @@ const SITE_LABELS: Record<string, string> = {
   deepseek: "Deepseek",
 };
 
-function relativeTime(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "Just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
-
 function CopyIcon() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
@@ -48,16 +26,7 @@ function CopyIcon() {
 
 function CheckIcon() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 6L9 17l-5-5" />
     </svg>
   );
@@ -65,16 +34,7 @@ function CheckIcon() {
 
 function TrashIcon() {
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6" />
@@ -85,10 +45,24 @@ function TrashIcon() {
 }
 
 export function LibraryItem({ entry, onDelete }: LibraryItemProps) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const siteKey = entry.site?.toLowerCase() ?? "";
-  const siteLabel = SITE_LABELS[siteKey] ?? entry.site ?? "General";
+  const siteLabel = SITE_LABELS[siteKey] ?? entry.site ?? t.siteGeneral;
+
+  function relativeTime(timestamp: number): string {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return t.timeJustNow;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return t.timeMinsAgo(minutes);
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t.timeHoursAgo(hours);
+    const days = Math.floor(hours / 24);
+    if (days === 1) return t.timeYesterday;
+    if (days < 30) return t.timeDaysAgo(days);
+    return t.timeMonthsAgo(Math.floor(days / 30));
+  }
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(entry.improved);
@@ -105,23 +79,21 @@ export function LibraryItem({ entry, onDelete }: LibraryItemProps) {
         </span>
         <span className="library-item-time">{relativeTime(entry.createdAt)}</span>
       </div>
-
       <div className="library-item-text">
-        <strong>Original:</strong> {entry.original}
+        <strong>{t.labelOriginal}</strong> {entry.original}
       </div>
       <div className="library-item-improved">
-        <strong>Improved:</strong> {entry.improved}
+        <strong>{t.labelImproved}</strong> {entry.improved}
       </div>
-
       <div className="library-item-actions">
         <button
           className="icon-btn"
-          title={copied ? "Copied!" : "Copy improved prompt"}
+          title={copied ? t.titleCopied : t.titleCopy}
           onClick={handleCopy}
         >
           {copied ? <CheckIcon /> : <CopyIcon />}
         </button>
-        <button className="icon-btn btn-delete" title="Delete" onClick={() => onDelete(entry.id)}>
+        <button className="icon-btn btn-delete" title={t.titleDelete} onClick={() => onDelete(entry.id)}>
           <TrashIcon />
         </button>
       </div>
