@@ -146,7 +146,7 @@ check_env_file() {
       require_env_key "OPENROUTER_API_KEY"
       ;;
     *)
-      warn "LLM_BACKEND is not OPENAI or OPENROUTER; skipping provider-key-specific validation"
+      die "LLM_BACKEND must be OPENAI or OPENROUTER; found: $(read_env_value "LLM_BACKEND")"
       ;;
   esac
 }
@@ -180,6 +180,7 @@ run_preflight() {
   require_cmd docker
   require_cmd df
   require_cmd awk
+  require_cmd curl
   docker info >/dev/null 2>&1 || die "Docker daemon is not available"
   docker compose version >/dev/null 2>&1 || die "Docker Compose plugin is not available"
 
