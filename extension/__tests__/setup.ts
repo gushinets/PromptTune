@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { vi } from "vitest";
+import type { Browser } from "webextension-polyfill";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-globalThis.browser = {
+const browserMock = {
   storage: {
     local: {
       get: vi.fn().mockResolvedValue({}),
@@ -29,6 +31,7 @@ globalThis.browser = {
   },
 } as any;
 
+globalThis.browser = browserMock as Browser;
 globalThis.chrome = globalThis.browser;
 
 vi.mock("webextension-polyfill", () => ({
