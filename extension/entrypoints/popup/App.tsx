@@ -131,8 +131,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, [viewMode]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
-  const isExhausted =
-    BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
+  const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
   const isWarning =
     BACKEND_MODE === "fastapi" && limitsLoaded
       ? rateLimit.remaining > 0 && rateLimit.remaining <= 10

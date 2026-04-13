@@ -26,7 +26,9 @@ export function Library({ onCountChange }: LibraryProps) {
     });
   }, [onCountChange]);
 
-  useEffect(() => { loadEntries(); }, [loadEntries]);
+  useEffect(() => {
+    loadEntries();
+  }, [loadEntries]);
 
   const handleDelete = async (id: string) => {
     await remove(id);

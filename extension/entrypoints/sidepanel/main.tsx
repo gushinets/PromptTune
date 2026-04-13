@@ -7,5 +7,5 @@ const root = document.getElementById("root")!;
 createRoot(root).render(
   <I18nProvider>
     <App viewMode="sidepanel" />
-  </I18nProvider>
+  </I18nProvider>,
 );

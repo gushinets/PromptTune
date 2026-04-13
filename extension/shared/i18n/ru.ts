@@ -76,7 +76,8 @@ export const ru: TranslationKeys = {
 
   // RatingBar
   ratingLabel: "Оцените нас",
-  ariaLabelRateStar: (star: number) => `Оценить на ${star} ${star === 1 ? "звезду" : star < 5 ? "звезды" : "звёзд"}`,
+  ariaLabelRateStar: (star: number) =>
+    `Оценить на ${star} ${star === 1 ? "звезду" : star < 5 ? "звезды" : "звёзд"}`,
 
   // SearchBar
   searchPlaceholder: "Поиск промптов...",
@@ -95,4 +96,3 @@ export const ru: TranslationKeys = {
   errorGenericFallback: "Что-то пошло не так. Попробуйте снова.",
   errorEmptyResponse: "Бэкенд вернул пустой улучшенный промпт.",
 };
-

@@ -10,39 +10,70 @@ function ChatGPTIcon() {
 }
 function ClaudeIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 4L6 20" /><path d="M12 4l6 16" /><path d="M8.5 14h7" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 4L6 20" />
+      <path d="M12 4l6 16" />
+      <path d="M8.5 14h7" />
     </svg>
   );
 }
 function PerplexityIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+    >
       <path d="M12 2v20M2 12h20M5.64 5.64l12.73 12.73M18.36 5.64 5.64 18.36" />
     </svg>
   );
 }
 function GroqIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="10" r="5" /><path d="M16 10v8a3 3 0 0 1-3 3h-1" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="11" cy="10" r="5" />
+      <path d="M16 10v8a3 3 0 0 1-3 3h-1" />
     </svg>
   );
 }
 function DeepSeekIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 4h3a8 8 0 0 1 0 16H7V4z" /><circle cx="13" cy="12" r="1" fill="currentColor" stroke="none" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 4h3a8 8 0 0 1 0 16H7V4z" />
+      <circle cx="13" cy="12" r="1" fill="currentColor" stroke="none" />
     </svg>
   );
 }
 
 const SITES = [
-  { id: "chatgpt",    label: "ChatGPT",    url: "https://chatgpt.com",           Icon: ChatGPTIcon },
-  { id: "claude",     label: "Claude",     url: "https://claude.ai",             Icon: ClaudeIcon },
-  { id: "perplexity", label: "Perplexity", url: "https://www.perplexity.ai",     Icon: PerplexityIcon },
-  { id: "groq",       label: "Groq",       url: "https://groq.com",              Icon: GroqIcon },
-  { id: "deepseek",   label: "Deepseek",   url: "https://chat.deepseek.com",     Icon: DeepSeekIcon },
+  { id: "chatgpt", label: "ChatGPT", url: "https://chatgpt.com", Icon: ChatGPTIcon },
+  { id: "claude", label: "Claude", url: "https://claude.ai", Icon: ClaudeIcon },
+  { id: "perplexity", label: "Perplexity", url: "https://www.perplexity.ai", Icon: PerplexityIcon },
+  { id: "groq", label: "Groq", url: "https://groq.com", Icon: GroqIcon },
+  { id: "deepseek", label: "Deepseek", url: "https://chat.deepseek.com", Icon: DeepSeekIcon },
 ] as const;
 
 interface SiteIconsProps {

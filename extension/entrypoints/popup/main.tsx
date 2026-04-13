@@ -8,5 +8,5 @@ const root = document.getElementById("root")!;
 createRoot(root).render(
   <I18nProvider>
     <App viewMode="popup" />
-  </I18nProvider>
+  </I18nProvider>,
 );

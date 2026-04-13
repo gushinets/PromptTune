@@ -25,7 +25,13 @@ function SparkleIcon({ className }: { className?: string }) {
   );
 }
 
-export function PromptForm({ original, improved, loading, onOriginalChange, onImprove }: PromptFormProps) {
+export function PromptForm({
+  original,
+  improved,
+  loading,
+  onOriginalChange,
+  onImprove,
+}: PromptFormProps) {
   const t = useT();
 
   return (
@@ -39,9 +45,15 @@ export function PromptForm({ original, improved, loading, onOriginalChange, onIm
       />
       <button className="btn-improve" onClick={onImprove} disabled={!original.trim() || loading}>
         {loading ? (
-          <><span className="spinner" />{t.btnImproving}</>
+          <>
+            <span className="spinner" />
+            {t.btnImproving}
+          </>
         ) : (
-          <><SparkleIcon className="btn-icon" />{t.btnImprove}</>
+          <>
+            <SparkleIcon className="btn-icon" />
+            {t.btnImprove}
+          </>
         )}
       </button>
       <span className="section-label">{t.labelImprovedPrompt}</span>

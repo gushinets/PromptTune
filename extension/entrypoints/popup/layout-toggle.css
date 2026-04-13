@@ -17,7 +17,10 @@
   background: transparent;
   color: var(--text-secondary, #8b8ea8);
   cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
   flex-shrink: 0;
 }
 

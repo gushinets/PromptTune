@@ -31,7 +31,8 @@ export const en = {
   // PromptForm
   labelOriginalPrompt: "Original Prompt",
   labelImprovedPrompt: "Improved Prompt",
-  placeholderOriginal: "e.g. Write a follow-up email to a client who didn't respond to my roof repair quote...",
+  placeholderOriginal:
+    "e.g. Write a follow-up email to a client who didn't respond to my roof repair quote...",
   placeholderImproved: "Improved version will appear here...",
   btnImprove: "Improve",
   btnImproving: "Improving...",
