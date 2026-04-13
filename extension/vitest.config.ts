@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { wxt } from "wxt/vitest";
 import path from "node:path";
 
 const coverageInclude = [
@@ -22,6 +23,7 @@ const coverageExclude = [
 ];
 
 export default defineConfig({
+  plugins: [wxt()],
   resolve: {
     alias: {
       "@shared": path.resolve(__dirname, "shared"),
