@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "@shared/i18n";
 import type { LibraryEntry } from "@shared/storage";
 
 interface LibraryItemProps {
@@ -13,20 +14,6 @@ const SITE_LABELS: Record<string, string> = {
   groq: "Groq",
   deepseek: "Deepseek",
 };
-
-function relativeTime(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "Just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
 
 function CopyIcon() {
   return (
@@ -85,10 +72,24 @@ function TrashIcon() {
 }
 
 export function LibraryItem({ entry, onDelete }: LibraryItemProps) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   const siteKey = entry.site?.toLowerCase() ?? "";
-  const siteLabel = SITE_LABELS[siteKey] ?? entry.site ?? "General";
+  const siteLabel = SITE_LABELS[siteKey] ?? entry.site ?? t.siteGeneral;
+
+  function relativeTime(timestamp: number): string {
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    if (seconds < 60) return t.timeJustNow;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return t.timeMinsAgo(minutes);
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return t.timeHoursAgo(hours);
+    const days = Math.floor(hours / 24);
+    if (days === 1) return t.timeYesterday;
+    if (days < 30) return t.timeDaysAgo(days);
+    return t.timeMonthsAgo(Math.floor(days / 30));
+  }
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(entry.improved);
@@ -105,23 +106,25 @@ export function LibraryItem({ entry, onDelete }: LibraryItemProps) {
         </span>
         <span className="library-item-time">{relativeTime(entry.createdAt)}</span>
       </div>
-
       <div className="library-item-text">
-        <strong>Original:</strong> {entry.original}
+        <strong>{t.labelOriginal}</strong> {entry.original}
       </div>
       <div className="library-item-improved">
-        <strong>Improved:</strong> {entry.improved}
+        <strong>{t.labelImproved}</strong> {entry.improved}
       </div>
-
       <div className="library-item-actions">
         <button
           className="icon-btn"
-          title={copied ? "Copied!" : "Copy improved prompt"}
+          title={copied ? t.titleCopied : t.titleCopy}
           onClick={handleCopy}
         >
           {copied ? <CheckIcon /> : <CopyIcon />}
         </button>
-        <button className="icon-btn btn-delete" title="Delete" onClick={() => onDelete(entry.id)}>
+        <button
+          className="icon-btn btn-delete"
+          title={t.titleDelete}
+          onClick={() => onDelete(entry.id)}
+        >
           <TrashIcon />
         </button>
       </div>

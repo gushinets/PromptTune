@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useT } from "@shared/i18n";
 import { SearchBar } from "./SearchBar";
 import { LibraryItem } from "./LibraryItem";
 import { getAll, remove, type LibraryEntry } from "@shared/storage";
@@ -14,6 +15,7 @@ interface LibraryProps {
 }
 
 export function Library({ onCountChange }: LibraryProps) {
+  const t = useT();
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -48,24 +50,23 @@ export function Library({ onCountChange }: LibraryProps) {
     );
   }, [entries, searchQuery]);
 
+  const promptWord = entries.length === 1 ? t.storagePromptSingular : t.storagePromptPlural;
+
   return (
     <div className="library">
       <SearchBar query={searchQuery} onChange={setSearchQuery} />
-
       {entries.length === 0 ? (
-        <p className="empty-state">No saved prompts yet.</p>
+        <p className="empty-state">{t.emptyStateNoPrompts}</p>
       ) : filtered.length === 0 ? (
-        <p className="empty-state">No prompts match your search.</p>
+        <p className="empty-state">{t.emptyStateNoResults}</p>
       ) : (
         filtered.map((entry) => (
           <LibraryItem key={entry.id} entry={entry} onDelete={handleDelete} />
         ))
       )}
-
       {entries.length > 0 && (
         <div className="storage-stats">
-          {entries.length} {entries.length === 1 ? "prompt" : "prompts"} &middot;{" "}
-          {estimateStorageBytes(entries)} used
+          {entries.length} {promptWord} &middot; {estimateStorageBytes(entries)} {t.storageUsed}
         </div>
       )}
     </div>

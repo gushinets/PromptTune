@@ -1,12 +1,11 @@
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
-import "./App.css";
-import "./layout-toggle.css";
 import { I18nProvider } from "@shared/i18n";
+import { App } from "../popup/App";
+import "../popup/App.css";
 
 const root = document.getElementById("root")!;
 createRoot(root).render(
   <I18nProvider>
-    <App viewMode="popup" />
+    <App viewMode="sidepanel" />
   </I18nProvider>,
 );

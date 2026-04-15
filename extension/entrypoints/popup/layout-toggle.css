@@ -1,0 +1,36 @@
+/* ── Layout toggle button ─────────────────────────────────────────────────── */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #8b8ea8);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+  flex-shrink: 0;
+}
+
+.layout-toggle-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.07));
+  color: var(--text-primary, #f0f0f8);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.layout-toggle-icon {
+  width: 15px;
+  height: 15px;
+}

@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import { useT } from "@shared/i18n";
 import type { ErrorInfo } from "../App";
 
 interface ErrorToastProps {
@@ -63,53 +64,47 @@ function CloseIcon() {
   );
 }
 
+type ErrorConfig = {
+  className: string;
+  titleKey: keyof ReturnType<typeof useT>;
+  Icon: (props: { className?: string }) => ReactElement;
+};
+
 const ERROR_CONFIG: Record<
   ErrorInfo["type"],
-  {
-    className: string;
-    title: string;
-    Icon: (props: { className?: string }) => ReactElement;
-  }
+  Omit<ErrorConfig, "titleKey"> & { type: ErrorInfo["type"] }
 > = {
-  "rate-limit": {
-    className: "error-rate-limit",
-    title: "Rate limit exceeded.",
-    Icon: AlertCircleIcon,
-  },
-  auth: {
-    className: "error-auth",
-    title: "Invalid login.",
-    Icon: AlertCircleIcon,
-  },
-  network: {
-    className: "error-network",
-    title: "Connection failed.",
-    Icon: WifiOffIcon,
-  },
-  generic: {
-    className: "error-generic",
-    title: "Error",
-    Icon: AlertCircleIcon,
-  },
+  "rate-limit": { className: "error-rate-limit", type: "rate-limit", Icon: AlertCircleIcon },
+  auth: { className: "error-auth", type: "auth", Icon: AlertCircleIcon },
+  network: { className: "error-network", type: "network", Icon: WifiOffIcon },
+  generic: { className: "error-generic", type: "generic", Icon: AlertCircleIcon },
 };
 
 export function ErrorToast({ error, onDismiss, onRetry }: ErrorToastProps) {
+  const t = useT();
   const config = ERROR_CONFIG[error.type];
   const Icon = config.Icon;
+
+  const title = {
+    "rate-limit": t.errorTitleRateLimit,
+    auth: t.errorTitleAuth,
+    network: t.errorTitleNetwork,
+    generic: t.errorTitleGeneric,
+  }[error.type];
 
   return (
     <div className={`error-toast ${config.className}`} role="alert">
       <Icon className="error-toast-icon" />
       <div className="error-toast-content">
-        <div className="error-toast-title">{config.title}</div>
+        <div className="error-toast-title">{title}</div>
         <div className="error-toast-message">{error.message}</div>
         {onRetry && (
           <button className="error-toast-retry" onClick={onRetry}>
-            Retry
+            {t.btnRetry}
           </button>
         )}
       </div>
-      <button className="error-toast-dismiss" onClick={onDismiss} aria-label="Dismiss">
+      <button className="error-toast-dismiss" onClick={onDismiss} aria-label={t.ariaLabelDismiss}>
         <CloseIcon />
       </button>
     </div>

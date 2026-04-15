@@ -1,3 +1,5 @@
+import { useT } from "@shared/i18n";
+
 interface SearchBarProps {
   query: string;
   onChange: (query: string) => void;
@@ -21,12 +23,13 @@ function SearchIcon({ className }: { className?: string }) {
 }
 
 export function SearchBar({ query, onChange }: SearchBarProps) {
+  const t = useT();
   return (
     <div className="search-bar">
       <SearchIcon className="search-bar-icon" />
       <input
         type="text"
-        placeholder="Search prompts..."
+        placeholder={t.searchPlaceholder}
         value={query}
         onChange={(e) => onChange(e.target.value)}
       />

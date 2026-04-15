@@ -14,12 +14,16 @@ import {
   extractImproveResponse,
   extractRateLimitResponse,
 } from "@shared/response-utils";
+import { useT } from "@shared/i18n";
 
 // TODO: Replace with actual upgrade URL
 const UPGRADE_URL = "https://forgekit.io/upgrade";
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 
 type TabId = "improve" | "library";
+
+/** The mode this UI is rendered in — affects layout toggle behaviour. */
+export type ViewMode = "popup" | "sidepanel";
 
 export interface ErrorInfo {
   type: "rate-limit" | "network" | "auth" | "generic";
@@ -59,7 +63,13 @@ function BookmarkIcon({ className }: { className?: string }) {
   );
 }
 
-export function App() {
+interface AppProps {
+  /** Whether the App is rendered inside the Chrome side panel. Defaults to false (popup). */
+  viewMode?: ViewMode;
+}
+
+export function App({ viewMode = "popup" }: AppProps) {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState("");
   const [improved, setImproved] = useState("");
@@ -70,6 +80,7 @@ export function App() {
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
+
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
   }, []);
@@ -79,7 +90,6 @@ export function App() {
   }, [refreshLibraryCount]);
 
   useEffect(() => {
-    // Populate totals + remaining counts on popup open, so UI matches backend/env limits.
     if (BACKEND_MODE !== "fastapi") return;
     browser.runtime
       .sendMessage({ type: "GET_LIMITS" })
@@ -97,27 +107,45 @@ export function App() {
         setLimitsLoaded(true);
       })
       .catch(() => {
-        // Best-effort; allow improving even if the balance lookup fails.
         setLimitsUnavailable(true);
       });
   }, []);
 
+  // ── Layout toggle ────────────────────────────────────────────────────────────
+  const handleLayoutToggle = useCallback(async () => {
+    try {
+      if (viewMode === "popup") {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.windowId != null) {
+          await chrome.sidePanel.open({ windowId: tab.windowId });
+        }
+        window.close();
+      } else {
+        // Cannot open popup programmatically — just close sidebar
+        // User needs to click the extension icon to open popup
+        window.close();
+      }
+    } catch {
+      // fail silently
+    }
+  }, [viewMode]);
+
+  // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
   const isWarning =
     BACKEND_MODE === "fastapi" && limitsLoaded
       ? rateLimit.remaining > 0 && rateLimit.remaining <= 10
       : false;
   const showRateLimitTooltip = BACKEND_MODE === "fastapi";
+
   const rateLimitBadgeText =
     BACKEND_MODE !== "fastapi"
-      ? "Unlimited"
+      ? t.rateLimitUnlimited
       : !limitsLoaded
         ? limitsUnavailable
-          ? "Limits unavailable"
-          : "Loading limits..."
-        : rateLimit.total > 0
-          ? `${rateLimit.remaining}/${rateLimit.total} today`
-          : `${rateLimit.remaining} today`;
+          ? t.rateLimitUnavailable
+          : t.rateLimitLoading
+        : t.rateLimitToday(rateLimit.remaining, rateLimit.total);
 
   const handleTooltipBlur = useCallback((event: FocusEvent<HTMLDivElement>) => {
     const nextTarget = event.relatedTarget as Node | null;
@@ -126,86 +154,51 @@ export function App() {
     }
   }, []);
 
+  // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
     (err: unknown): ErrorInfo => {
       if (err instanceof ApiError) {
         if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
-          return {
-            type: "auth",
-            message: "Your login is invalid. Try refreshing the extension or reinstalling.",
-          };
+          return { type: "auth", message: t.errorAuthMessage };
         }
         if (err.status === 429 || err.detail.toLowerCase().includes("rate limit")) {
-          return {
-            type: "rate-limit",
-            message:
-              rateLimit.total > 0
-                ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
-                : "You've used all requests today. Resets at midnight UTC.",
-          };
+          return { type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) };
         }
         if (err.status === 422) {
-          return {
-            type: "generic",
-            message: err.detail,
-          };
+          return { type: "generic", message: err.detail };
         }
       }
 
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("403") || message.toLowerCase().includes("login is invalid")) {
-        return {
-          type: "auth",
-          message: "Your login is invalid. Try refreshing the extension or reinstalling.",
-        };
+        return { type: "auth", message: t.errorAuthMessage };
       }
       if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
-        return {
-          type: "rate-limit",
-          message:
-            rateLimit.total > 0
-              ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
-              : "You've used all requests today. Resets at midnight UTC.",
-        };
+        return { type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) };
       }
       if (message.includes("422")) {
         const validationDetail = message.replace(/^.*API 422:\s*/i, "").trim();
-        return {
-          type: "generic",
-          message: validationDetail || message,
-        };
+        return { type: "generic", message: validationDetail || message };
       }
       if (
         message.includes("Failed to fetch") ||
         message.includes("NetworkError") ||
         message.toLowerCase().includes("network")
       ) {
-        return {
-          type: "network",
-          message: "Check your internet and try again.",
-        };
+        return { type: "network", message: t.errorNetworkMessage };
       }
-
-      return {
-        type: "generic",
-        message: message || "Something went wrong. Please try again.",
-      };
+      return { type: "generic", message: message || t.errorGenericFallback };
     },
-    [rateLimit.total],
+    [rateLimit.total, t],
   );
 
+  // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
     const trimmed = original.trim();
     if (!trimmed) return;
 
     if (isExhausted) {
-      setError({
-        type: "rate-limit",
-        message:
-          rateLimit.total > 0
-            ? `You've used all ${rateLimit.total.toLocaleString()} requests today. Resets at midnight UTC.`
-            : "You've used all requests today. Resets at midnight UTC.",
-      });
+      setError({ type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) });
       return;
     }
 
@@ -221,9 +214,7 @@ export function App() {
       const result = extractImproveResponse(response);
 
       if (result) {
-        if (!result.improved_text.trim()) {
-          throw new Error("The backend returned an empty improved prompt.");
-        }
+        if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
         setImproved(result.improved_text);
         if (result.rate_limit) {
           setRateLimit({
@@ -247,7 +238,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [original, isExhausted, mapErrorToToast, rateLimit.total]);
+  }, [original, isExhausted, mapErrorToToast, rateLimit.total, t]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     const originalTrimmed = original.trim();
@@ -257,17 +248,15 @@ export function App() {
     if (BACKEND_MODE === "fastapi") {
       try {
         const installationId = await getInstallationId();
-        const client = "extension";
-        const clientVersion = browser.runtime.getManifest().version;
         await apiClient.savePrompt({
           installation_id: installationId,
-          client,
-          client_version: clientVersion,
+          client: "extension",
+          client_version: browser.runtime.getManifest().version,
           original_text: originalTrimmed,
           improved_text: improvedTrimmed,
           site: undefined,
           page_url: undefined,
-          meta: { source: "popup" },
+          meta: { source: viewMode },
         });
       } catch (err: unknown) {
         const info = mapErrorToToast(err);
@@ -284,74 +273,82 @@ export function App() {
     await save({ original: originalTrimmed, improved: improvedTrimmed });
     refreshLibraryCount();
     return true;
-  }, [original, improved, refreshLibraryCount, mapErrorToToast]);
+  }, [original, improved, refreshLibraryCount, mapErrorToToast, viewMode]);
 
-  const handleDismissError = useCallback(() => {
-    setError(null);
-  }, []);
+  const handleDismissError = useCallback(() => setError(null), []);
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="popup-container">
       <header className="header">
         <div className="header-brand">
           <SparkleIcon className="header-icon" />
-          <span className="header-title">PromptTune</span>
+          <span className="header-title">{t.appName}</span>
         </div>
-        <div
-          className="rate-limit-wrapper"
-          onMouseEnter={() => {
-            if (showRateLimitTooltip) setShowTooltip(true);
-          }}
-          onMouseLeave={() => setShowTooltip(false)}
-          onFocus={() => {
-            if (showRateLimitTooltip) setShowTooltip(true);
-          }}
-          onBlur={handleTooltipBlur}
-        >
+
+        <div className="header-actions">
+          {/* Layout toggle button */}
           <button
             type="button"
-            className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warn" : ""}`}
-            aria-describedby={showTooltip ? RATE_LIMIT_TOOLTIP_ID : undefined}
-            aria-expanded={showRateLimitTooltip ? showTooltip : undefined}
+            className="layout-toggle-btn"
+            title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
+            onClick={handleLayoutToggle}
           >
-            {showRateLimitTooltip && <span className="status-dot" />}
-            {rateLimitBadgeText}
+            {viewMode === "popup" ? "⊟" : "⊞"}
           </button>
-          {showRateLimitTooltip && showTooltip && (
-            <div className="rate-limit-tooltip" id={RATE_LIMIT_TOOLTIP_ID} role="tooltip">
-              {!limitsLoaded && !limitsUnavailable ? (
-                <p>Loading your daily free request balance.</p>
-              ) : !limitsLoaded ? (
-                <p>
-                  We couldn&apos;t load your current balance. Improvements still work, and the next
-                  successful request will refresh this count.
-                </p>
-              ) : (
-                <>
-                  <p>
-                    <strong>
-                      {rateLimit.total > 0 ? `${rateLimit.remaining} free` : rateLimit.remaining}
-                    </strong>{" "}
-                    improvements left today
-                  </p>
-                  <p>
-                    {rateLimit.total > 0 ? `Daily limit: ${rateLimit.total}. ` : ""}
-                    Resets at midnight UTC.{" "}
-                    <a
-                      href="#"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        browser.tabs.create({ url: UPGRADE_URL });
-                      }}
-                    >
-                      Upgrade for unlimited
-                    </a>
-                  </p>
-                </>
-              )}
-            </div>
-          )}
+
+          {/* Rate-limit badge */}
+          <div
+            className="rate-limit-wrapper"
+            onMouseEnter={() => {
+              if (showRateLimitTooltip) setShowTooltip(true);
+            }}
+            onMouseLeave={() => setShowTooltip(false)}
+            onFocus={() => {
+              if (showRateLimitTooltip) setShowTooltip(true);
+            }}
+            onBlur={handleTooltipBlur}
+          >
+            <button
+              type="button"
+              className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warn" : ""}`}
+              aria-describedby={showTooltip ? RATE_LIMIT_TOOLTIP_ID : undefined}
+              aria-expanded={showRateLimitTooltip ? showTooltip : undefined}
+            >
+              {showRateLimitTooltip && <span className="status-dot" />}
+              {rateLimitBadgeText}
+            </button>
+            {showRateLimitTooltip && showTooltip && (
+              <div className="rate-limit-tooltip" id={RATE_LIMIT_TOOLTIP_ID} role="tooltip">
+                {!limitsLoaded && !limitsUnavailable ? (
+                  <p>{t.tooltipLoading}</p>
+                ) : !limitsLoaded ? (
+                  <p>{t.tooltipUnavailable}</p>
+                ) : (
+                  <>
+                    <p>
+                      <strong>{t.tooltipRemaining(rateLimit.remaining, rateLimit.total)}</strong>{" "}
+                      {t.tooltipImprovementsLeft}
+                    </p>
+                    <p>
+                      {rateLimit.total > 0 ? t.tooltipDailyLimit(rateLimit.total) : ""}
+                      {t.tooltipResets}{" "}
+                      <a
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          browser.tabs.create({ url: UPGRADE_URL });
+                        }}
+                      >
+                        {t.tooltipUpgrade}
+                      </a>
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -361,7 +358,7 @@ export function App() {
           onClick={() => setActiveTab("improve")}
         >
           <SparkleIcon className="tab-icon" />
-          Improve
+          {t.tabImprove}
         </button>
         <button
           className={`tab${activeTab === "library" ? " active" : ""}`}
@@ -371,7 +368,7 @@ export function App() {
           }}
         >
           <BookmarkIcon className="tab-icon" />
-          Library
+          {t.tabLibrary}
           {libraryCount > 0 && <span className="tab-badge">{libraryCount}</span>}
         </button>
       </nav>
@@ -388,12 +385,12 @@ export function App() {
             )}
             {isExhausted && (
               <div className="upgrade-banner">
-                <p>You&apos;ve used all free improvements today.</p>
+                <p>{t.exhaustedTitle}</p>
                 <button
                   className="btn-upgrade"
                   onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
                 >
-                  Upgrade for unlimited
+                  {t.btnUpgrade}
                 </button>
               </div>
             )}

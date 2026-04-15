@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "@shared/i18n";
 
 interface ActionBarProps {
   improved: string;
@@ -56,6 +57,7 @@ function CheckIcon({ className }: { className?: string }) {
 }
 
 export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -78,12 +80,12 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
         {copied ? (
           <>
             <CheckIcon className="btn-icon" />
-            Copied!
+            {t.btnCopied}
           </>
         ) : (
           <>
             <CopyIcon className="btn-icon" />
-            Copy
+            {t.btnCopy}
           </>
         )}
       </button>
@@ -91,12 +93,12 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
         {saved ? (
           <>
             <CheckIcon className="btn-icon" />
-            Saved!
+            {t.btnSaved}
           </>
         ) : (
           <>
             <BookmarkIcon className="btn-icon" />
-            Save to Library
+            {t.btnSaveToLibrary}
           </>
         )}
       </button>

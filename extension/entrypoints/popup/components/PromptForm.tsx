@@ -1,3 +1,5 @@
+import { useT } from "@shared/i18n";
+
 interface PromptFormProps {
   original: string;
   improved: string;
@@ -30,31 +32,31 @@ export function PromptForm({
   onOriginalChange,
   onImprove,
 }: PromptFormProps) {
+  const t = useT();
+
   return (
     <div className="prompt-form">
-      <span className="section-label">Original Prompt</span>
+      <span className="section-label">{t.labelOriginalPrompt}</span>
       <textarea
         value={original}
         onChange={(e) => onOriginalChange(e.target.value)}
-        placeholder="e.g. Write a follow-up email to a client who didn't respond to my roof repair quote..."
+        placeholder={t.placeholderOriginal}
         rows={4}
       />
-
       <button className="btn-improve" onClick={onImprove} disabled={!original.trim() || loading}>
         {loading ? (
           <>
             <span className="spinner" />
-            Improving...
+            {t.btnImproving}
           </>
         ) : (
           <>
             <SparkleIcon className="btn-icon" />
-            Improve
+            {t.btnImprove}
           </>
         )}
       </button>
-
-      <span className="section-label">Improved Prompt</span>
+      <span className="section-label">{t.labelImprovedPrompt}</span>
       {loading ? (
         <div className="skeleton-loader">
           <div className="skeleton-line" />
@@ -68,14 +70,10 @@ export function PromptForm({
             className="improved-textarea"
             value={improved}
             readOnly
-            placeholder="Improved version will appear here..."
+            placeholder={t.placeholderImproved}
             rows={4}
           />
-          {improved && (
-            <p className="improve-hint">
-              ✦ Prompt optimized for clarity, specificity and structure
-            </p>
-          )}
+          {improved && <p className="improve-hint">{t.improveHint}</p>}
         </>
       )}
     </div>

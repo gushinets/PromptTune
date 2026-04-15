@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { useT } from "@shared/i18n";
 
 function ChatGPTIcon() {
   return (
@@ -7,7 +8,6 @@ function ChatGPTIcon() {
     </svg>
   );
 }
-
 function ClaudeIcon() {
   return (
     <svg
@@ -24,7 +24,6 @@ function ClaudeIcon() {
     </svg>
   );
 }
-
 function PerplexityIcon() {
   return (
     <svg
@@ -38,7 +37,6 @@ function PerplexityIcon() {
     </svg>
   );
 }
-
 function GroqIcon() {
   return (
     <svg
@@ -54,7 +52,6 @@ function GroqIcon() {
     </svg>
   );
 }
-
 function DeepSeekIcon() {
   return (
     <svg
@@ -85,6 +82,8 @@ interface SiteIconsProps {
 }
 
 export function SiteIcons({ improved, disabled }: SiteIconsProps) {
+  const t = useT();
+
   const handleOpenAndPaste = async (url: string) => {
     await browser.runtime.sendMessage({
       type: "OPEN_AND_PASTE",
@@ -94,13 +93,13 @@ export function SiteIcons({ improved, disabled }: SiteIconsProps) {
 
   return (
     <div className="site-icons-section">
-      <span className="site-icons-label">Open &amp; Paste</span>
+      <span className="site-icons-label">{t.openAndPasteLabel}</span>
       <div className="site-icons">
         {SITES.map((site) => (
           <div key={site.id} className="site-icon-wrapper">
             <button
               className={`site-icon-btn ${site.id}`}
-              title={`Open & Paste in ${site.label}`}
+              title={t.openAndPasteTitle(site.label)}
               disabled={disabled}
               onClick={() => handleOpenAndPaste(site.url)}
             >
