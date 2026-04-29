@@ -12,7 +12,11 @@ describe("response utils", () => {
       payload: {
         request_id: "r1",
         improved_text: "better prompt",
-        changes: ["Clarified output format", "Added concrete context", "Specified success criteria"],
+        changes: [
+          "Clarified output format",
+          "Added concrete context",
+          "Specified success criteria",
+        ],
       },
     });
 
