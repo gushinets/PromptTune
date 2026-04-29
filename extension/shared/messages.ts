@@ -1,6 +1,8 @@
+import type { ImproveResponse } from "./types";
+
 export type Message =
   | { type: "IMPROVE_REQUEST"; payload: { text: string; site?: string; page_url?: string } }
-  | { type: "IMPROVE_RESULT"; payload: { improved_text: string; request_id: string } }
+  | { type: "IMPROVE_RESULT"; payload: ImproveResponse }
   | { type: "GET_LIMITS" }
   | {
       type: "LIMITS_RESULT";

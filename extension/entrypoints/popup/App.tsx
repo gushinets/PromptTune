@@ -73,6 +73,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState("");
   const [improved, setImproved] = useState("");
+  const [changes, setChanges] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
@@ -205,6 +206,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     setLoading(true);
     setError(null);
     setImproved("");
+    setChanges([]);
 
     try {
       const response = await browser.runtime.sendMessage({
@@ -216,6 +218,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       if (result) {
         if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
         setImproved(result.improved_text);
+        setChanges(result.changes ?? []);
         if (result.rate_limit) {
           setRateLimit({
             remaining: result.rate_limit.per_day_remaining,
@@ -397,6 +400,7 @@ export function App({ viewMode = "popup" }: AppProps) {
             <PromptForm
               original={original}
               improved={improved}
+              improvements={changes}
               loading={loading}
               onOriginalChange={setOriginal}
               onImprove={handleImprove}

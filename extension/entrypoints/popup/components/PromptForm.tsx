@@ -3,6 +3,7 @@ import { useT } from "@shared/i18n";
 interface PromptFormProps {
   original: string;
   improved: string;
+  improvements: string[];
   loading: boolean;
   onOriginalChange: (text: string) => void;
   onImprove: () => void;
@@ -28,6 +29,7 @@ function SparkleIcon({ className }: { className?: string }) {
 export function PromptForm({
   original,
   improved,
+  improvements,
   loading,
   onOriginalChange,
   onImprove,
@@ -74,6 +76,16 @@ export function PromptForm({
             rows={4}
           />
           {improved && <p className="improve-hint">{t.improveHint}</p>}
+          {improvements.length > 0 && (
+            <details className="improvements-details" open>
+              <summary>{t.whatWasImproved}</summary>
+              <ul className="improvements-list">
+                {improvements.map((line, index) => (
+                  <li key={`${index}-${line}`}>{line}</li>
+                ))}
+              </ul>
+            </details>
+          )}
         </>
       )}
     </div>

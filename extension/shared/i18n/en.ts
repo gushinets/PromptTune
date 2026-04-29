@@ -37,6 +37,7 @@ export const en = {
   btnImprove: "Improve",
   btnImproving: "Improving...",
   improveHint: "✦ Prompt optimized for clarity, specificity and structure",
+  whatWasImproved: "What was improved",
 
   // ActionBar
   btnCopy: "Copy",
