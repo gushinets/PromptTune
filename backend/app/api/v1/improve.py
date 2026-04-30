@@ -38,6 +38,7 @@ async def improve(
         result = await service.improve_prompt(
             text=req.text,
             installation_id=req.installation_id,
+            goal=req.goal,
             client=req.client,
             client_version=req.client_version,
             site=req.site,
