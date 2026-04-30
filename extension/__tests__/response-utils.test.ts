@@ -53,6 +53,32 @@ describe("response utils", () => {
     });
   });
 
+  it("keeps one or two valid change lines", () => {
+    const oneLine = extractImproveResponse({
+      request_id: "r3",
+      improved_text: "better prompt",
+      changes: [" One line "],
+    });
+
+    const twoLines = extractImproveResponse({
+      request_id: "r4",
+      improved_text: "better prompt",
+      changes: ["First line", " Second line "],
+    });
+
+    expect(oneLine).toEqual({
+      request_id: "r3",
+      improved_text: "better prompt",
+      changes: ["One line"],
+    });
+
+    expect(twoLines).toEqual({
+      request_id: "r4",
+      improved_text: "better prompt",
+      changes: ["First line", "Second line"],
+    });
+  });
+
   it("extracts rate limits from wrapped or direct responses", () => {
     const wrapped = extractRateLimitResponse({
       type: "LIMITS_RESULT",

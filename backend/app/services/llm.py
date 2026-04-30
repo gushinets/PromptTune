@@ -4,7 +4,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from litellm import acompletion
 from litellm.exceptions import (
@@ -37,6 +37,16 @@ from app.services.errors import (
 logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.INFO)
+
+ImproveGoal = Literal["general", "clarity", "structure", "concise", "persuasive"]
+
+GOAL_PROMPT_HINTS: dict[ImproveGoal, str] = {
+    "general": "Сбалансируй улучшение между ясностью, структурой и конкретностью.",
+    "clarity": "Сделай максимальный упор на ясность: убери двусмысленность и нечеткость формулировок.",
+    "structure": "Сделай максимальный упор на структуру: выстрой логичный и хорошо читаемый порядок инструкций.",
+    "concise": "Сделай максимальный упор на краткость: убери лишние слова, сохранив смысл и ограничения.",
+    "persuasive": "Сделай максимальный упор на убедительность и силу формулировок без изменения смысла.",
+}
 
 
 def setup_file_logging() -> None:
@@ -242,13 +252,22 @@ class LiteLLMClient:
         request_id: str,
         installation_id: str,
         site: str | None,
+        goal: ImproveGoal | None = None,
     ) -> ImproveLLMResult:
         model_id = settings.litellm_model_id()
         api_key = _resolve_provider_api_key()
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text},
-        ]
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if goal and goal != "general":
+            messages.append(
+                {
+                    "role": "system",
+                    "content": GOAL_PROMPT_HINTS.get(
+                        goal,
+                        GOAL_PROMPT_HINTS["general"],
+                    ),
+                }
+            )
+        messages.append({"role": "user", "content": text})
         extra_headers: dict[str, str] | None = None
         if settings.llm_backend == "OPENROUTER":
             extra_headers = {
@@ -376,10 +395,12 @@ async def improve_text(
     request_id: str,
     installation_id: str,
     site: str | None,
+    goal: ImproveGoal | None = None,
 ) -> ImproveLLMResult:
     return await _default_client.improve_text(
         text,
         request_id=request_id,
         installation_id=installation_id,
         site=site,
+        goal=goal,
     )
