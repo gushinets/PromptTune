@@ -1,5 +1,10 @@
+import type { ImproveGoal } from "./types";
+
 export type Message =
-  | { type: "IMPROVE_REQUEST"; payload: { text: string; site?: string; page_url?: string } }
+  | {
+      type: "IMPROVE_REQUEST";
+      payload: { text: string; goal?: ImproveGoal; site?: string; page_url?: string };
+    }
   | { type: "IMPROVE_RESULT"; payload: { improved_text: string; request_id: string } }
   | { type: "GET_LIMITS" }
   | {

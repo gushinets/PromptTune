@@ -1,5 +1,8 @@
+export type ImproveGoal = "general" | "clarity" | "structure" | "concise" | "persuasive";
+
 export interface ImproveRequest {
   text: string;
+  goal?: ImproveGoal;
   installation_id: string;
   client: string;
   client_version?: string;

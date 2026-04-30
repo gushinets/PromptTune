@@ -60,6 +60,7 @@ export default defineContentScript({
             type: "IMPROVE_REQUEST",
             payload: {
               text,
+              goal: "general",
               site: location.hostname,
               page_url: location.href,
             },

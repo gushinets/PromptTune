@@ -1,9 +1,14 @@
 import { useT } from "@shared/i18n";
+import type { ImproveGoal } from "@shared/types";
+
+const GOAL_ORDER: ImproveGoal[] = ["general", "clarity", "structure", "concise", "persuasive"];
 
 interface PromptFormProps {
   original: string;
   improved: string;
+  goal: ImproveGoal;
   loading: boolean;
+  onGoalChange: (goal: ImproveGoal) => void;
   onOriginalChange: (text: string) => void;
   onImprove: () => void;
 }
@@ -28,11 +33,20 @@ function SparkleIcon({ className }: { className?: string }) {
 export function PromptForm({
   original,
   improved,
+  goal,
   loading,
+  onGoalChange,
   onOriginalChange,
   onImprove,
 }: PromptFormProps) {
   const t = useT();
+  const goalLabels: Record<ImproveGoal, string> = {
+    general: t.goalGeneral,
+    clarity: t.goalClarity,
+    structure: t.goalStructure,
+    concise: t.goalConcise,
+    persuasive: t.goalPersuasive,
+  };
 
   return (
     <div className="prompt-form">
@@ -43,6 +57,23 @@ export function PromptForm({
         placeholder={t.placeholderOriginal}
         rows={4}
       />
+      <div className="goal-pills" role="radiogroup" aria-label={t.goalLabel}>
+        {GOAL_ORDER.map((option) => {
+          const isActive = goal === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              className={`goal-pill${isActive ? " active" : ""}`}
+              onClick={() => onGoalChange(option)}
+              aria-pressed={isActive}
+              disabled={loading}
+            >
+              {goalLabels[option]}
+            </button>
+          );
+        })}
+      </div>
       <button className="btn-improve" onClick={onImprove} disabled={!original.trim() || loading}>
         {loading ? (
           <>
