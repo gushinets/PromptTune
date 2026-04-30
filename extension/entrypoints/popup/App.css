@@ -486,12 +486,13 @@ button:disabled {
 /* --- Secondary buttons (Copy, Save) --- */
 .btn-secondary {
   flex: 1;
-  padding: 10px 14px;
+  min-width: 0;
+  padding: 10px 8px;
   background: rgba(255, 255, 255, 0.07);
   color: var(--txt);
   border: 1px solid var(--border2);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 11px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   transition:
@@ -564,6 +565,57 @@ button:disabled {
   animation: fadeIn 0.3s ease-out;
 }
 
+.improvements-details {
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 8px 10px 10px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.improvements-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--teal);
+}
+
+.improvements-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.improvements-details summary::after {
+  content: "▾";
+  color: var(--txt2);
+  font-size: 10px;
+  transition: transform 0.2s ease;
+  transform: rotate(-90deg);
+}
+
+.improvements-details[open] summary::after {
+  transform: rotate(0deg);
+}
+
+.improvements-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.improvements-list li {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--txt2);
+  line-height: 1.4;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -577,8 +629,10 @@ button:disabled {
    Action Bar
    ========================================= */
 .action-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
 }
 
 /* =========================================

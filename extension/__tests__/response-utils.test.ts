@@ -12,12 +12,18 @@ describe("response utils", () => {
       payload: {
         request_id: "r1",
         improved_text: "better prompt",
+        changes: [
+          "Clarified output format",
+          "Added concrete context",
+          "Specified success criteria",
+        ],
       },
     });
 
     expect(response).toEqual({
       request_id: "r1",
       improved_text: "better prompt",
+      changes: ["Clarified output format", "Added concrete context", "Specified success criteria"],
     });
   });
 
@@ -30,6 +36,20 @@ describe("response utils", () => {
     expect(response).toEqual({
       request_id: "r1",
       improved_text: "",
+    });
+  });
+
+  it("normalizes change explanations and keeps at most five lines", () => {
+    const response = extractImproveResponse({
+      request_id: "r2",
+      improved_text: "better prompt",
+      changes: [" First line ", "Second line", "", "Third line", "Fourth line", "Fifth line"],
+    });
+
+    expect(response).toEqual({
+      request_id: "r2",
+      improved_text: "better prompt",
+      changes: ["First line", "Second line", "Third line", "Fourth line", "Fifth line"],
     });
   });
 

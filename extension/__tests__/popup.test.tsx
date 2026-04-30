@@ -90,6 +90,11 @@ describe("App", () => {
         payload: {
           request_id: "req-1",
           improved_text: "Improved prompt",
+          changes: [
+            "Clarified the user goal and output format.",
+            "Added constraints to reduce ambiguity.",
+            "Specified concrete success criteria for the answer.",
+          ],
         },
       });
 
@@ -115,8 +120,26 @@ describe("App", () => {
     const improvedField = container.querySelector(".improved-textarea");
     expect(improvedField).toBeInstanceOf(HTMLTextAreaElement);
     expect((improvedField as HTMLTextAreaElement).value).toBe("Improved prompt");
+    expect(container.textContent).toContain("What was improved");
+    expect(container.textContent).toContain("Clarified the user goal and output format.");
     expect(container.textContent).toContain("Limits unavailable");
     expect(container.textContent).not.toContain("You've used all free improvements today.");
+
+    const details = container.querySelector(".improvements-details");
+    expect(details).toBeInstanceOf(HTMLDetailsElement);
+    expect((details as HTMLDetailsElement).open).toBe(true);
+
+    await act(async () => {
+      const el = details as HTMLDetailsElement;
+      el.open = false;
+      el.dispatchEvent(new Event("toggle"));
+    });
+    await flushEffects();
+
+    await setOriginalPrompt(container, "Original prompt edited");
+    const detailsRequeried = container.querySelector(".improvements-details");
+    expect(detailsRequeried).toBeInstanceOf(HTMLDetailsElement);
+    expect((detailsRequeried as HTMLDetailsElement).open).toBe(false);
   });
 
   it("does not show a saved state when the save request fails", async () => {
@@ -175,6 +198,7 @@ describe("App", () => {
   });
 
   it("sends selected goal in improve requests", async () => {
+  it("inserts improved text into the active tab", async () => {
     vi.mocked(browser.runtime.sendMessage)
       .mockResolvedValueOnce({
         type: "LIMITS_RESULT",
@@ -194,6 +218,10 @@ describe("App", () => {
           improved_text: "Improved with clarity focus",
         },
       });
+          improved_text: "Improved prompt",
+        },
+      });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 123 }] as never);
 
     await act(async () => {
       root.render(<App />);
@@ -207,6 +235,13 @@ describe("App", () => {
 
     await act(async () => {
       getImproveButton(container).click();
+      getImproveButton(container).click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    await act(async () => {
+      findButton(container, "Insert").click();
       await Promise.resolve();
     });
     await flushEffects();
@@ -214,6 +249,13 @@ describe("App", () => {
     expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
       type: "IMPROVE_REQUEST",
       payload: { text: "Original prompt", goal: "clarity" },
+    expect(vi.mocked(browser.tabs.query)).toHaveBeenCalledWith({
+      active: true,
+      currentWindow: true,
+    });
+    expect(vi.mocked(browser.tabs.sendMessage)).toHaveBeenCalledWith(123, {
+      type: "PASTE_TEXT",
+      payload: { text: "Improved prompt" },
     });
   });
 });

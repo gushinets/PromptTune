@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useT } from "@shared/i18n";
 import type { ImproveGoal } from "@shared/types";
 
@@ -7,6 +8,7 @@ interface PromptFormProps {
   original: string;
   improved: string;
   goal: ImproveGoal;
+  improvements: string[];
   loading: boolean;
   onGoalChange: (goal: ImproveGoal) => void;
   onOriginalChange: (text: string) => void;
@@ -34,6 +36,7 @@ export function PromptForm({
   original,
   improved,
   goal,
+  improvements,
   loading,
   onGoalChange,
   onOriginalChange,
@@ -47,6 +50,13 @@ export function PromptForm({
     concise: t.goalConcise,
     persuasive: t.goalPersuasive,
   };
+  const [isImprovementsOpen, setIsImprovementsOpen] = useState(true);
+
+  useEffect(() => {
+    if (improvements.length > 0) {
+      setIsImprovementsOpen(true);
+    }
+  }, [improvements]);
 
   return (
     <div className="prompt-form">
@@ -105,6 +115,20 @@ export function PromptForm({
             rows={4}
           />
           {improved && <p className="improve-hint">{t.improveHint}</p>}
+          {improvements.length > 0 && (
+            <details
+              className="improvements-details"
+              open={isImprovementsOpen}
+              onToggle={(event) => setIsImprovementsOpen(event.currentTarget.open)}
+            >
+              <summary>{t.whatWasImproved}</summary>
+              <ul className="improvements-list">
+                {improvements.map((line, index) => (
+                  <li key={`${index}-${line}`}>{line}</li>
+                ))}
+              </ul>
+            </details>
+          )}
         </>
       )}
     </div>
