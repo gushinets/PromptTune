@@ -124,6 +124,20 @@ describe("App", () => {
     expect(container.textContent).toContain("Clarified the user goal and output format.");
     expect(container.textContent).toContain("Limits unavailable");
     expect(container.textContent).not.toContain("You've used all free improvements today.");
+
+    const details = container.querySelector(".improvements-details");
+    expect(details).toBeInstanceOf(HTMLDetailsElement);
+    expect((details as HTMLDetailsElement).open).toBe(true);
+
+    await act(async () => {
+      const el = details as HTMLDetailsElement;
+      el.open = false;
+      el.dispatchEvent(new Event("toggle"));
+    });
+    await flushEffects();
+
+    await setOriginalPrompt(container, "Original prompt edited");
+    expect((details as HTMLDetailsElement).open).toBe(false);
   });
 
   it("does not show a saved state when the save request fails", async () => {

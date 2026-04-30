@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useT } from "@shared/i18n";
 
 interface PromptFormProps {
@@ -35,6 +36,13 @@ export function PromptForm({
   onImprove,
 }: PromptFormProps) {
   const t = useT();
+  const [isImprovementsOpen, setIsImprovementsOpen] = useState(true);
+
+  useEffect(() => {
+    if (improvements.length > 0) {
+      setIsImprovementsOpen(true);
+    }
+  }, [improvements]);
 
   return (
     <div className="prompt-form">
@@ -77,7 +85,11 @@ export function PromptForm({
           />
           {improved && <p className="improve-hint">{t.improveHint}</p>}
           {improvements.length > 0 && (
-            <details className="improvements-details" open>
+            <details
+              className="improvements-details"
+              open={isImprovementsOpen}
+              onToggle={(event) => setIsImprovementsOpen(event.currentTarget.open)}
+            >
               <summary>{t.whatWasImproved}</summary>
               <ul className="improvements-list">
                 {improvements.map((line, index) => (
