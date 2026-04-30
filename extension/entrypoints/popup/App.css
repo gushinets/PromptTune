@@ -514,6 +514,46 @@ button:disabled {
   gap: 12px;
 }
 
+.goal-pills {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 2px 0;
+  scrollbar-width: none;
+}
+
+.goal-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.goal-pill {
+  padding: 5px 11px;
+  border-radius: 100px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--txt2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.goal-pill:hover:not(:disabled) {
+  border-color: rgba(129, 140, 248, 0.3);
+  color: var(--txt);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.goal-pill.active {
+  background: var(--acc-grad);
+  color: #fff;
+  border-color: transparent;
+}
+
 /* --- Improve hint --- */
 .improve-hint {
   font-family: var(--font-sans);

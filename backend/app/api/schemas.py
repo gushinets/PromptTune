@@ -1,8 +1,13 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+ImproveGoal = Literal["general", "clarity", "structure", "concise", "persuasive"]
 
 
 class ImproveRequest(BaseModel):
     text: str
+    goal: ImproveGoal | None = None
     installation_id: str = Field(..., max_length=64)
     client: str | None = Field(None, max_length=64)
     client_version: str | None = Field(None, max_length=64)

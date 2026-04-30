@@ -114,7 +114,7 @@ describe("App", () => {
 
     expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
       type: "IMPROVE_REQUEST",
-      payload: { text: "Original prompt" },
+      payload: { text: "Original prompt", goal: "general" },
     });
 
     const improvedField = container.querySelector(".improved-textarea");
@@ -197,6 +197,7 @@ describe("App", () => {
     expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalled();
   });
 
+  it("sends selected goal in improve requests", async () => {
   it("inserts improved text into the active tab", async () => {
     vi.mocked(browser.runtime.sendMessage)
       .mockResolvedValueOnce({
@@ -214,6 +215,9 @@ describe("App", () => {
         type: "IMPROVE_RESULT",
         payload: {
           request_id: "req-3",
+          improved_text: "Improved with clarity focus",
+        },
+      });
           improved_text: "Improved prompt",
         },
       });
@@ -226,6 +230,11 @@ describe("App", () => {
 
     await setOriginalPrompt(container, "Original prompt");
     await act(async () => {
+      findButton(container, "Clarity").click();
+    });
+
+    await act(async () => {
+      getImproveButton(container).click();
       getImproveButton(container).click();
       await Promise.resolve();
     });
@@ -237,6 +246,9 @@ describe("App", () => {
     });
     await flushEffects();
 
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
+      type: "IMPROVE_REQUEST",
+      payload: { text: "Original prompt", goal: "clarity" },
     expect(vi.mocked(browser.tabs.query)).toHaveBeenCalledWith({
       active: true,
       currentWindow: true,

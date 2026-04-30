@@ -15,6 +15,7 @@ import {
   extractRateLimitResponse,
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
+import type { ImproveGoal } from "@shared/types";
 
 // TODO: Replace with actual upgrade URL
 const UPGRADE_URL = "https://forgekit.io/upgrade";
@@ -73,6 +74,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState("");
   const [improved, setImproved] = useState("");
+  const [goal, setGoal] = useState<ImproveGoal>("general");
   const [changes, setChanges] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
@@ -211,7 +213,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     try {
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
-        payload: { text: trimmed },
+        payload: { text: trimmed, goal },
       });
       const result = extractImproveResponse(response);
 
@@ -241,7 +243,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     } finally {
       setLoading(false);
     }
-  }, [original, isExhausted, mapErrorToToast, rateLimit.total, t]);
+  }, [goal, original, isExhausted, mapErrorToToast, rateLimit.total, t]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     const originalTrimmed = original.trim();
@@ -400,8 +402,10 @@ export function App({ viewMode = "popup" }: AppProps) {
             <PromptForm
               original={original}
               improved={improved}
+              goal={goal}
               improvements={changes}
               loading={loading}
+              onGoalChange={setGoal}
               onOriginalChange={setOriginal}
               onImprove={handleImprove}
             />
