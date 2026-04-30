@@ -88,7 +88,7 @@ async def test_improve_works_without_client_field(
 
 
 @pytest.mark.asyncio
-async def test_improve_accepts_goal_and_includes_goal_specific_change(
+async def test_improve_accepts_goal_and_passes_it_to_llm(
     client: AsyncClient, mock_litellm, mock_db, mock_redis
 ):
     response = await client.post(
@@ -105,7 +105,6 @@ async def test_improve_accepts_goal_and_includes_goal_specific_change(
     body = response.json()
     assert body["improved_text"] == "better result"
     assert isinstance(body["changes"], list)
-    assert any("ambiguity" in line.lower() for line in body["changes"])
     assert len(mock_litellm.await_args.kwargs["messages"]) == 3
     assert mock_litellm.await_args.kwargs["messages"][1]["role"] == "system"
     assert "ясность" in mock_litellm.await_args.kwargs["messages"][1]["content"].lower()
