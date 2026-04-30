@@ -41,6 +41,8 @@ export const en = {
   // ActionBar
   btnCopy: "Copy",
   btnCopied: "Copied!",
+  btnInsert: "Insert",
+  btnInserted: "Inserted!",
   btnSaveToLibrary: "Save to Library",
   btnSaved: "Saved!",
 

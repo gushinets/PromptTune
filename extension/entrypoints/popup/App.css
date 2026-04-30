@@ -486,12 +486,13 @@ button:disabled {
 /* --- Secondary buttons (Copy, Save) --- */
 .btn-secondary {
   flex: 1;
-  padding: 10px 14px;
+  min-width: 0;
+  padding: 10px 8px;
   background: rgba(255, 255, 255, 0.07);
   color: var(--txt);
   border: 1px solid var(--border2);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 11px;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   transition:
@@ -537,8 +538,10 @@ button:disabled {
    Action Bar
    ========================================= */
 .action-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
 }
 
 /* =========================================
