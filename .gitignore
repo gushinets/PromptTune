@@ -17,6 +17,7 @@ __pycache__/
 .env
 .env.local
 .env.*.local
+.venv-backend
 
 # IDE
 .idea/

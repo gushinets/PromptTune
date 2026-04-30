@@ -16,6 +16,18 @@ from app.services.prompt_service import PromptService
 router = APIRouter()
 
 
+def _extract_changes(result_meta: object) -> list[str] | None:
+    if not isinstance(result_meta, dict):
+        return None
+
+    raw_changes = result_meta.get("changes")
+    if not isinstance(raw_changes, list):
+        return None
+
+    changes = [line.strip() for line in raw_changes if isinstance(line, str) and line.strip()]
+    return changes or None
+
+
 @router.post("/improve", response_model=ImproveResponse)
 async def improve(
     req: ImproveRequest,
@@ -38,6 +50,7 @@ async def improve(
         result = await service.improve_prompt(
             text=req.text,
             installation_id=req.installation_id,
+            goal=req.goal,
             client=req.client,
             client_version=req.client_version,
             site=req.site,
@@ -50,5 +63,6 @@ async def improve(
     return ImproveResponse(
         request_id=result.id,
         improved_text=result.improved_text,
+        changes=_extract_changes(result.llm_meta),
         rate_limit=remaining,
     )

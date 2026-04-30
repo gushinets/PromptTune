@@ -24,6 +24,8 @@ async def test_improve_works_without_authorization_header(
     assert response.status_code == 200
     body = response.json()
     assert body["improved_text"] == "better result"
+    assert isinstance(body["changes"], list)
+    assert len(body["changes"]) >= 3
     assert body["rate_limit"]["per_minute_remaining"] == 9
     assert body["rate_limit"]["per_day_remaining"] == 49
     assert body["rate_limit"]["per_minute_total"] == 10
@@ -46,6 +48,7 @@ async def test_improve_ignores_client_authorization_header(
 
     assert response.status_code == 200
     assert response.json()["improved_text"] == "better result"
+    assert isinstance(response.json()["changes"], list)
 
 
 @pytest.mark.asyncio
@@ -78,8 +81,32 @@ async def test_improve_works_without_client_field(
     assert response.status_code == 200
     body = response.json()
     assert body["improved_text"] == "better result"
+    assert isinstance(body["changes"], list)
+    assert len(body["changes"]) >= 3
     assert body["rate_limit"]["per_minute_remaining"] == 9
     assert body["rate_limit"]["per_day_remaining"] == 49
+
+
+@pytest.mark.asyncio
+async def test_improve_accepts_goal_and_includes_goal_specific_change(
+    client: AsyncClient, mock_litellm, mock_db, mock_redis
+):
+    response = await client.post(
+        "/v1/improve",
+        json={
+            "text": "write me a poem",
+            "goal": "clarity",
+            "installation_id": "test-inst-1",
+            "client": "manual-test",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["improved_text"] == "better result"
+    assert isinstance(body["changes"], list)
+    assert any("ambiguity" in line.lower() for line in body["changes"])
+    assert "ясность" in mock_litellm.await_args.kwargs["messages"][1]["content"].lower()
 
 
 @pytest.mark.asyncio
