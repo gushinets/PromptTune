@@ -196,4 +196,54 @@ describe("App", () => {
     );
     expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalled();
   });
+
+  it("inserts improved text into the active tab", async () => {
+    vi.mocked(browser.runtime.sendMessage)
+      .mockResolvedValueOnce({
+        type: "LIMITS_RESULT",
+        payload: {
+          rate_limit: {
+            per_minute_remaining: 4,
+            per_day_remaining: 10,
+            per_minute_total: 5,
+            per_day_total: 10,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        type: "IMPROVE_RESULT",
+        payload: {
+          request_id: "req-3",
+          improved_text: "Improved prompt",
+        },
+      });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 123 }] as never);
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+
+    await setOriginalPrompt(container, "Original prompt");
+    await act(async () => {
+      getImproveButton(container).click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    await act(async () => {
+      findButton(container, "Insert").click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(vi.mocked(browser.tabs.query)).toHaveBeenCalledWith({
+      active: true,
+      currentWindow: true,
+    });
+    expect(vi.mocked(browser.tabs.sendMessage)).toHaveBeenCalledWith(123, {
+      type: "PASTE_TEXT",
+      payload: { text: "Improved prompt" },
+    });
+  });
 });

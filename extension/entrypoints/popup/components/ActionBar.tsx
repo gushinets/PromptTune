@@ -1,4 +1,5 @@
 import { useState } from "react";
+import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
 
 interface ActionBarProps {
@@ -56,9 +57,28 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
+function InsertIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3v12" />
+      <path d="M8 11l4 4 4-4" />
+      <path d="M4 21h16" />
+    </svg>
+  );
+}
+
 export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [inserted, setInserted] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const handleCopy = async () => {
@@ -74,6 +94,22 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
     setTimeout(() => setSaved(false), 1500);
   };
 
+  const handleInsert = async () => {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (typeof tab?.id !== "number") return;
+
+    try {
+      await browser.tabs.sendMessage(tab.id, {
+        type: "PASTE_TEXT",
+        payload: { text: improved },
+      });
+      setInserted(true);
+      setTimeout(() => setInserted(false), 1500);
+    } catch {
+      // Ignore errors when the active tab doesn't support content scripts.
+    }
+  };
+
   return (
     <div className="action-bar">
       <button className="btn-secondary" onClick={handleCopy} disabled={disabled}>
@@ -86,6 +122,19 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
           <>
             <CopyIcon className="btn-icon" />
             {t.btnCopy}
+          </>
+        )}
+      </button>
+      <button className="btn-secondary" onClick={handleInsert} disabled={disabled || inserted}>
+        {inserted ? (
+          <>
+            <CheckIcon className="btn-icon" />
+            {t.btnInserted}
+          </>
+        ) : (
+          <>
+            <InsertIcon className="btn-icon" />
+            {t.btnInsert}
           </>
         )}
       </button>
