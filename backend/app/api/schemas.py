@@ -26,6 +26,7 @@ class RateLimitInfo(BaseModel):
 class ImproveResponse(BaseModel):
     request_id: str
     improved_text: str
+    changes: list[str] | None = None
     rate_limit: RateLimitInfo | None = None
 
 

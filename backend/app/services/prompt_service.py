@@ -8,6 +8,7 @@ from app.api.schemas import ImproveGoal, RateLimitInfo
 from app.db.models import Installation, PromptImprovement
 from app.security.redaction import redact_secrets
 from app.services.errors import UpstreamServiceError
+from app.services.improvement_changes import build_improvement_changes
 from app.services.llm import improve_text
 from app.services.rate_limiter import RateLimiter
 
@@ -52,7 +53,10 @@ class PromptService:
                 site=site,
                 goal=goal,
             )
+            changes = build_improvement_changes(text, llm_result.improved_text, goal)
             llm_meta = {
+                "goal": goal or "general",
+                "changes": changes,
                 "model": llm_result.model,
                 "provider": llm_result.provider,
                 "latency_ms": llm_result.latency_ms,
@@ -97,6 +101,7 @@ class PromptService:
                 improved_text="",
                 status="error",
                 error=exc.error_code,
+                llm_meta={"goal": goal or "general"},
             )
             self.db.add(record)
             await self.db.commit()
@@ -119,6 +124,7 @@ class PromptService:
                 improved_text="",
                 status="error",
                 error="INTERNAL_ERROR",
+                llm_meta={"goal": goal or "general"},
             )
             self.db.add(record)
             await self.db.commit()
