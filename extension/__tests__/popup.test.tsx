@@ -137,7 +137,9 @@ describe("App", () => {
     await flushEffects();
 
     await setOriginalPrompt(container, "Original prompt edited");
-    expect((details as HTMLDetailsElement).open).toBe(false);
+    const detailsRequeried = container.querySelector(".improvements-details");
+    expect(detailsRequeried).toBeInstanceOf(HTMLDetailsElement);
+    expect((detailsRequeried as HTMLDetailsElement).open).toBe(false);
   });
 
   it("does not show a saved state when the save request fails", async () => {
