@@ -11,6 +11,7 @@ export interface ImproveRequest {
 export interface ImproveResponse {
   request_id: string;
   improved_text: string;
+  changes?: string[];
   rate_limit?: {
     per_minute_remaining: number;
     per_day_remaining: number;

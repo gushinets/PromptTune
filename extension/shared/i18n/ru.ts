@@ -38,6 +38,7 @@ export const ru: TranslationKeys = {
   btnImprove: "Улучшить",
   btnImproving: "Улучшаем...",
   improveHint: "✦ Промпт оптимизирован по ясности, конкретности и структуре",
+  whatWasImproved: "Что было улучшено",
 
   // ActionBar
   btnCopy: "Копировать",
