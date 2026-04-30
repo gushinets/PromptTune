@@ -16,6 +16,7 @@ export default defineBackground(() => {
         const installationId = await getInstallationId();
         const result = await apiClient.improve({
           text: msg.payload.text,
+          goal: msg.payload.goal,
           installation_id: installationId,
           client,
           client_version: clientVersion,
