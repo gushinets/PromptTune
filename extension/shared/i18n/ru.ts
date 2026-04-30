@@ -43,6 +43,8 @@ export const ru: TranslationKeys = {
   // ActionBar
   btnCopy: "Копировать",
   btnCopied: "Скопировано!",
+  btnInsert: "Вставить",
+  btnInserted: "Вставлено!",
   btnSaveToLibrary: "Сохранить в библиотеку",
   btnSaved: "Сохранено!",
 
