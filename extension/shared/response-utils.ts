@@ -15,7 +15,7 @@ function normalizeChanges(value: unknown): string[] | undefined {
     .filter((line) => line.length > 0)
     .slice(0, 5);
 
-  return normalized.length >= 3 ? normalized : undefined;
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function toImproveResponse(value: Record<string, unknown>): ImproveResponse | null {
