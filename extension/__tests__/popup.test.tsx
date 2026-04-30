@@ -90,6 +90,11 @@ describe("App", () => {
         payload: {
           request_id: "req-1",
           improved_text: "Improved prompt",
+          changes: [
+            "Clarified the user goal and output format.",
+            "Added constraints to reduce ambiguity.",
+            "Specified concrete success criteria for the answer.",
+          ],
         },
       });
 
