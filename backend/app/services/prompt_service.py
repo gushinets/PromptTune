@@ -4,7 +4,7 @@ import uuid
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import RateLimitInfo
+from app.api.schemas import ImproveGoal, RateLimitInfo
 from app.db.models import Installation, PromptImprovement
 from app.security.redaction import redact_secrets
 from app.services.errors import UpstreamServiceError
@@ -34,6 +34,7 @@ class PromptService:
         self,
         text: str,
         installation_id: str,
+        goal: ImproveGoal | None = None,
         client: str | None = None,
         client_version: str | None = None,
         site: str | None = None,
@@ -49,6 +50,7 @@ class PromptService:
                 request_id=request_id,
                 installation_id=installation_id,
                 site=site,
+                goal=goal,
             )
             llm_meta = {
                 "model": llm_result.model,

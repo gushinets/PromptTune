@@ -89,6 +89,36 @@ async def test_improve_text_includes_system_prompt_and_user_message():
     assert result.total_tokens == 3
 
 
+@pytest.mark.asyncio
+async def test_improve_text_includes_goal_instruction_when_goal_is_set():
+    mock_response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="out"))],
+        model="gpt-4o-mini",
+        usage=SimpleNamespace(prompt_tokens=1, completion_tokens=2, total_tokens=3),
+        id="id-1",
+        _hidden_params={},
+    )
+    with (
+        patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
+        patch("app.services.llm.settings.llm_temperature", None),
+        patch("app.services.llm.acompletion", new_callable=AsyncMock) as ac,
+    ):
+        ac.return_value = mock_response
+        await improve_text(
+            "hello",
+            request_id="req-a",
+            installation_id="inst-b",
+            site="example.com",
+            goal="clarity",
+        )
+
+    kwargs = ac.await_args.kwargs
+    assert kwargs["messages"][0]["role"] == "system"
+    assert kwargs["messages"][1]["role"] == "system"
+    assert "ясность" in kwargs["messages"][1]["content"].lower()
+    assert kwargs["messages"][2] == {"role": "user", "content": "hello"}
+
+
 @pytest.mark.asyncio  # SIM117 fix
 async def test_improve_text_maps_authentication_error():
     client = LiteLLMClient()
