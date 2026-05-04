@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useT } from "@shared/i18n";
 import type { ImproveGoal } from "@shared/types";
 
@@ -43,6 +43,7 @@ export function PromptForm({
   onImprove,
 }: PromptFormProps) {
   const t = useT();
+  const goalGroupName = useId();
   const [isImprovementsOpen, setIsImprovementsOpen] = useState(true);
   const goalLabels: Record<ImproveGoal, string> = {
     general: t.goalGeneral,
@@ -67,23 +68,26 @@ export function PromptForm({
         placeholder={t.placeholderOriginal}
         rows={4}
       />
-      <div className="goal-pills" role="radiogroup" aria-label={t.goalLabel}>
+      <fieldset className="goal-pills">
+        <legend className="sr-only">{t.goalLabel}</legend>
         {GOAL_ORDER.map((option) => {
           const isActive = goal === option;
           return (
-            <button
-              key={option}
-              type="button"
-              className={`goal-pill${isActive ? " active" : ""}`}
-              onClick={() => onGoalChange(option)}
-              aria-pressed={isActive}
-              disabled={loading}
-            >
-              {goalLabels[option]}
-            </button>
+            <label key={option} className={`goal-pill${isActive ? " active" : ""}`}>
+              <input
+                className="goal-pill-input"
+                type="radio"
+                name={goalGroupName}
+                value={option}
+                checked={isActive}
+                onChange={() => onGoalChange(option)}
+                disabled={loading}
+              />
+              <span className="goal-pill-text">{goalLabels[option]}</span>
+            </label>
           );
         })}
-      </div>
+      </fieldset>
       <button className="btn-improve" onClick={onImprove} disabled={!original.trim() || loading}>
         {loading ? (
           <>

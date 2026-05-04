@@ -32,6 +32,15 @@ function getImproveButton(container: HTMLElement): HTMLButtonElement {
   return match;
 }
 
+function selectGoal(container: HTMLElement, goal: string) {
+  const radio = container.querySelector(`input[type="radio"][value="${goal}"]`);
+  if (!(radio instanceof HTMLInputElement)) {
+    throw new Error(`Goal radio not found: ${goal}`);
+  }
+
+  radio.click();
+}
+
 async function setOriginalPrompt(container: HTMLElement, value: string) {
   const originalField = container.querySelector("textarea");
   if (!(originalField instanceof HTMLTextAreaElement)) {
@@ -225,7 +234,7 @@ describe("App", () => {
 
     await setOriginalPrompt(container, "Original prompt");
     await act(async () => {
-      findButton(container, "Clarity").click();
+      selectGoal(container, "clarity");
     });
 
     await act(async () => {
