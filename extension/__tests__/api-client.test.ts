@@ -15,6 +15,7 @@ describe("apiClient", () => {
 
     const result = await apiClient.improve({
       text: "original",
+      goal: "structure",
       installation_id: "inst-1",
       client: "extension",
     });
@@ -22,7 +23,15 @@ describe("apiClient", () => {
     expect(result).toEqual(mockResponse);
     expect(fetch).toHaveBeenCalledWith(
       "https://api.anytoolai.store/v1/improve",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          text: "original",
+          goal: "structure",
+          installation_id: "inst-1",
+          client: "extension",
+        }),
+      }),
     );
   });
 

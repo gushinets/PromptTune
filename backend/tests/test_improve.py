@@ -83,6 +83,28 @@ async def test_improve_works_without_client_field(
 
 
 @pytest.mark.asyncio
+async def test_improve_accepts_goal_and_passes_it_to_llm(
+    client: AsyncClient, mock_litellm, mock_db, mock_redis
+):
+    response = await client.post(
+        "/v1/improve",
+        json={
+            "text": "write me a poem",
+            "goal": "clarity",
+            "installation_id": "test-inst-1",
+            "client": "manual-test",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["improved_text"] == "better result"
+    assert len(mock_litellm.await_args.kwargs["messages"]) == 3
+    assert mock_litellm.await_args.kwargs["messages"][1]["role"] == "system"
+    assert "ясность" in mock_litellm.await_args.kwargs["messages"][1]["content"].lower()
+
+
+@pytest.mark.asyncio
 async def test_improve_returns_structured_upstream_auth_error(
     client: AsyncClient, mock_db, mock_redis
 ):

@@ -32,6 +32,15 @@ function getImproveButton(container: HTMLElement): HTMLButtonElement {
   return match;
 }
 
+function selectGoal(container: HTMLElement, goal: string) {
+  const radio = container.querySelector(`input[type="radio"][value="${goal}"]`);
+  if (!(radio instanceof HTMLInputElement)) {
+    throw new Error(`Goal radio not found: ${goal}`);
+  }
+
+  radio.click();
+}
+
 async function setOriginalPrompt(container: HTMLElement, value: string) {
   const originalField = container.querySelector("textarea");
   if (!(originalField instanceof HTMLTextAreaElement)) {
@@ -114,7 +123,7 @@ describe("App", () => {
 
     expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
       type: "IMPROVE_REQUEST",
-      payload: { text: "Original prompt" },
+      payload: { text: "Original prompt", goal: "general" },
     });
 
     const improvedField = container.querySelector(".improved-textarea");
@@ -197,7 +206,7 @@ describe("App", () => {
     expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalled();
   });
 
-  it("inserts improved text into the active tab", async () => {
+  it("sends selected goal in improve requests", async () => {
     vi.mocked(browser.runtime.sendMessage)
       .mockResolvedValueOnce({
         type: "LIMITS_RESULT",
@@ -214,6 +223,49 @@ describe("App", () => {
         type: "IMPROVE_RESULT",
         payload: {
           request_id: "req-3",
+          improved_text: "Improved with clarity focus",
+        },
+      });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+
+    await setOriginalPrompt(container, "Original prompt");
+    await act(async () => {
+      selectGoal(container, "clarity");
+    });
+
+    await act(async () => {
+      getImproveButton(container).click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
+      type: "IMPROVE_REQUEST",
+      payload: { text: "Original prompt", goal: "clarity" },
+    });
+  });
+
+  it("inserts improved text into the active tab", async () => {
+    vi.mocked(browser.runtime.sendMessage)
+      .mockResolvedValueOnce({
+        type: "LIMITS_RESULT",
+        payload: {
+          rate_limit: {
+            per_minute_remaining: 4,
+            per_day_remaining: 10,
+            per_minute_total: 5,
+            per_day_total: 10,
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        type: "IMPROVE_RESULT",
+        payload: {
+          request_id: "req-4",
           improved_text: "Improved prompt",
         },
       });

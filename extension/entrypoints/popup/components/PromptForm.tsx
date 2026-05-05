@@ -1,11 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useT } from "@shared/i18n";
+import type { ImproveGoal } from "@shared/types";
+
+const GOAL_ORDER: ImproveGoal[] = ["general", "clarity", "structure", "concise", "persuasive"];
 
 interface PromptFormProps {
   original: string;
   improved: string;
   improvements: string[];
+  goal: ImproveGoal;
   loading: boolean;
+  onGoalChange: (goal: ImproveGoal) => void;
   onOriginalChange: (text: string) => void;
   onImprove: () => void;
 }
@@ -31,12 +36,22 @@ export function PromptForm({
   original,
   improved,
   improvements,
+  goal,
   loading,
+  onGoalChange,
   onOriginalChange,
   onImprove,
 }: PromptFormProps) {
   const t = useT();
+  const goalGroupName = useId();
   const [isImprovementsOpen, setIsImprovementsOpen] = useState(true);
+  const goalLabels: Record<ImproveGoal, string> = {
+    general: t.goalGeneral,
+    clarity: t.goalClarity,
+    structure: t.goalStructure,
+    concise: t.goalConcise,
+    persuasive: t.goalPersuasive,
+  };
 
   useEffect(() => {
     if (improvements.length > 0) {
@@ -53,6 +68,26 @@ export function PromptForm({
         placeholder={t.placeholderOriginal}
         rows={4}
       />
+      <fieldset className="goal-pills">
+        <legend className="sr-only">{t.goalLabel}</legend>
+        {GOAL_ORDER.map((option) => {
+          const isActive = goal === option;
+          return (
+            <label key={option} className={`goal-pill${isActive ? " active" : ""}`}>
+              <input
+                className="goal-pill-input"
+                type="radio"
+                name={goalGroupName}
+                value={option}
+                checked={isActive}
+                onChange={() => onGoalChange(option)}
+                disabled={loading}
+              />
+              <span className="goal-pill-text">{goalLabels[option]}</span>
+            </label>
+          );
+        })}
+      </fieldset>
       <button className="btn-improve" onClick={onImprove} disabled={!original.trim() || loading}>
         {loading ? (
           <>

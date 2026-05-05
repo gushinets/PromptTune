@@ -68,7 +68,7 @@ async function improveViaN8n(req: ImproveRequest): Promise<ImproveResponse> {
   const res = await fetch(N8N_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: req.text }),
+    body: JSON.stringify({ prompt: req.text, goal: req.goal }),
   });
 
   if (!res.ok) {

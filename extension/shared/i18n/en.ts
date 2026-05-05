@@ -34,6 +34,12 @@ export const en = {
   placeholderOriginal:
     "e.g. Write a follow-up email to a client who didn't respond to my roof repair quote...",
   placeholderImproved: "Improved version will appear here...",
+  goalLabel: "Improvement goal",
+  goalGeneral: "General",
+  goalClarity: "Clarity",
+  goalStructure: "Structure",
+  goalConcise: "Concise",
+  goalPersuasive: "Persuasive",
   btnImprove: "Improve",
   btnImproving: "Improving...",
   improveHint: "✦ Prompt optimized for clarity, specificity and structure",
