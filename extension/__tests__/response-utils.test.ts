@@ -79,6 +79,19 @@ describe("response utils", () => {
     });
   });
 
+  it("omits changes when backend returns an empty changes array", () => {
+    const response = extractImproveResponse({
+      request_id: "r5",
+      improved_text: "better prompt",
+      changes: [],
+    });
+
+    expect(response).toEqual({
+      request_id: "r5",
+      improved_text: "better prompt",
+    });
+  });
+
   it("extracts rate limits from wrapped or direct responses", () => {
     const wrapped = extractRateLimitResponse({
       type: "LIMITS_RESULT",
