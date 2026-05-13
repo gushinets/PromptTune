@@ -10,6 +10,7 @@ from app.dependencies import (
     get_db,
     get_redis,
 )
+from app.goals import normalize_goal_selection
 from app.services.errors import UpstreamServiceError
 from app.services.prompt_service import PromptService
 
@@ -39,6 +40,7 @@ async def improve(
     validate_improve_text_length(req.text)
 
     service = PromptService(db=db, redis=redis)
+    audience_mode, goal = normalize_goal_selection(req.audience_mode, req.goal)
 
     allowed, remaining = await service.check_rate_limit(
         installation_id=req.installation_id, ip=client_ip
@@ -50,7 +52,8 @@ async def improve(
         result = await service.improve_prompt(
             text=req.text,
             installation_id=req.installation_id,
-            goal=req.goal,
+            audience_mode=audience_mode,
+            goal=goal,
             client=req.client,
             client_version=req.client_version,
             site=req.site,

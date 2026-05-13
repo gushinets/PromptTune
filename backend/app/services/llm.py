@@ -4,7 +4,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from litellm import acompletion
 from litellm.exceptions import (
@@ -25,6 +25,7 @@ from litellm.exceptions import (
 )
 
 from app.config import settings
+from app.goals import AudienceMode, CanonicalGoal
 from app.security.redaction import redact_secrets
 from app.services.errors import (
     UpstreamAuthError,
@@ -38,14 +39,40 @@ logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.INFO)
 
-ImproveGoal = Literal["general", "clarity", "structure", "concise", "persuasive"]
-
-GOAL_PROMPT_HINTS: dict[ImproveGoal, str] = {
-    "general": "Сбалансируй улучшение между ясностью, структурой и конкретностью.",
-    "clarity": "Сделай максимальный упор на ясность: убери двусмысленность и нечеткость формулировок.",
-    "structure": "Сделай максимальный упор на структуру: выстрой логичный и хорошо читаемый порядок инструкций.",
-    "concise": "Сделай максимальный упор на краткость: убери лишние слова, сохранив смысл и ограничения.",
-    "persuasive": "Сделай максимальный упор на убедительность и силу формулировок без изменения смысла.",
+GOAL_PROMPT_HINTS: dict[tuple[AudienceMode, CanonicalGoal], str] = {
+    ("ai", "chatgpt"): (
+        "Оптимизируй промпт под ChatGPT: явные шаги, критерии качества и четкий ожидаемый формат."
+    ),
+    ("ai", "claude"): (
+        "Оптимизируй промпт под Claude: аккуратный контекст, ясные ограничения и фокус на рассуждение."
+    ),
+    ("ai", "perplexity"): (
+        "Оптимизируй промпт под Perplexity: добавь ожидание источников и проверяемых фактов."
+    ),
+    ("ai", "structured"): (
+        "Сделай максимальный упор на structured output: стабильная структура, поля и формат результата."
+    ),
+    ("ai", "deep_research"): (
+        "Сделай максимальный упор на глубокое исследование: гипотезы, сравнительный анализ и выводы."
+    ),
+    ("content", "general"): (
+        "Оптимизируй промпт под создание контента: ясный тон, структура и готовность к публикации."
+    ),
+    ("content", "seo_article"): (
+        "Оптимизируй под SEO-статью: H1/H2 структура, ключевые слова, мета-описание и intent."
+    ),
+    ("content", "product_description"): (
+        "Оптимизируй под товарное описание: выгоды, характеристики, возражения и CTA."
+    ),
+    ("content", "ad_copy"): (
+        "Оптимизируй под рекламный текст: сильный hook, offer, proof и короткий CTA."
+    ),
+    ("content", "email"): (
+        "Оптимизируй под email: тема, контекст, четкий следующий шаг и вежливый призыв к действию."
+    ),
+    ("content", "landing_page"): (
+        "Оптимизируй под лендинг: оффер, value proposition, social proof и блок CTA."
+    ),
 }
 
 
@@ -252,16 +279,18 @@ class LiteLLMClient:
         request_id: str,
         installation_id: str,
         site: str | None,
-        goal: ImproveGoal | None = None,
+        audience_mode: AudienceMode = "ai",
+        goal: CanonicalGoal = "general",
     ) -> ImproveLLMResult:
         model_id = settings.litellm_model_id()
         api_key = _resolve_provider_api_key()
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-        if goal and goal != "general":
+        hint = GOAL_PROMPT_HINTS.get((audience_mode, goal))
+        if hint:
             messages.append(
                 {
                     "role": "system",
-                    "content": GOAL_PROMPT_HINTS.get(goal, GOAL_PROMPT_HINTS["general"]),
+                    "content": hint,
                 }
             )
         messages.append({"role": "user", "content": text})
@@ -392,12 +421,14 @@ async def improve_text(
     request_id: str,
     installation_id: str,
     site: str | None,
-    goal: ImproveGoal | None = None,
+    audience_mode: AudienceMode = "ai",
+    goal: CanonicalGoal = "general",
 ) -> ImproveLLMResult:
     return await _default_client.improve_text(
         text,
         request_id=request_id,
         installation_id=installation_id,
         site=site,
+        audience_mode=audience_mode,
         goal=goal,
     )

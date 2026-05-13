@@ -2,6 +2,15 @@ import browser from "webextension-polyfill";
 import { getAdapter } from "@adapters/registry";
 import { extractImproveResponse } from "@shared/response-utils";
 import type { Message } from "@shared/messages";
+import type { ImproveGoal } from "@shared/types";
+
+function detectAiGoalFromHostname(hostname: string): ImproveGoal {
+  const host = hostname.toLowerCase();
+  if (host.endsWith("chatgpt.com")) return "chatgpt";
+  if (host.endsWith("claude.ai")) return "claude";
+  if (host.endsWith("perplexity.ai")) return "perplexity";
+  return "general";
+}
 
 export default defineContentScript({
   matches: [
@@ -60,7 +69,8 @@ export default defineContentScript({
             type: "IMPROVE_REQUEST",
             payload: {
               text,
-              goal: "general",
+              audience_mode: "ai",
+              goal: detectAiGoalFromHostname(location.hostname),
               site: location.hostname,
               page_url: location.href,
             },

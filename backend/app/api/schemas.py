@@ -1,12 +1,11 @@
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
-ImproveGoal = Literal["general", "clarity", "structure", "concise", "persuasive"]
+from app.goals import AudienceMode, ImproveGoal
 
 
 class ImproveRequest(BaseModel):
     text: str
+    audience_mode: AudienceMode | None = None
     goal: ImproveGoal | None = None
     installation_id: str = Field(..., max_length=64)
     client: str | None = Field(None, max_length=64)

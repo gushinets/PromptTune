@@ -20,6 +20,29 @@ npm run dev        # WXT dev mode (Chrome)
 npm run build      # Production build
 ```
 
+#### Local backend profile (safe, without touching prod settings)
+
+Use dedicated scripts that force localhost for this terminal run only:
+
+```bash
+cd extension
+npm run dev:local-api
+```
+
+Also available:
+- `npm run dev:local-api:firefox`
+- `npm run build:local-api`
+- `npm run zip:local-api`
+
+Optional persistent local override (git-ignored):
+
+```bash
+cd extension
+cp .env.local.example .env.local
+```
+
+This does not overwrite production values in code or CI.
+
 #### Run extension tests
 
 ```bash

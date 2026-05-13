@@ -4,8 +4,9 @@ import uuid
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import ImproveGoal, RateLimitInfo
+from app.api.schemas import RateLimitInfo
 from app.db.models import Installation, PromptImprovement
+from app.goals import AudienceMode, CanonicalGoal
 from app.security.redaction import redact_secrets
 from app.services.errors import UpstreamServiceError
 from app.services.improvement_changes import build_improvement_changes
@@ -35,7 +36,8 @@ class PromptService:
         self,
         text: str,
         installation_id: str,
-        goal: ImproveGoal | None = None,
+        audience_mode: AudienceMode = "ai",
+        goal: CanonicalGoal = "general",
         client: str | None = None,
         client_version: str | None = None,
         site: str | None = None,
@@ -51,11 +53,18 @@ class PromptService:
                 request_id=request_id,
                 installation_id=installation_id,
                 site=site,
+                audience_mode=audience_mode,
                 goal=goal,
             )
-            changes = build_improvement_changes(text, llm_result.improved_text, goal)
+            changes = build_improvement_changes(
+                original_text=text,
+                improved_text=llm_result.improved_text,
+                audience_mode=audience_mode,
+                goal=goal,
+            )
             llm_meta = {
-                "goal": goal or "general",
+                "audience_mode": audience_mode,
+                "goal": goal,
                 "changes": changes,
                 "model": llm_result.model,
                 "provider": llm_result.provider,
@@ -101,7 +110,7 @@ class PromptService:
                 improved_text="",
                 status="error",
                 error=exc.error_code,
-                llm_meta={"goal": goal or "general"},
+                llm_meta={"audience_mode": audience_mode, "goal": goal},
             )
             self.db.add(record)
             await self.db.commit()
@@ -124,7 +133,7 @@ class PromptService:
                 improved_text="",
                 status="error",
                 error="INTERNAL_ERROR",
-                llm_meta={"goal": goal or "general"},
+                llm_meta={"audience_mode": audience_mode, "goal": goal},
             )
             self.db.add(record)
             await self.db.commit()

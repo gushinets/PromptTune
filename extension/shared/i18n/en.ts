@@ -1,6 +1,14 @@
 export const en = {
   // Header
   appName: "PromptTune",
+  modeBadgeAi: "AI Mode",
+  modeBadgeContent: "Content Mode",
+  settingsOpen: "Open settings",
+  settingsTitle: "Settings",
+  settingsClose: "Close settings",
+  settingsModeHint: "Pick your primary workflow. You can change this anytime.",
+  settingsModeRequiredTitle: "Choose mode to continue",
+  settingsModeRequiredSubtitle: "Set your mode once in settings to tailor goal presets.",
   rateLimitUnlimited: "Unlimited",
   rateLimitLoading: "Loading limits...",
   rateLimitUnavailable: "Limits unavailable",
@@ -29,6 +37,16 @@ export const en = {
   btnUpgrade: "Upgrade for unlimited",
 
   // PromptForm
+  modeLabel: "Mode",
+  modeAi: "AI prompts",
+  modeContent: "Marketing content",
+  onboardingTitle: "Choose your mode",
+  onboardingSubtitle: "You can switch this anytime in settings below.",
+  onboardingAiTitle: "I work with AI prompts",
+  onboardingAiDescription: "Model-aware optimization for ChatGPT, Claude, and research workflows.",
+  onboardingContentTitle: "I create marketing content",
+  onboardingContentDescription:
+    "Output-focused optimization for SEO pages, product copy, ads, emails, and landing pages.",
   labelOriginalPrompt: "Original Prompt",
   labelImprovedPrompt: "Improved Prompt",
   placeholderOriginal:
@@ -36,14 +54,20 @@ export const en = {
   placeholderImproved: "Improved version will appear here...",
   goalLabel: "Improvement goal",
   goalGeneral: "General",
-  goalClarity: "Clarity",
-  goalStructure: "Structure",
-  goalConcise: "Concise",
-  goalPersuasive: "Persuasive",
+  goalChatgpt: "ChatGPT",
+  goalClaude: "Claude",
+  goalPerplexity: "Perplexity",
+  goalStructured: "Structured",
+  goalDeepResearch: "Deep research",
+  goalSeoArticle: "SEO article",
+  goalProductDescription: "Product description",
+  goalAdCopy: "Ad copy",
+  goalEmail: "Email",
+  goalLandingPage: "Landing page",
   btnImprove: "Improve",
   btnImproving: "Improving...",
   improveHint: "✦ Prompt optimized for clarity, specificity and structure",
-  whatWasImproved: "What was improved",
+  whyItChanged: "Why it changed",
 
   // ActionBar
   btnCopy: "Copy",

@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { STORAGE_KEYS, LIMITS } from "./constants";
+import type { AudienceMode } from "./types";
 
 export interface LibraryEntry {
   id: string;
@@ -43,4 +44,17 @@ export async function remove(id: string): Promise<void> {
   const entries = await getAll();
   const updated = entries.filter((e) => e.id !== id);
   await browser.storage.local.set({ [STORAGE_KEYS.LIBRARY]: updated });
+}
+
+export async function getAudienceMode(): Promise<AudienceMode | null> {
+  const data = await browser.storage.local.get(STORAGE_KEYS.AUDIENCE_MODE);
+  const mode = data[STORAGE_KEYS.AUDIENCE_MODE];
+  if (mode === "ai" || mode === "content") {
+    return mode;
+  }
+  return null;
+}
+
+export async function setAudienceMode(mode: AudienceMode): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS.AUDIENCE_MODE]: mode });
 }

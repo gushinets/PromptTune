@@ -1,9 +1,15 @@
-import type { ImproveGoal, ImproveResponse } from "./types";
+import type { AudienceMode, ImproveGoal, ImproveResponse } from "./types";
 
 export type Message =
   | {
       type: "IMPROVE_REQUEST";
-      payload: { text: string; goal?: ImproveGoal; site?: string; page_url?: string };
+      payload: {
+        text: string;
+        audience_mode?: AudienceMode;
+        goal?: ImproveGoal;
+        site?: string;
+        page_url?: string;
+      };
     }
   | { type: "IMPROVE_RESULT"; payload: ImproveResponse }
   | { type: "GET_LIMITS" }
