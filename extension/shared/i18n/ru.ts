@@ -41,7 +41,7 @@ export const ru: TranslationKeys = {
   // PromptForm
   modeLabel: "Режим",
   modeAi: "AI промпты",
-  modeContent: "Маркетинг контент",
+  modeContent: "Маркетинговый контент",
   onboardingTitle: "Выберите режим",
   onboardingSubtitle: "Позже его можно изменить ниже в настройках.",
   onboardingAiTitle: "Я работаю с AI-промптами",

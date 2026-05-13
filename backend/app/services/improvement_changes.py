@@ -47,7 +47,11 @@ def build_improvement_changes(
     goal: CanonicalGoal = "general",
 ) -> list[str]:
     lines: list[str] = []
-    lines.append(GOAL_LINES.get((audience_mode, goal), GOAL_LINES[("ai", "general")]))
+    lines.append(
+        GOAL_LINES.get((audience_mode, goal))
+        or GOAL_LINES.get((audience_mode, "general"))
+        or GOAL_LINES[("ai", "general")]
+    )
 
     original_word_count = len(original_text.split())
     improved_word_count = len(improved_text.split())
