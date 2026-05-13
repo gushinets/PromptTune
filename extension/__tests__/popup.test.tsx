@@ -25,7 +25,8 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
 
 function findButtonByAria(container: HTMLElement, label: string): HTMLButtonElement {
   const match = Array.from(container.querySelectorAll("button")).find(
-    (button) => button.getAttribute("aria-label") === label || button.getAttribute("title") === label,
+    (button) =>
+      button.getAttribute("aria-label") === label || button.getAttribute("title") === label,
   );
 
   if (!(match instanceof HTMLButtonElement)) {
@@ -338,7 +339,9 @@ describe("App", () => {
   });
 
   it("auto-detects AI goal from active tab hostname", async () => {
-    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 77, url: "https://claude.ai/new" }] as never);
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 77, url: "https://claude.ai/new" },
+    ] as never);
     vi.mocked(browser.runtime.sendMessage)
       .mockResolvedValueOnce({
         type: "LIMITS_RESULT",

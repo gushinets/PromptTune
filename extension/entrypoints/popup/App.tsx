@@ -542,7 +542,12 @@ export function App({ viewMode = "popup" }: AppProps) {
       <RatingBar />
 
       {showSettings && (
-        <div className="settings-overlay" role="dialog" aria-modal="true" aria-label={t.settingsTitle}>
+        <div
+          className="settings-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.settingsTitle}
+        >
           <div className="settings-modal">
             <div className="settings-modal-header">
               <h3>{t.settingsTitle}</h3>

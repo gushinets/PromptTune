@@ -8,17 +8,35 @@ FALLBACK_LINES = [
 
 GOAL_LINES: dict[tuple[AudienceMode, CanonicalGoal], str] = {
     ("ai", "general"): "Balanced clarity, specificity, and structure without changing intent.",
-    ("ai", "chatgpt"): "Adjusted wording for ChatGPT-style instruction following and response quality.",
+    (
+        "ai",
+        "chatgpt",
+    ): "Adjusted wording for ChatGPT-style instruction following and response quality.",
     ("ai", "claude"): "Adjusted wording for Claude-style long-context reasoning and safer framing.",
-    ("ai", "perplexity"): "Adjusted wording for web-grounded answers with stronger source expectations.",
+    (
+        "ai",
+        "perplexity",
+    ): "Adjusted wording for web-grounded answers with stronger source expectations.",
     ("ai", "structured"): "Reshaped the prompt toward predictable structured output.",
     ("ai", "deep_research"): "Expanded scope and rigor for deeper research-style responses.",
     ("content", "general"): "Balanced clarity and structure for content production tasks.",
-    ("content", "seo_article"): "Added SEO-oriented structure with heading and keyword guidance.",
-    ("content", "product_description"): "Focused wording on product value, features, and clear CTA.",
+    (
+        "content",
+        "seo_article",
+    ): "Added SEO-oriented structure with heading and keyword guidance.",
+    (
+        "content",
+        "product_description",
+    ): "Focused wording on product value, features, and clear CTA.",
     ("content", "ad_copy"): "Tightened the copy around hook, offer, and action-oriented CTA.",
-    ("content", "email"): "Improved message flow for concise, actionable email communication.",
-    ("content", "landing_page"): "Structured the prompt for offer, value proposition, and proof elements.",
+    (
+        "content",
+        "email",
+    ): "Improved message flow for concise, actionable email communication.",
+    (
+        "content",
+        "landing_page",
+    ): "Structured the prompt for offer, value proposition, and proof elements.",
 }
 
 
