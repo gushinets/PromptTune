@@ -11,6 +11,7 @@ export const N8N_WEBHOOK_URL =
 export const STORAGE_KEYS = {
   INSTALLATION_ID: "installation_id",
   LIBRARY: "library",
+  AUDIENCE_MODE: "audience_mode",
 } as const;
 
 export const LIMITS = {

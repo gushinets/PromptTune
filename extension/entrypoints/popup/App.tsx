@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FocusEvent } from "react";
+import { useState, useEffect, useCallback, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
 import { ActionBar } from "./components/ActionBar";
@@ -6,7 +6,7 @@ import { SiteIcons } from "./components/SiteIcons";
 import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
-import { getAll, save, getInstallationId } from "@shared/storage";
+import { getAll, save, getInstallationId, getAudienceMode, setAudienceMode } from "@shared/storage";
 import { FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
@@ -15,11 +15,29 @@ import {
   extractRateLimitResponse,
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
-import type { ImproveGoal } from "@shared/types";
+import type { AiImproveGoal, AudienceMode, ImproveGoal } from "@shared/types";
 
 // TODO: Replace with actual upgrade URL
 const UPGRADE_URL = "https://forgekit.io/upgrade";
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
+
+function detectAiGoalFromUrl(rawUrl: string | undefined): AiImproveGoal {
+  if (!rawUrl) return "general";
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase();
+    if (host.endsWith("chatgpt.com")) return "chatgpt";
+    if (host.endsWith("claude.ai")) return "claude";
+    if (host.endsWith("perplexity.ai")) return "perplexity";
+  } catch {
+    // Ignore malformed tab URLs.
+  }
+  return "general";
+}
+
+function defaultGoalForMode(mode: AudienceMode, detectedAiGoal: AiImproveGoal): ImproveGoal {
+  if (mode === "content") return "general";
+  return detectedAiGoal;
+}
 
 type TabId = "improve" | "library";
 
@@ -64,6 +82,23 @@ function BookmarkIcon({ className }: { className?: string }) {
   );
 }
 
+function SettingsIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .16 1.7 1.7 0 0 0-.94 1.53V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-.94-1.53 1.7 1.7 0 0 0-1-.16 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.16-1 1.7 1.7 0 0 0-1.53-.94H2.9a2 2 0 0 1 0-4h.01a1.7 1.7 0 0 0 1.53-.94 1.7 1.7 0 0 0 .16-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.16 1.7 1.7 0 0 0 .94-1.53V2.9a2 2 0 0 1 4 0v.01a1.7 1.7 0 0 0 .94 1.53 1.7 1.7 0 0 0 1 .16 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .16 1 1.7 1.7 0 0 0 1.53.94h.01a2 2 0 0 1 0 4h-.01a1.7 1.7 0 0 0-1.53.94 1.7 1.7 0 0 0-.16 1z" />
+    </svg>
+  );
+}
+
 interface AppProps {
   /** Whether the App is rendered inside the Chrome side panel. Defaults to false (popup). */
   viewMode?: ViewMode;
@@ -75,6 +110,9 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [original, setOriginal] = useState("");
   const [improved, setImproved] = useState("");
   const [changes, setChanges] = useState<string[]>([]);
+  const [audienceMode, setAudienceModeState] = useState<AudienceMode | null>(null);
+  const [modeReady, setModeReady] = useState(false);
+  const [detectedAiGoal, setDetectedAiGoal] = useState<AiImproveGoal>("general");
   const [goal, setGoal] = useState<ImproveGoal>("general");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<ErrorInfo | null>(null);
@@ -83,6 +121,8 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const hasUserSelectedGoalRef = useRef(false);
 
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
@@ -91,6 +131,36 @@ export function App({ viewMode = "popup" }: AppProps) {
   useEffect(() => {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
+
+  useEffect(() => {
+    getAudienceMode()
+      .then((mode) => setAudienceModeState(mode))
+      .finally(() => setModeReady(true));
+  }, []);
+
+  useEffect(() => {
+    browser.tabs
+      .query({ active: true, currentWindow: true })
+      .then((tabs) => {
+        const goalFromSite = detectAiGoalFromUrl(tabs[0]?.url);
+        setDetectedAiGoal(goalFromSite);
+      })
+      .catch(() => {
+        setDetectedAiGoal("general");
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!modeReady || !audienceMode) return;
+    if (hasUserSelectedGoalRef.current) return;
+    setGoal(defaultGoalForMode(audienceMode, detectedAiGoal));
+  }, [audienceMode, detectedAiGoal, modeReady]);
+
+  useEffect(() => {
+    if (modeReady && !audienceMode) {
+      setShowSettings(true);
+    }
+  }, [modeReady, audienceMode]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -113,6 +183,14 @@ export function App({ viewMode = "popup" }: AppProps) {
         setLimitsUnavailable(true);
       });
   }, []);
+
+  useEffect(() => {
+    const className = viewMode === "sidepanel" ? "sidepanel-body" : "popup-body";
+    document.body.classList.add(className);
+    return () => {
+      document.body.classList.remove(className);
+    };
+  }, [viewMode]);
 
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
@@ -199,6 +277,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const handleImprove = useCallback(async () => {
     const trimmed = original.trim();
     if (!trimmed) return;
+    if (!audienceMode) return;
 
     if (isExhausted) {
       setError({ type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) });
@@ -213,7 +292,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     try {
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
-        payload: { text: trimmed, goal },
+        payload: { text: trimmed, audience_mode: audienceMode, goal },
       });
       const result = extractImproveResponse(response);
 
@@ -243,7 +322,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     } finally {
       setLoading(false);
     }
-  }, [goal, original, isExhausted, mapErrorToToast, rateLimit.total, t]);
+  }, [audienceMode, goal, original, isExhausted, mapErrorToToast, rateLimit.total, t]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     const originalTrimmed = original.trim();
@@ -282,16 +361,52 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   const handleDismissError = useCallback(() => setError(null), []);
 
+  const handleGoalChange = useCallback((nextGoal: ImproveGoal) => {
+    hasUserSelectedGoalRef.current = true;
+    setGoal(nextGoal);
+  }, []);
+
+  const handleModeSelection = useCallback(
+    async (mode: AudienceMode) => {
+      hasUserSelectedGoalRef.current = false;
+      setAudienceModeState(mode);
+      setGoal(defaultGoalForMode(mode, detectedAiGoal));
+      setShowSettings(false);
+      try {
+        await setAudienceMode(mode);
+      } catch {
+        // Ignore storage write failures; mode stays active for current popup session.
+      }
+    },
+    [detectedAiGoal],
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="popup-container">
+    <div className={`popup-container ${viewMode}`}>
       <header className="header">
         <div className="header-brand">
           <SparkleIcon className="header-icon" />
-          <span className="header-title">{t.appName}</span>
+          <div className="header-brand-text">
+            <span className="header-title">{t.appName}</span>
+            {audienceMode && (
+              <span className={`mode-badge ${audienceMode}`}>
+                {audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="header-actions">
+          <button
+            type="button"
+            className="layout-toggle-btn settings-btn"
+            title={t.settingsOpen}
+            aria-label={t.settingsOpen}
+            onClick={() => setShowSettings(true)}
+          >
+            <SettingsIcon className="settings-icon" />
+          </button>
           {/* Layout toggle button */}
           <button
             type="button"
@@ -378,7 +493,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         </button>
       </nav>
 
-      <div className="tab-content">
+      <div className={`tab-content${activeTab === "improve" ? " no-scroll" : ""}`}>
         {activeTab === "improve" ? (
           <>
             {error && (
@@ -399,16 +514,32 @@ export function App({ viewMode = "popup" }: AppProps) {
                 </button>
               </div>
             )}
-            <PromptForm
-              original={original}
-              improved={improved}
-              improvements={changes}
-              goal={goal}
-              loading={loading}
-              onGoalChange={setGoal}
-              onOriginalChange={setOriginal}
-              onImprove={handleImprove}
-            />
+            {!modeReady ? null : audienceMode ? (
+              <PromptForm
+                original={original}
+                improved={improved}
+                improvements={changes}
+                mode={audienceMode}
+                goal={goal}
+                loading={loading}
+                onGoalChange={handleGoalChange}
+                onOriginalChange={setOriginal}
+                onImprove={handleImprove}
+              />
+            ) : (
+              <div className="mode-onboarding compact">
+                <h3>{t.settingsModeRequiredTitle}</h3>
+                <p>{t.settingsModeRequiredSubtitle}</p>
+                <button
+                  type="button"
+                  className="mode-onboarding-card"
+                  onClick={() => setShowSettings(true)}
+                >
+                  <strong>{t.settingsOpen}</strong>
+                  <span>{t.settingsModeHint}</span>
+                </button>
+              </div>
+            )}
             <ActionBar improved={improved} disabled={!improved} onSave={handleSave} />
             {FEATURES.OPEN_AND_PASTE && <SiteIcons improved={improved} disabled={!improved} />}
           </>
@@ -417,6 +548,50 @@ export function App({ viewMode = "popup" }: AppProps) {
         )}
       </div>
       <RatingBar />
+
+      {showSettings && (
+        <div
+          className="settings-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.settingsTitle}
+        >
+          <div className="settings-modal">
+            <div className="settings-modal-header">
+              <h3>{t.settingsTitle}</h3>
+              <button
+                type="button"
+                className="settings-close"
+                onClick={() => setShowSettings(false)}
+                aria-label={t.settingsClose}
+              >
+                ×
+              </button>
+            </div>
+            <p className="settings-hint">{t.settingsModeHint}</p>
+            <div className="settings-mode-grid" role="radiogroup" aria-label={t.modeLabel}>
+              <button
+                type="button"
+                className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
+                aria-pressed={audienceMode === "ai"}
+                onClick={() => handleModeSelection("ai")}
+              >
+                <strong>{t.onboardingAiTitle}</strong>
+                <span>{t.onboardingAiDescription}</span>
+              </button>
+              <button
+                type="button"
+                className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
+                aria-pressed={audienceMode === "content"}
+                onClick={() => handleModeSelection("content")}
+              >
+                <strong>{t.onboardingContentTitle}</strong>
+                <span>{t.onboardingContentDescription}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

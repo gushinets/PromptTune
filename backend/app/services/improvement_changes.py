@@ -1,4 +1,4 @@
-from app.api.schemas import ImproveGoal
+from app.goals import AudienceMode, CanonicalGoal
 
 FALLBACK_LINES = [
     "Made the goal and expected result more explicit.",
@@ -6,23 +6,52 @@ FALLBACK_LINES = [
     "Preserved the original intent while tightening the instructions.",
 ]
 
-GOAL_LINES: dict[ImproveGoal, str] = {
-    "general": "Balanced clarity, specificity, and structure without changing intent.",
-    "clarity": "Reduced ambiguity so the task is easier for the model to interpret correctly.",
-    "structure": "Reorganized instructions into a clearer, more scannable structure.",
-    "concise": "Removed redundant wording to keep the request focused and efficient.",
-    "persuasive": "Strengthened phrasing to make the prompt more convincing and goal-oriented.",
+GOAL_LINES: dict[tuple[AudienceMode, CanonicalGoal], str] = {
+    ("ai", "general"): "Balanced clarity, specificity, and structure without changing intent.",
+    (
+        "ai",
+        "chatgpt",
+    ): "Adjusted wording for ChatGPT-style instruction following and response quality.",
+    ("ai", "claude"): "Adjusted wording for Claude-style long-context reasoning and safer framing.",
+    (
+        "ai",
+        "perplexity",
+    ): "Adjusted wording for web-grounded answers with stronger source expectations.",
+    ("ai", "structured"): "Reshaped the prompt toward predictable structured output.",
+    ("ai", "deep_research"): "Expanded scope and rigor for deeper research-style responses.",
+    ("content", "general"): "Balanced clarity and structure for content production tasks.",
+    (
+        "content",
+        "seo_article",
+    ): "Added SEO-oriented structure with heading and keyword guidance.",
+    (
+        "content",
+        "product_description",
+    ): "Focused wording on product value, features, and clear CTA.",
+    ("content", "ad_copy"): "Tightened the copy around hook, offer, and action-oriented CTA.",
+    (
+        "content",
+        "email",
+    ): "Improved message flow for concise, actionable email communication.",
+    (
+        "content",
+        "landing_page",
+    ): "Structured the prompt for offer, value proposition, and proof elements.",
 }
 
 
 def build_improvement_changes(
     original_text: str,
     improved_text: str,
-    goal: ImproveGoal | None = None,
+    audience_mode: AudienceMode = "ai",
+    goal: CanonicalGoal = "general",
 ) -> list[str]:
     lines: list[str] = []
-    goal_key = goal or "general"
-    lines.append(GOAL_LINES[goal_key])
+    lines.append(
+        GOAL_LINES.get((audience_mode, goal))
+        or GOAL_LINES.get((audience_mode, "general"))
+        or GOAL_LINES[("ai", "general")]
+    )
 
     original_word_count = len(original_text.split())
     improved_word_count = len(improved_text.split())

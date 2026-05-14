@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import browser from "webextension-polyfill";
-import { getInstallationId, getAll, save, remove } from "@shared/storage";
+import {
+  getInstallationId,
+  getAll,
+  save,
+  remove,
+  getAudienceMode,
+  setAudienceMode,
+} from "@shared/storage";
 
 describe("storage", () => {
   beforeEach(() => {
@@ -47,6 +54,23 @@ describe("storage", () => {
       });
       await remove("1");
       expect(browser.storage.local.set).toHaveBeenCalledWith({ library: [] });
+    });
+  });
+
+  describe("audience mode", () => {
+    it("returns null when no mode exists", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({});
+      expect(await getAudienceMode()).toBeNull();
+    });
+
+    it("returns stored mode", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({ audience_mode: "content" });
+      expect(await getAudienceMode()).toBe("content");
+    });
+
+    it("persists mode", async () => {
+      await setAudienceMode("ai");
+      expect(browser.storage.local.set).toHaveBeenCalledWith({ audience_mode: "ai" });
     });
   });
 });

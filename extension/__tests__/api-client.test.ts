@@ -15,7 +15,8 @@ describe("apiClient", () => {
 
     const result = await apiClient.improve({
       text: "original",
-      goal: "structure",
+      audience_mode: "ai",
+      goal: "structured",
       installation_id: "inst-1",
       client: "extension",
     });
@@ -27,7 +28,8 @@ describe("apiClient", () => {
         method: "POST",
         body: JSON.stringify({
           text: "original",
-          goal: "structure",
+          audience_mode: "ai",
+          goal: "structured",
           installation_id: "inst-1",
           client: "extension",
         }),

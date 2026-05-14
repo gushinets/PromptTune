@@ -1,7 +1,26 @@
-export type ImproveGoal = "general" | "clarity" | "structure" | "concise" | "persuasive";
+export type AudienceMode = "ai" | "content";
+
+export type AiImproveGoal =
+  | "general"
+  | "chatgpt"
+  | "claude"
+  | "perplexity"
+  | "structured"
+  | "deep_research";
+
+export type ContentImproveGoal =
+  | "general"
+  | "seo_article"
+  | "product_description"
+  | "ad_copy"
+  | "email"
+  | "landing_page";
+
+export type ImproveGoal = AiImproveGoal | ContentImproveGoal;
 
 export interface ImproveRequest {
   text: string;
+  audience_mode?: AudienceMode;
   goal?: ImproveGoal;
   installation_id: string;
   client: string;
