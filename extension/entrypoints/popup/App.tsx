@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FocusEvent } from "react";
+import { useState, useEffect, useCallback, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
 import { ActionBar } from "./components/ActionBar";
@@ -122,6 +122,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const hasUserSelectedGoalRef = useRef(false);
 
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
@@ -151,6 +152,7 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   useEffect(() => {
     if (!modeReady || !audienceMode) return;
+    if (hasUserSelectedGoalRef.current) return;
     setGoal(defaultGoalForMode(audienceMode, detectedAiGoal));
   }, [audienceMode, detectedAiGoal, modeReady]);
 
@@ -359,8 +361,14 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   const handleDismissError = useCallback(() => setError(null), []);
 
+  const handleGoalChange = useCallback((nextGoal: ImproveGoal) => {
+    hasUserSelectedGoalRef.current = true;
+    setGoal(nextGoal);
+  }, []);
+
   const handleModeSelection = useCallback(
     async (mode: AudienceMode) => {
+      hasUserSelectedGoalRef.current = false;
       setAudienceModeState(mode);
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
       setShowSettings(false);
@@ -514,7 +522,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                 mode={audienceMode}
                 goal={goal}
                 loading={loading}
-                onGoalChange={setGoal}
+                onGoalChange={handleGoalChange}
                 onOriginalChange={setOriginal}
                 onImprove={handleImprove}
               />
