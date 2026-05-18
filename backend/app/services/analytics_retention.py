@@ -28,9 +28,15 @@ def retention_cutoff_utc(
     now: datetime | None = None, retention_months: int | None = None
 ) -> datetime:
     current = now or datetime.now(UTC)
+    if current.tzinfo is None or current.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+
     months = (
         retention_months if retention_months is not None else settings.analytics_retention_months
     )
+    if months <= 0:
+        raise ValueError("retention_months must be positive")
+
     return _subtract_calendar_months(current, months)
 
 
@@ -42,4 +48,4 @@ async def cleanup_analytics_events(
     cutoff = retention_cutoff_utc(now=now, retention_months=retention_months)
     result = await db.execute(delete(AnalyticsEvent).where(AnalyticsEvent.occurred_at < cutoff))
     await db.commit()
-    return int(result.rowcount or 0)
+    return max(int(result.rowcount or 0), 0)
