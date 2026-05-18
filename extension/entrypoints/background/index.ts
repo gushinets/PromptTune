@@ -190,13 +190,10 @@ export default defineBackground(() => {
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
         let sentEventIds = new Set<string>();
         try {
-          const response = await apiClient.events(batch);
-          const rejectedIds = new Set((response.rejected ?? []).map((item) => item.event_id));
-          sentEventIds = new Set(
-            batch
-              .filter((event) => !rejectedIds.has(event.event_id))
-              .map((event) => event.event_id),
-          );
+          await apiClient.events(batch);
+          // Backend handled each batch item terminally on 200
+          // (accepted, deduplicated, or rejected).
+          sentEventIds = new Set(batch.map((event) => event.event_id));
         } catch (error) {
           if (
             error instanceof ApiError &&
@@ -206,10 +203,9 @@ export default defineBackground(() => {
           ) {
             for (const event of batch) {
               try {
-                const single = await apiClient.events([event]);
-                if (!(single.rejected ?? []).some((item) => item.event_id === event.event_id)) {
-                  sentEventIds.add(event.event_id);
-                }
+                await apiClient.events([event]);
+                // Single-item 200 is terminal as well, including rejected.
+                sentEventIds.add(event.event_id);
               } catch (singleError) {
                 if (
                   singleError instanceof ApiError &&
