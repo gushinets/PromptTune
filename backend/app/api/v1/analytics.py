@@ -35,8 +35,22 @@ _FORBIDDEN_PROPERTY_KEYS = {
 _MAX_PROPERTIES_JSON_BYTES = 8 * 1024
 
 
+def _collect_forbidden_keys(payload: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key in _FORBIDDEN_PROPERTY_KEYS:
+                found.add(key)
+            found.update(_collect_forbidden_keys(value))
+        return found
+    if isinstance(payload, list):
+        for item in payload:
+            found.update(_collect_forbidden_keys(item))
+    return found
+
+
 def _validate_event_payload(properties: dict[str, Any]) -> None:
-    intersect = _FORBIDDEN_PROPERTY_KEYS.intersection(properties.keys())
+    intersect = _collect_forbidden_keys(properties)
     if intersect:
         keys = ", ".join(sorted(intersect))
         raise HTTPException(status_code=422, detail=f"forbidden analytics properties: {keys}")
@@ -96,6 +110,7 @@ async def ingest_events(
             continue
 
         try:
+            inserted = False
             begin_ctx = db.begin_nested()
             if iscoroutine(begin_ctx):
                 begin_ctx = await begin_ctx
@@ -120,6 +135,8 @@ async def ingest_events(
                         properties=event.properties,
                     )
                 )
+                inserted = True
+            if inserted:
                 accepted += 1
         except IntegrityError:
             deduplicated += 1

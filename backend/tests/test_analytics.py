@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 
@@ -112,6 +113,35 @@ async def test_events_ingest_rejects_forbidden_properties(client: AsyncClient, m
                     "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "content",
                     "properties": {"prompt": "raw prompt text"},
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted"] == 0
+    assert payload["deduplicated"] == 0
+    assert len(payload["rejected"]) == 1
+    assert "forbidden analytics properties" in payload["rejected"][0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_events_ingest_rejects_nested_forbidden_properties(
+    client: AsyncClient, mock_db, mock_redis
+):
+    response = await client.post(
+        "/v1/events",
+        json={
+            "events": [
+                {
+                    "event_id": "evt-1",
+                    "name": "prompt_submitted",
+                    "user_id": "inst-1",
+                    "session_id": "sess-1",
+                    "occurred_at": datetime.now(UTC).isoformat(),
+                    "source": "content",
+                    "properties": {"meta": {"prompt": "raw prompt text"}},
                 }
             ]
         },
@@ -300,3 +330,38 @@ async def test_events_ingest_returns_503_when_analytics_disabled(
         settings.analytics_enabled = previous
 
     assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_events_ingest_does_not_count_accepted_on_savepoint_integrity_error(
+    client: AsyncClient, mock_db, mock_redis
+):
+    class _FailingBeginNested:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            raise IntegrityError("insert", {}, Exception("duplicate key"))
+
+    mock_db.begin_nested = Mock(return_value=_FailingBeginNested())
+    mock_db.get = AsyncMock(return_value=None)
+
+    response = await client.post(
+        "/v1/events",
+        json={
+            "events": [
+                {
+                    "event_id": "evt-dup-1",
+                    "name": "popup_opened",
+                    "user_id": "inst-1",
+                    "session_id": "sess-1",
+                    "occurred_at": datetime.now(UTC).isoformat(),
+                    "source": "popup",
+                    "properties": {},
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"accepted": 0, "deduplicated": 1, "rejected": []}

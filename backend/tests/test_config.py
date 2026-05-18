@@ -77,3 +77,14 @@ def test_validate_rejects_empty_ip_salt():
         assert str(exc) == "IP_SALT must not be empty"
     else:
         raise AssertionError("Expected ValueError")
+
+
+def test_from_env_rejects_invalid_analytics_enabled_value(monkeypatch):
+    monkeypatch.setenv("ANALYTICS_ENABLED", "flase")
+
+    try:
+        BotConfig.from_env()
+    except ValueError as exc:
+        assert "ANALYTICS_ENABLED must be a boolean-like value" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")

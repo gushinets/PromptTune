@@ -70,7 +70,10 @@ def _get_bool_env(name: str, default: bool) -> bool:
         return True
     if normalized in {"0", "false", "no", "n", "off"}:
         return False
-    return default
+    raise ValueError(
+        f"{name} must be a boolean-like value: "
+        "'1/0', 'true/false', 'yes/no', 'on/off'. Got: {value}"
+    )
 
 
 _load_env()
