@@ -43,16 +43,19 @@ _MAX_PROPERTIES_JSON_BYTES = 8 * 1024
 
 def _collect_forbidden_keys(payload: Any) -> set[str]:
     found: set[str] = set()
-    if isinstance(payload, dict):
-        for key, value in payload.items():
-            normalized_key = key.lower() if isinstance(key, str) else str(key).lower()
-            if normalized_key in _FORBIDDEN_PROPERTY_KEYS_LOWER:
-                found.add(key)
-            found.update(_collect_forbidden_keys(value))
-        return found
-    if isinstance(payload, list):
-        for item in payload:
-            found.update(_collect_forbidden_keys(item))
+    stack: list[Any] = [payload]
+
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            for key, value in current.items():
+                normalized_key = key.lower() if isinstance(key, str) else str(key).lower()
+                if normalized_key in _FORBIDDEN_PROPERTY_KEYS_LOWER:
+                    found.add(key)
+                stack.append(value)
+            continue
+        if isinstance(current, list):
+            stack.extend(current)
     return found
 
 

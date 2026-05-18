@@ -185,6 +185,43 @@ async def test_events_ingest_rejects_case_variant_forbidden_properties(
 
 
 @pytest.mark.asyncio
+async def test_events_ingest_handles_deep_nested_properties_without_500(
+    client: AsyncClient, mock_db, mock_redis
+):
+    deep: dict[str, object] = {}
+    current = deep
+    for _ in range(300):
+        child: dict[str, object] = {}
+        current["nested"] = child
+        current = child
+    current["Prompt"] = "raw prompt text"
+
+    response = await client.post(
+        "/v1/events",
+        json={
+            "events": [
+                {
+                    "event_id": "evt-deep-1",
+                    "name": "prompt_submitted",
+                    "user_id": "inst-1",
+                    "session_id": "sess-1",
+                    "occurred_at": datetime.now(UTC).isoformat(),
+                    "source": "content",
+                    "properties": deep,
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted"] == 0
+    assert payload["deduplicated"] == 0
+    assert len(payload["rejected"]) == 1
+    assert "forbidden analytics properties" in payload["rejected"][0]["reason"]
+
+
+@pytest.mark.asyncio
 async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, mock_db, mock_redis):
     names = [
         "extension_installed",
