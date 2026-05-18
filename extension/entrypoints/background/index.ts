@@ -323,7 +323,7 @@ export default defineBackground(() => {
           const totalUses = Number(totalUsesData[STORAGE_KEYS.TOTAL_USES] ?? 0);
           await browser.storage.local.set({ [STORAGE_KEYS.TOTAL_USES]: totalUses + 1 });
 
-          await flushAnalytics();
+          void flushAnalytics();
         }
 
         const startedAt = Date.now();
