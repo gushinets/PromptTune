@@ -50,6 +50,7 @@ def mock_redis():
     redis_mock.get = AsyncMock(return_value=None)  # no existing bucket → new UUID
     redis_mock.set = AsyncMock(return_value=True)
     redis_mock.expire = AsyncMock(return_value=True)
+    redis_mock.incr = AsyncMock(return_value=1)
     # check() uses redis.mget to read counters (0 usage → allowed)
     redis_mock.mget = AsyncMock(return_value=[None, None])
     redis_mock.ping = AsyncMock(return_value=True)

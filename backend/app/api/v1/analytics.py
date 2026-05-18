@@ -1,6 +1,9 @@
 import json
+from datetime import UTC, datetime
+from hashlib import sha256
 from typing import Any
 
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas import AnalyticsBatchRequest, AnalyticsBatchResponse
 from app.config import settings
 from app.db.models import AnalyticsEvent
-from app.dependencies import get_db
+from app.dependencies import (
+    ensure_installation_id_when_ip_present,
+    get_client_ip,
+    get_db,
+    get_redis,
+)
 
 router = APIRouter()
 
@@ -37,13 +45,32 @@ def _validate_event_payload(properties: dict[str, Any]) -> None:
         raise HTTPException(status_code=422, detail="analytics properties too large")
 
 
+def _hash_ip(ip: str) -> str:
+    payload = f"{ip}{settings.ip_salt}"
+    return sha256(payload.encode()).hexdigest()
+
+
+async def _enforce_ingest_rate_limit(redis: aioredis.Redis, client_ip: str) -> None:
+    now_bucket = datetime.now(UTC).strftime("%Y%m%d%H%M")
+    key = f"rl:analytics:ip:{_hash_ip(client_ip)}:{now_bucket}"
+    count = await redis.incr(key)
+    if count == 1:
+        await redis.expire(key, 90)
+    if count > settings.analytics_ingest_req_per_min:
+        raise HTTPException(status_code=429, detail="analytics rate limit exceeded")
+
+
 @router.post("/events", response_model=AnalyticsBatchResponse)
 async def ingest_events(
     req: AnalyticsBatchRequest,
     db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+    client_ip: str = Depends(get_client_ip),
 ) -> AnalyticsBatchResponse:
     if not settings.analytics_enabled:
         raise HTTPException(status_code=503, detail="analytics ingestion is disabled")
+
+    await _enforce_ingest_rate_limit(redis, client_ip)
 
     accepted = 0
     deduplicated = 0
@@ -56,9 +83,14 @@ async def ingest_events(
             )
 
         _validate_event_payload(event.properties)
+        if event.source in _EXTENSION_SOURCES:
+            await ensure_installation_id_when_ip_present(client_ip, event.user_id, redis)
 
         try:
-            async with db.begin_nested():
+            begin_ctx = db.begin_nested()
+            if hasattr(begin_ctx, "__await__"):
+                begin_ctx = await begin_ctx
+            async with begin_ctx:
                 existing = await db.get(AnalyticsEvent, event.event_id)
                 if existing:
                     deduplicated += 1

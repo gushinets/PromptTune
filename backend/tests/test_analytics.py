@@ -8,7 +8,7 @@ from app.config import settings
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_accepts_valid_batch(client: AsyncClient, mock_db):
+async def test_events_ingest_accepts_valid_batch(client: AsyncClient, mock_db, mock_redis):
     response = await client.post(
         "/v1/events",
         json={
@@ -37,7 +37,7 @@ async def test_events_ingest_accepts_valid_batch(client: AsyncClient, mock_db):
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_deduplicates_by_event_id(client: AsyncClient, mock_db):
+async def test_events_ingest_deduplicates_by_event_id(client: AsyncClient, mock_db, mock_redis):
     mock_db.get = AsyncMock(side_effect=[None, Mock()])
 
     response = await client.post(
@@ -71,7 +71,9 @@ async def test_events_ingest_deduplicates_by_event_id(client: AsyncClient, mock_
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_requires_session_for_extension_sources(client: AsyncClient, mock_db):
+async def test_events_ingest_requires_session_for_extension_sources(
+    client: AsyncClient, mock_db, mock_redis
+):
     response = await client.post(
         "/v1/events",
         json={
@@ -93,7 +95,7 @@ async def test_events_ingest_requires_session_for_extension_sources(client: Asyn
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_rejects_forbidden_properties(client: AsyncClient, mock_db):
+async def test_events_ingest_rejects_forbidden_properties(client: AsyncClient, mock_db, mock_redis):
     response = await client.post(
         "/v1/events",
         json={
@@ -116,7 +118,7 @@ async def test_events_ingest_rejects_forbidden_properties(client: AsyncClient, m
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, mock_db):
+async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, mock_db, mock_redis):
     names = [
         "extension_installed",
         "onboarding_completed",
@@ -153,7 +155,7 @@ async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, moc
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_rejects_unknown_event_name(client: AsyncClient, mock_db):
+async def test_events_ingest_rejects_unknown_event_name(client: AsyncClient, mock_db, mock_redis):
     response = await client.post(
         "/v1/events",
         json={
@@ -175,7 +177,9 @@ async def test_events_ingest_rejects_unknown_event_name(client: AsyncClient, moc
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_allows_nullable_session_for_forms_import(client: AsyncClient, mock_db):
+async def test_events_ingest_allows_nullable_session_for_forms_import(
+    client: AsyncClient, mock_db, mock_redis
+):
     response = await client.post(
         "/v1/events",
         json={
@@ -198,7 +202,7 @@ async def test_events_ingest_allows_nullable_session_for_forms_import(client: As
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_rejects_oversized_properties(client: AsyncClient, mock_db):
+async def test_events_ingest_rejects_oversized_properties(client: AsyncClient, mock_db, mock_redis):
     response = await client.post(
         "/v1/events",
         json={
@@ -221,7 +225,9 @@ async def test_events_ingest_rejects_oversized_properties(client: AsyncClient, m
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_returns_503_when_analytics_disabled(client: AsyncClient, mock_db):
+async def test_events_ingest_returns_503_when_analytics_disabled(
+    client: AsyncClient, mock_db, mock_redis
+):
     previous = settings.analytics_enabled
     settings.analytics_enabled = False
     try:

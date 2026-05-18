@@ -159,10 +159,11 @@ export default defineBackground(() => {
 
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
         await apiClient.events(batch);
+        const sentEventIds = new Set(batch.map((event) => event.event_id));
         await enqueueQueueOp(async () => {
           const current = await getQueue();
-          // Drop only the already-sent prefix, preserving events enqueued meanwhile.
-          await setQueue(current.slice(batch.length));
+          // Remove only actually sent events by id, preserving unsent entries.
+          await setQueue(current.filter((event) => !sentEventIds.has(event.event_id)));
         });
       }
     } catch {

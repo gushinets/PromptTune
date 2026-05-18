@@ -89,6 +89,7 @@ class BotConfig:
     ip_salt: str
     analytics_enabled: bool
     analytics_retention_months: int
+    analytics_ingest_req_per_min: int
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -125,6 +126,7 @@ class BotConfig:
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
             analytics_enabled=(_get_env("ANALYTICS_ENABLED", "true") or "true").lower() == "true",
             analytics_retention_months=_get_int_env("ANALYTICS_RETENTION_MONTHS", 13),
+            analytics_ingest_req_per_min=_get_int_env("ANALYTICS_INGEST_REQ_PER_MIN", 120),
         )
 
     def validate(self) -> None:
@@ -180,6 +182,11 @@ class BotConfig:
             raise ValueError(
                 "ANALYTICS_RETENTION_MONTHS must be positive. "
                 f"Got: {self.analytics_retention_months}"
+            )
+        if self.analytics_ingest_req_per_min <= 0:
+            raise ValueError(
+                "ANALYTICS_INGEST_REQ_PER_MIN must be positive. "
+                f"Got: {self.analytics_ingest_req_per_min}"
             )
 
     def litellm_model_id(self) -> str:
