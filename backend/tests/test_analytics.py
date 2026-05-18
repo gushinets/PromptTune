@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from httpx import AsyncClient
+
 from app.config import settings
 
 
@@ -17,7 +18,7 @@ async def test_events_ingest_accepts_valid_batch(client: AsyncClient, mock_db):
                     "name": "popup_opened",
                     "user_id": "inst-1",
                     "session_id": "sess-1",
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "extension_version": "1.0.0",
                     "os": "mac",
                     "chrome_version": "136",
@@ -48,7 +49,7 @@ async def test_events_ingest_deduplicates_by_event_id(client: AsyncClient, mock_
                     "name": "popup_opened",
                     "user_id": "inst-1",
                     "session_id": "sess-1",
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "popup",
                     "properties": {},
                 },
@@ -57,7 +58,7 @@ async def test_events_ingest_deduplicates_by_event_id(client: AsyncClient, mock_
                     "name": "popup_opened",
                     "user_id": "inst-1",
                     "session_id": "sess-1",
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "popup",
                     "properties": {},
                 },
@@ -79,7 +80,7 @@ async def test_events_ingest_requires_session_for_extension_sources(client: Asyn
                     "event_id": "evt-1",
                     "name": "popup_opened",
                     "user_id": "inst-1",
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "popup",
                     "properties": {},
                 }
@@ -102,7 +103,7 @@ async def test_events_ingest_rejects_forbidden_properties(client: AsyncClient, m
                     "name": "prompt_submitted",
                     "user_id": "inst-1",
                     "session_id": "sess-1",
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "content",
                     "properties": {"prompt": "raw prompt text"},
                 }
@@ -138,7 +139,7 @@ async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, moc
             "name": name,
             "user_id": "inst-1",
             "session_id": None,
-            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "occurred_at": datetime.now(UTC).isoformat(),
             "source": "forms_import",
             "properties": {},
         }
@@ -162,7 +163,7 @@ async def test_events_ingest_rejects_unknown_event_name(client: AsyncClient, moc
                     "name": "unknown_event",
                     "user_id": "inst-1",
                     "session_id": "sess-1",
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "popup",
                     "properties": {},
                 }
@@ -184,7 +185,7 @@ async def test_events_ingest_allows_nullable_session_for_forms_import(client: As
                     "name": "uninstall_reason_submitted",
                     "user_id": "inst-forms-1",
                     "session_id": None,
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "forms_import",
                     "properties": {"reason": "too_many_bugs"},
                 }
@@ -207,7 +208,7 @@ async def test_events_ingest_rejects_oversized_properties(client: AsyncClient, m
                     "name": "popup_opened",
                     "user_id": "inst-1",
                     "session_id": "sess-1",
-                    "occurred_at": datetime.now(timezone.utc).isoformat(),
+                    "occurred_at": datetime.now(UTC).isoformat(),
                     "source": "popup",
                     "properties": {"blob": "x" * 9000},
                 }
@@ -233,7 +234,7 @@ async def test_events_ingest_returns_503_when_analytics_disabled(client: AsyncCl
                         "name": "popup_opened",
                         "user_id": "inst-1",
                         "session_id": "sess-1",
-                        "occurred_at": datetime.now(timezone.utc).isoformat(),
+                        "occurred_at": datetime.now(UTC).isoformat(),
                         "source": "popup",
                         "properties": {},
                     }

@@ -380,7 +380,19 @@ export function App({ viewMode = "popup" }: AppProps) {
     } finally {
       setLoading(false);
     }
-  }, [audienceMode, goal, original, isExhausted, mapErrorToToast, rateLimit.total, t]);
+  }, [
+    audienceMode,
+    attemptN,
+    goal,
+    isExhausted,
+    lastRequestId,
+    mapErrorToToast,
+    original,
+    rateLimit.total,
+    siteHostname,
+    t,
+    viewMode,
+  ]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     const originalTrimmed = original.trim();

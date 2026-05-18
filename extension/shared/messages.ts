@@ -10,7 +10,10 @@ export type Message =
         goal?: ImproveGoal;
         site?: string;
         page_url?: string;
-        analytics_context?: AnalyticsTrackContext & { view_mode?: "popup" | "sidepanel"; attempt_n?: number };
+        analytics_context?: AnalyticsTrackContext & {
+          view_mode?: "popup" | "sidepanel";
+          attempt_n?: number;
+        };
       };
     }
   | { type: "IMPROVE_RESULT"; payload: ImproveResponse }

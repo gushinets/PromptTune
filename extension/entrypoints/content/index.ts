@@ -81,7 +81,7 @@ export default defineContentScript({
 
           if (result?.improved_text.trim()) {
             adapter.setText(field, result.improved_text);
-            await trackEvent(
+            void trackEvent(
               "result_displayed",
               {
                 request_id: result.request_id,
@@ -90,7 +90,7 @@ export default defineContentScript({
               },
               "content",
             );
-            await trackEvent(
+            void trackEvent(
               "result_copied",
               {
                 request_id: result.request_id,

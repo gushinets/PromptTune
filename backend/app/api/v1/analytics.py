@@ -2,12 +2,13 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import AnalyticsBatchRequest, AnalyticsBatchResponse
 from app.config import settings
-from app.dependencies import get_db
 from app.db.models import AnalyticsEvent
+from app.dependencies import get_db
 
 router = APIRouter()
 
@@ -56,27 +57,32 @@ async def ingest_events(
 
         _validate_event_payload(event.properties)
 
-        existing = await db.get(AnalyticsEvent, event.event_id)
-        if existing:
+        try:
+            async with db.begin_nested():
+                existing = await db.get(AnalyticsEvent, event.event_id)
+                if existing:
+                    deduplicated += 1
+                    continue
+
+                db.add(
+                    AnalyticsEvent(
+                        event_id=event.event_id,
+                        event_name=event.name,
+                        user_id=event.user_id,
+                        session_id=event.session_id,
+                        occurred_at=event.occurred_at,
+                        extension_version=event.extension_version,
+                        os=event.os,
+                        chrome_version=event.chrome_version,
+                        user_plan=event.user_plan,
+                        source=event.source,
+                        properties=event.properties,
+                    )
+                )
+                accepted += 1
+        except IntegrityError:
             deduplicated += 1
             continue
-
-        db.add(
-            AnalyticsEvent(
-                event_id=event.event_id,
-                event_name=event.name.value,
-                user_id=event.user_id,
-                session_id=event.session_id,
-                occurred_at=event.occurred_at,
-                extension_version=event.extension_version,
-                os=event.os,
-                chrome_version=event.chrome_version,
-                user_plan=event.user_plan,
-                source=event.source,
-                properties=event.properties,
-            )
-        )
-        accepted += 1
 
     await db.commit()
     return AnalyticsBatchResponse(accepted=accepted, deduplicated=deduplicated)

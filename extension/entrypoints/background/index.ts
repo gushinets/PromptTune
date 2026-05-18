@@ -35,6 +35,7 @@ export default defineBackground(() => {
   const clientVersion = browser.runtime.getManifest().version;
 
   let sessionOpChain: Promise<void> = Promise.resolve();
+  let queueOpChain: Promise<void> = Promise.resolve();
   let flushInFlight = false;
 
   const enqueueSessionOp = async <T>(op: () => Promise<T>): Promise<T> => {
@@ -58,9 +59,32 @@ export default defineBackground(() => {
     return out;
   };
 
+  const enqueueQueueOp = async <T>(op: () => Promise<T>): Promise<T> => {
+    let resolveOut: (value: T) => void;
+    let rejectOut: (reason?: unknown) => void;
+    const out = new Promise<T>((resolve, reject) => {
+      resolveOut = resolve;
+      rejectOut = reject;
+    });
+
+    queueOpChain = queueOpChain
+      .then(async () => {
+        try {
+          resolveOut(await op());
+        } catch (err) {
+          rejectOut(err);
+        }
+      })
+      .catch(() => undefined);
+
+    return out;
+  };
+
   async function getSessionState(): Promise<AnalyticsSessionState | null> {
     const data = await browser.storage.local.get(STORAGE_KEYS.ANALYTICS_SESSION_STATE);
-    return (data[STORAGE_KEYS.ANALYTICS_SESSION_STATE] as AnalyticsSessionState | undefined) ?? null;
+    return (
+      (data[STORAGE_KEYS.ANALYTICS_SESSION_STATE] as AnalyticsSessionState | undefined) ?? null
+    );
   }
 
   async function setSessionState(state: AnalyticsSessionState): Promise<void> {
@@ -117,10 +141,12 @@ export default defineBackground(() => {
   }
 
   async function enqueueEvent(event: AnalyticsEventOut): Promise<void> {
-    const queue = await getQueue();
-    queue.push(event);
-    const next = queue.slice(-MAX_QUEUE_ITEMS);
-    await setQueue(next);
+    await enqueueQueueOp(async () => {
+      const queue = await getQueue();
+      queue.push(event);
+      const next = queue.slice(-MAX_QUEUE_ITEMS);
+      await setQueue(next);
+    });
   }
 
   async function flushAnalytics(): Promise<void> {
@@ -128,12 +154,16 @@ export default defineBackground(() => {
     flushInFlight = true;
     try {
       while (true) {
-        const queue = await getQueue();
+        const queue = await enqueueQueueOp(async () => getQueue());
         if (!queue.length) return;
 
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
         await apiClient.events(batch);
-        await setQueue(queue.slice(batch.length));
+        await enqueueQueueOp(async () => {
+          const current = await getQueue();
+          // Drop only the already-sent prefix, preserving events enqueued meanwhile.
+          await setQueue(current.slice(batch.length));
+        });
       }
     } catch {
       // Keep queue for later retry.
@@ -189,7 +219,9 @@ export default defineBackground(() => {
         const minutes = installAt
           ? Math.max(0, Math.floor((Date.now() - new Date(installAt).getTime()) / 60000))
           : undefined;
-        await browser.storage.local.set({ [STORAGE_KEYS.FIRST_RESULT_COPIED_AT]: new Date().toISOString() });
+        await browser.storage.local.set({
+          [STORAGE_KEYS.FIRST_RESULT_COPIED_AT]: new Date().toISOString(),
+        });
         const firstEvent = await buildEvent(
           "first_result_copied",
           minutes !== undefined ? { time_since_install_min: minutes } : {},
@@ -264,7 +296,9 @@ export default defineBackground(() => {
           );
           await enqueueEvent(promptEvent);
 
-          const firstPromptData = await browser.storage.local.get(STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT);
+          const firstPromptData = await browser.storage.local.get(
+            STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT,
+          );
           if (!firstPromptData[STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT]) {
             const installData = await browser.storage.local.get(STORAGE_KEYS.INSTALL_AT);
             const installAt = installData[STORAGE_KEYS.INSTALL_AT] as string | undefined;

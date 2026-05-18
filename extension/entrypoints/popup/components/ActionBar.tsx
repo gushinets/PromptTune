@@ -98,7 +98,7 @@ export function ActionBar({
   const handleCopy = async () => {
     await navigator.clipboard.writeText(improved);
     if (requestId) {
-      await trackEvent(
+      void trackEvent(
         "result_copied",
         {
           request_id: requestId,
@@ -130,7 +130,7 @@ export function ActionBar({
         payload: { text: improved },
       });
       if (requestId) {
-        await trackEvent(
+        void trackEvent(
           "result_copied",
           {
             request_id: requestId,

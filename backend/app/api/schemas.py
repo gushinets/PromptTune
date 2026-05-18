@@ -1,8 +1,7 @@
-from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from app.goals import AudienceMode, ImproveGoal
 
@@ -50,7 +49,7 @@ class SavePromptResponse(BaseModel):
     prompt_id: str
 
 
-class AnalyticsEventName(str, Enum):
+class AnalyticsEventName(StrEnum):
     extension_installed = "extension_installed"
     onboarding_completed = "onboarding_completed"
     onboarding_abandoned = "onboarding_abandoned"
@@ -67,11 +66,11 @@ class AnalyticsEventName(str, Enum):
 
 
 class AnalyticsEventIn(BaseModel):
-    event_id: str = Field(..., min_length=1, max_length=64)
+    event_id: str = Field(..., min_length=1, max_length=36)
     name: AnalyticsEventName
     user_id: str = Field(..., min_length=1, max_length=64)
     session_id: str | None = Field(default=None, max_length=64)
-    occurred_at: datetime
+    occurred_at: AwareDatetime
     extension_version: str | None = Field(default=None, max_length=64)
     os: str | None = Field(default=None, max_length=32)
     chrome_version: str | None = Field(default=None, max_length=128)
