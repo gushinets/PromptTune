@@ -73,9 +73,11 @@ def _hash_ip(ip: str) -> str:
 async def _enforce_ingest_rate_limit(redis: aioredis.Redis, client_ip: str) -> None:
     now_bucket = datetime.now(UTC).strftime("%Y%m%d%H%M")
     key = f"rl:analytics:ip:{_hash_ip(client_ip)}:{now_bucket}"
-    count = await redis.incr(key)
-    if count == 1:
-        await redis.expire(key, 90)
+    pipe = redis.pipeline()
+    pipe.incr(key)
+    pipe.expire(key, 90)
+    result = await pipe.execute()
+    count = int(result[0]) if result else 0
     if count > settings.analytics_ingest_req_per_min:
         raise HTTPException(status_code=429, detail="analytics rate limit exceeded")
 
