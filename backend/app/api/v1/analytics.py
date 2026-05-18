@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import AnalyticsBatchRequest, AnalyticsBatchResponse
+from app.api.schemas import AnalyticsBatchRequest, AnalyticsBatchResponse, AnalyticsEventSource
 from app.config import settings
 from app.db.models import AnalyticsEvent
 from app.dependencies import (
@@ -21,7 +21,12 @@ from app.dependencies import (
 
 router = APIRouter()
 
-_EXTENSION_SOURCES = {"background", "popup", "sidepanel", "content"}
+_EXTENSION_SOURCES = {
+    AnalyticsEventSource.background,
+    AnalyticsEventSource.popup,
+    AnalyticsEventSource.sidepanel,
+    AnalyticsEventSource.content,
+}
 _FORBIDDEN_PROPERTY_KEYS = {
     "text",
     "prompt",

@@ -323,14 +323,6 @@ export function App({ viewMode = "popup" }: AppProps) {
 
     setLoading(true);
     setError(null);
-    if (isRegeneration) {
-      const regenAttempt = attemptN + 1;
-      void trackEvent(
-        "result_regenerated",
-        { attempt_n: regenAttempt, request_id: lastRequestId },
-        viewMode,
-      );
-    }
     setImproved("");
     setChanges([]);
 
@@ -357,6 +349,13 @@ export function App({ viewMode = "popup" }: AppProps) {
         setLastModel(result.model ?? null);
         setLastLatencyMs(typeof result.latency_ms === "number" ? result.latency_ms : null);
         setAttemptN(nextAttempt);
+        if (isRegeneration) {
+          void trackEvent(
+            "result_regenerated",
+            { attempt_n: nextAttempt, request_id: lastRequestId },
+            viewMode,
+          );
+        }
         void trackEvent(
           "result_displayed",
           {

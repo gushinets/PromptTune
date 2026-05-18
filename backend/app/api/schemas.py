@@ -65,6 +65,14 @@ class AnalyticsEventName(StrEnum):
     uninstall_reason_submitted = "uninstall_reason_submitted"
 
 
+class AnalyticsEventSource(StrEnum):
+    background = "background"
+    popup = "popup"
+    sidepanel = "sidepanel"
+    content = "content"
+    forms_import = "forms_import"
+
+
 class AnalyticsEventIn(BaseModel):
     event_id: str = Field(..., min_length=1, max_length=36)
     name: AnalyticsEventName
@@ -75,7 +83,7 @@ class AnalyticsEventIn(BaseModel):
     os: str | None = Field(default=None, max_length=32)
     chrome_version: str | None = Field(default=None, max_length=128)
     user_plan: str | None = Field(default=None, max_length=32)
-    source: str | None = Field(default=None, max_length=32)
+    source: AnalyticsEventSource
     properties: dict[str, Any] = Field(default_factory=dict)
 
 
