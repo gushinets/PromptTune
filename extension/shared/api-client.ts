@@ -114,9 +114,13 @@ export const apiClient = {
     return get("/v1/limits", { installation_id });
   },
 
-  events(events: AnalyticsEventOut[]): Promise<{ accepted: number; deduplicated: number }> {
+  events(events: AnalyticsEventOut[]): Promise<{
+    accepted: number;
+    deduplicated: number;
+    rejected: Array<{ event_id: string; reason: string }>;
+  }> {
     if (BACKEND_MODE !== "fastapi") {
-      return Promise.resolve({ accepted: 0, deduplicated: 0 });
+      return Promise.resolve({ accepted: 0, deduplicated: 0, rejected: [] });
     }
     return post("/v1/events", { events });
   },

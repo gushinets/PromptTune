@@ -188,8 +188,15 @@ export default defineBackground(() => {
         if (!queue.length) return;
 
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
+        let sentEventIds = new Set<string>();
         try {
-          await apiClient.events(batch);
+          const response = await apiClient.events(batch);
+          const rejectedIds = new Set((response.rejected ?? []).map((item) => item.event_id));
+          sentEventIds = new Set(
+            batch
+              .filter((event) => !rejectedIds.has(event.event_id))
+              .map((event) => event.event_id),
+          );
         } catch (error) {
           if (
             error instanceof ApiError &&
@@ -197,16 +204,30 @@ export default defineBackground(() => {
             error.status < 500 &&
             error.status !== 429
           ) {
-            const sentEventIds = new Set(batch.map((event) => event.event_id));
-            await enqueueQueueOp(async () => {
-              const current = await getQueue();
-              await setQueue(current.filter((event) => !sentEventIds.has(event.event_id)));
-            });
-            continue;
+            for (const event of batch) {
+              try {
+                const single = await apiClient.events([event]);
+                if (!(single.rejected ?? []).some((item) => item.event_id === event.event_id)) {
+                  sentEventIds.add(event.event_id);
+                }
+              } catch (singleError) {
+                if (
+                  singleError instanceof ApiError &&
+                  singleError.status >= 400 &&
+                  singleError.status < 500 &&
+                  singleError.status !== 429
+                ) {
+                  sentEventIds.add(event.event_id);
+                  continue;
+                }
+                throw singleError;
+              }
+            }
+          } else {
+            throw error;
           }
-          throw error;
         }
-        const sentEventIds = new Set(batch.map((event) => event.event_id));
+
         await enqueueQueueOp(async () => {
           const current = await getQueue();
           // Remove only actually sent events by id, preserving unsent entries.

@@ -90,8 +90,12 @@ async def test_events_ingest_requires_session_for_extension_sources(
         },
     )
 
-    assert response.status_code == 422
-    assert "session_id is required" in response.json()["detail"]
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted"] == 0
+    assert payload["deduplicated"] == 0
+    assert len(payload["rejected"]) == 1
+    assert "session_id is required" in payload["rejected"][0]["reason"]
 
 
 @pytest.mark.asyncio
@@ -113,8 +117,12 @@ async def test_events_ingest_rejects_forbidden_properties(client: AsyncClient, m
         },
     )
 
-    assert response.status_code == 422
-    assert "forbidden analytics properties" in response.json()["detail"]
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted"] == 0
+    assert payload["deduplicated"] == 0
+    assert len(payload["rejected"]) == 1
+    assert "forbidden analytics properties" in payload["rejected"][0]["reason"]
 
 
 @pytest.mark.asyncio
@@ -220,8 +228,49 @@ async def test_events_ingest_rejects_oversized_properties(client: AsyncClient, m
         },
     )
 
-    assert response.status_code == 422
-    assert "too large" in response.json()["detail"]
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted"] == 0
+    assert payload["deduplicated"] == 0
+    assert len(payload["rejected"]) == 1
+    assert "too large" in payload["rejected"][0]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_events_ingest_keeps_valid_events_when_batch_contains_invalid(
+    client: AsyncClient, mock_db, mock_redis
+):
+    response = await client.post(
+        "/v1/events",
+        json={
+            "events": [
+                {
+                    "event_id": "evt-good-1",
+                    "name": "popup_opened",
+                    "user_id": "inst-1",
+                    "session_id": "sess-1",
+                    "occurred_at": datetime.now(UTC).isoformat(),
+                    "source": "popup",
+                    "properties": {},
+                },
+                {
+                    "event_id": "evt-bad-1",
+                    "name": "popup_opened",
+                    "user_id": "inst-1",
+                    "occurred_at": datetime.now(UTC).isoformat(),
+                    "source": "popup",
+                    "properties": {},
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted"] == 1
+    assert payload["deduplicated"] == 0
+    assert len(payload["rejected"]) == 1
+    assert payload["rejected"][0]["event_id"] == "evt-bad-1"
 
 
 @pytest.mark.asyncio

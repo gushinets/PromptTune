@@ -75,17 +75,25 @@ async def ingest_events(
 
     accepted = 0
     deduplicated = 0
+    rejected: list[dict[str, str]] = []
 
     for event in req.events:
         if event.source in _EXTENSION_SOURCES and not event.session_id:
-            raise HTTPException(
-                status_code=422,
-                detail=f"session_id is required for extension event source: {event.source}",
+            rejected.append(
+                {
+                    "event_id": event.event_id,
+                    "reason": f"session_id is required for extension event source: {event.source}",
+                }
             )
+            continue
 
-        _validate_event_payload(event.properties)
-        if event.source in _EXTENSION_SOURCES:
-            await ensure_installation_id_when_ip_present(client_ip, event.user_id, redis)
+        try:
+            _validate_event_payload(event.properties)
+            if event.source in _EXTENSION_SOURCES:
+                await ensure_installation_id_when_ip_present(client_ip, event.user_id, redis)
+        except HTTPException as exc:
+            rejected.append({"event_id": event.event_id, "reason": str(exc.detail)})
+            continue
 
         try:
             begin_ctx = db.begin_nested()
@@ -118,4 +126,4 @@ async def ingest_events(
             continue
 
     await db.commit()
-    return AnalyticsBatchResponse(accepted=accepted, deduplicated=deduplicated)
+    return AnalyticsBatchResponse(accepted=accepted, deduplicated=deduplicated, rejected=rejected)
