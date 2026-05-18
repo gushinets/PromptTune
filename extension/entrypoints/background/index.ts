@@ -185,7 +185,12 @@ export default defineBackground(() => {
     try {
       while (true) {
         const queue = await enqueueQueueOp(async () => getQueue());
-        if (!queue.length) return;
+        if (!queue.length) {
+          // Re-check once before exiting: an event may be enqueued while this flush is in-flight.
+          const latestQueue = await enqueueQueueOp(async () => getQueue());
+          if (!latestQueue.length) return;
+          continue;
+        }
 
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
         let sentEventIds = new Set<string>();
@@ -343,36 +348,39 @@ export default defineBackground(() => {
         }
 
         if (ANALYTICS_ENABLED) {
-          const promptEvent = await buildEvent(
-            "prompt_submitted",
-            {
-              prompt_length: trimmed.length,
-              site: msg.payload.site,
-              view_mode: msg.payload.analytics_context?.view_mode,
-            },
-            msg.payload.analytics_context?.source ?? "background",
-            { promptSubmitted: true },
-          );
-          await enqueueEvent(promptEvent);
-
-          const firstPrompt = await markFirstEvent(STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT);
-          if (firstPrompt.isFirst) {
-            const firstPromptEvent = await buildEvent(
-              "first_prompt_submitted",
-              firstPrompt.timeSinceInstallMin !== undefined
-                ? {
-                    time_since_install_min: firstPrompt.timeSinceInstallMin,
-                    site: msg.payload.site,
-                  }
-                : { site: msg.payload.site },
+          try {
+            const promptEvent = await buildEvent(
+              "prompt_submitted",
+              {
+                prompt_length: trimmed.length,
+                site: msg.payload.site,
+                view_mode: msg.payload.analytics_context?.view_mode,
+              },
               msg.payload.analytics_context?.source ?? "background",
+              { promptSubmitted: true },
             );
-            await enqueueEvent(firstPromptEvent);
+            await enqueueEvent(promptEvent);
+
+            const firstPrompt = await markFirstEvent(STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT);
+            if (firstPrompt.isFirst) {
+              const firstPromptEvent = await buildEvent(
+                "first_prompt_submitted",
+                firstPrompt.timeSinceInstallMin !== undefined
+                  ? {
+                      time_since_install_min: firstPrompt.timeSinceInstallMin,
+                      site: msg.payload.site,
+                    }
+                  : { site: msg.payload.site },
+                msg.payload.analytics_context?.source ?? "background",
+              );
+              await enqueueEvent(firstPromptEvent);
+            }
+
+            await incrementTotalUses();
+            void flushAnalytics();
+          } catch (analyticsError) {
+            console.warn("Analytics failed during prompt_submitted tracking", analyticsError);
           }
-
-          await incrementTotalUses();
-
-          void flushAnalytics();
         }
 
         const startedAt = Date.now();
@@ -396,27 +404,31 @@ export default defineBackground(() => {
           return { type: "IMPROVE_RESULT", payload: result };
         } catch (error: unknown) {
           if (ANALYTICS_ENABLED && error instanceof ApiError) {
-            const apiErrorEvent = await buildEvent(
-              "api_error",
-              {
-                endpoint: "/v1/improve",
-                status: error.status,
-                error_code: error.detail,
-                error_type:
-                  error.status === 429
-                    ? "rate_limit"
-                    : error.status === 401 || error.status === 403
-                      ? "auth"
-                      : error.status >= 500
-                        ? "upstream"
-                        : error.status === 422
-                          ? "validation"
-                          : "unknown",
-              },
-              msg.payload.analytics_context?.source ?? "background",
-            );
-            await enqueueEvent(apiErrorEvent);
-            await flushAnalytics();
+            try {
+              const apiErrorEvent = await buildEvent(
+                "api_error",
+                {
+                  endpoint: "/v1/improve",
+                  status: error.status,
+                  error_code: error.detail,
+                  error_type:
+                    error.status === 429
+                      ? "rate_limit"
+                      : error.status === 401 || error.status === 403
+                        ? "auth"
+                        : error.status >= 500
+                          ? "upstream"
+                          : error.status === 422
+                            ? "validation"
+                            : "unknown",
+                },
+                msg.payload.analytics_context?.source ?? "background",
+              );
+              await enqueueEvent(apiErrorEvent);
+              await flushAnalytics();
+            } catch (analyticsError) {
+              console.warn("Analytics failed during api_error tracking", analyticsError);
+            }
           }
           throw error;
         }
