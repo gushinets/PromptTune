@@ -126,6 +126,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [siteHostname, setSiteHostname] = useState<string | undefined>(undefined);
   const [siteResolved, setSiteResolved] = useState(false);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
+  const [lastRequestContextKey, setLastRequestContextKey] = useState<string | null>(null);
   const [lastModel, setLastModel] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
@@ -314,9 +315,15 @@ export function App({ viewMode = "popup" }: AppProps) {
       return;
     }
 
+    const currentRequestContextKey = `${audienceMode}|${goal}|${trimmed}`;
+    const isRegeneration =
+      !!lastRequestId &&
+      !!lastRequestContextKey &&
+      lastRequestContextKey === currentRequestContextKey;
+
     setLoading(true);
     setError(null);
-    if (lastRequestId) {
+    if (isRegeneration) {
       const regenAttempt = attemptN + 1;
       void trackEvent(
         "result_regenerated",
@@ -328,7 +335,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     setChanges([]);
 
     try {
-      const nextAttempt = lastRequestId ? attemptN + 1 : 1;
+      const nextAttempt = isRegeneration ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
         payload: {
@@ -346,6 +353,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         setImproved(result.improved_text);
         setChanges(result.changes ?? []);
         setLastRequestId(result.request_id);
+        setLastRequestContextKey(currentRequestContextKey);
         setLastModel(result.model ?? null);
         setLastLatencyMs(typeof result.latency_ms === "number" ? result.latency_ms : null);
         setAttemptN(nextAttempt);
@@ -386,6 +394,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     goal,
     isExhausted,
     lastRequestId,
+    lastRequestContextKey,
     mapErrorToToast,
     original,
     rateLimit.total,
