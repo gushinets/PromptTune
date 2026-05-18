@@ -37,6 +37,7 @@ _FORBIDDEN_PROPERTY_KEYS = {
     "html",
     "selection_text",
 }
+_FORBIDDEN_PROPERTY_KEYS_LOWER = {key.lower() for key in _FORBIDDEN_PROPERTY_KEYS}
 _MAX_PROPERTIES_JSON_BYTES = 8 * 1024
 
 
@@ -44,7 +45,8 @@ def _collect_forbidden_keys(payload: Any) -> set[str]:
     found: set[str] = set()
     if isinstance(payload, dict):
         for key, value in payload.items():
-            if key in _FORBIDDEN_PROPERTY_KEYS:
+            normalized_key = key.lower() if isinstance(key, str) else str(key).lower()
+            if normalized_key in _FORBIDDEN_PROPERTY_KEYS_LOWER:
                 found.add(key)
             found.update(_collect_forbidden_keys(value))
         return found
