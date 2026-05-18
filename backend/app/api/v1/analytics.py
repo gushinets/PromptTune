@@ -1,6 +1,7 @@
 import json
 from datetime import UTC, datetime
 from hashlib import sha256
+from inspect import iscoroutine
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -88,7 +89,7 @@ async def ingest_events(
 
         try:
             begin_ctx = db.begin_nested()
-            if hasattr(begin_ctx, "__await__"):
+            if iscoroutine(begin_ctx):
                 begin_ctx = await begin_ctx
             async with begin_ctx:
                 existing = await db.get(AnalyticsEvent, event.event_id)

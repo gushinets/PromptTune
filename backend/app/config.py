@@ -60,6 +60,19 @@ def _get_optional_float_env(name: str) -> float | None:
     return float(value)
 
 
+def _get_bool_env(name: str, default: bool) -> bool:
+    value = _get_env(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
 _load_env()
 
 
@@ -124,7 +137,7 @@ class BotConfig:
             installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
             or "prompttune-installation",
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
-            analytics_enabled=(_get_env("ANALYTICS_ENABLED", "true") or "true").lower() == "true",
+            analytics_enabled=_get_bool_env("ANALYTICS_ENABLED", True),
             analytics_retention_months=_get_int_env("ANALYTICS_RETENTION_MONTHS", 13),
             analytics_ingest_req_per_min=_get_int_env("ANALYTICS_INGEST_REQ_PER_MIN", 120),
         )

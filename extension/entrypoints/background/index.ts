@@ -149,6 +149,36 @@ export default defineBackground(() => {
     });
   }
 
+  async function markFirstEvent(
+    storageKey: string,
+  ): Promise<{ isFirst: boolean; timeSinceInstallMin?: number }> {
+    return enqueueSessionOp(async () => {
+      const markerData = await browser.storage.local.get(storageKey);
+      if (markerData[storageKey]) {
+        return { isFirst: false };
+      }
+
+      const installData = await browser.storage.local.get(STORAGE_KEYS.INSTALL_AT);
+      const installAt = installData[STORAGE_KEYS.INSTALL_AT] as string | undefined;
+      const timeSinceInstallMin =
+        installAt !== undefined
+          ? Math.max(0, Math.floor((Date.now() - new Date(installAt).getTime()) / 60000))
+          : undefined;
+
+      await browser.storage.local.set({ [storageKey]: new Date().toISOString() });
+      return { isFirst: true, timeSinceInstallMin };
+    });
+  }
+
+  async function incrementTotalUses(): Promise<number> {
+    return enqueueSessionOp(async () => {
+      const totalUsesData = await browser.storage.local.get(STORAGE_KEYS.TOTAL_USES);
+      const totalUses = Number(totalUsesData[STORAGE_KEYS.TOTAL_USES] ?? 0) + 1;
+      await browser.storage.local.set({ [STORAGE_KEYS.TOTAL_USES]: totalUses });
+      return totalUses;
+    });
+  }
+
   async function flushAnalytics(): Promise<void> {
     if (flushInFlight) return;
     flushInFlight = true;
@@ -158,7 +188,24 @@ export default defineBackground(() => {
         if (!queue.length) return;
 
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
-        await apiClient.events(batch);
+        try {
+          await apiClient.events(batch);
+        } catch (error) {
+          if (
+            error instanceof ApiError &&
+            error.status >= 400 &&
+            error.status < 500 &&
+            error.status !== 429
+          ) {
+            const sentEventIds = new Set(batch.map((event) => event.event_id));
+            await enqueueQueueOp(async () => {
+              const current = await getQueue();
+              await setQueue(current.filter((event) => !sentEventIds.has(event.event_id)));
+            });
+            continue;
+          }
+          throw error;
+        }
         const sentEventIds = new Set(batch.map((event) => event.event_id));
         await enqueueQueueOp(async () => {
           const current = await getQueue();
@@ -213,19 +260,13 @@ export default defineBackground(() => {
     await flushAnalytics();
 
     if (payload.name === "result_copied") {
-      const first = await browser.storage.local.get(STORAGE_KEYS.FIRST_RESULT_COPIED_AT);
-      if (!first[STORAGE_KEYS.FIRST_RESULT_COPIED_AT]) {
-        const installData = await browser.storage.local.get(STORAGE_KEYS.INSTALL_AT);
-        const installAt = installData[STORAGE_KEYS.INSTALL_AT] as string | undefined;
-        const minutes = installAt
-          ? Math.max(0, Math.floor((Date.now() - new Date(installAt).getTime()) / 60000))
-          : undefined;
-        await browser.storage.local.set({
-          [STORAGE_KEYS.FIRST_RESULT_COPIED_AT]: new Date().toISOString(),
-        });
+      const first = await markFirstEvent(STORAGE_KEYS.FIRST_RESULT_COPIED_AT);
+      if (first.isFirst) {
         const firstEvent = await buildEvent(
           "first_result_copied",
-          minutes !== undefined ? { time_since_install_min: minutes } : {},
+          first.timeSinceInstallMin !== undefined
+            ? { time_since_install_min: first.timeSinceInstallMin }
+            : {},
           source,
         );
         await enqueueEvent(firstEvent);
@@ -297,31 +338,22 @@ export default defineBackground(() => {
           );
           await enqueueEvent(promptEvent);
 
-          const firstPromptData = await browser.storage.local.get(
-            STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT,
-          );
-          if (!firstPromptData[STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT]) {
-            const installData = await browser.storage.local.get(STORAGE_KEYS.INSTALL_AT);
-            const installAt = installData[STORAGE_KEYS.INSTALL_AT] as string | undefined;
-            const minutes = installAt
-              ? Math.max(0, Math.floor((Date.now() - new Date(installAt).getTime()) / 60000))
-              : undefined;
-            await browser.storage.local.set({
-              [STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT]: new Date().toISOString(),
-            });
+          const firstPrompt = await markFirstEvent(STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT);
+          if (firstPrompt.isFirst) {
             const firstPromptEvent = await buildEvent(
               "first_prompt_submitted",
-              minutes !== undefined
-                ? { time_since_install_min: minutes, site: msg.payload.site }
+              firstPrompt.timeSinceInstallMin !== undefined
+                ? {
+                    time_since_install_min: firstPrompt.timeSinceInstallMin,
+                    site: msg.payload.site,
+                  }
                 : { site: msg.payload.site },
               msg.payload.analytics_context?.source ?? "background",
             );
             await enqueueEvent(firstPromptEvent);
           }
 
-          const totalUsesData = await browser.storage.local.get(STORAGE_KEYS.TOTAL_USES);
-          const totalUses = Number(totalUsesData[STORAGE_KEYS.TOTAL_USES] ?? 0);
-          await browser.storage.local.set({ [STORAGE_KEYS.TOTAL_USES]: totalUses + 1 });
+          await incrementTotalUses();
 
           void flushAnalytics();
         }
