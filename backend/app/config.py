@@ -87,6 +87,8 @@ class BotConfig:
     openrouter_app_name: str | None
     installation_id_salt: str
     ip_salt: str
+    analytics_enabled: bool
+    analytics_retention_months: int
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -121,6 +123,8 @@ class BotConfig:
             installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
             or "prompttune-installation",
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
+            analytics_enabled=(_get_env("ANALYTICS_ENABLED", "true") or "true").lower() == "true",
+            analytics_retention_months=_get_int_env("ANALYTICS_RETENTION_MONTHS", 13),
         )
 
     def validate(self) -> None:
@@ -172,6 +176,11 @@ class BotConfig:
             raise ValueError("INSTALLATION_ID_SALT must not be empty")
         if not self.ip_salt:
             raise ValueError("IP_SALT must not be empty")
+        if self.analytics_retention_months <= 0:
+            raise ValueError(
+                "ANALYTICS_RETENTION_MONTHS must be positive. "
+                f"Got: {self.analytics_retention_months}"
+            )
 
     def litellm_model_id(self) -> str:
         """Model string passed to LiteLLM (provider-prefixed)."""

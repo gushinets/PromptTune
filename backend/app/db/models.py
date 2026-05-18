@@ -42,3 +42,26 @@ class PromptImprovement(Base):
     llm_meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="ok")
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class AnalyticsEvent(Base):
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        Index("ix_analytics_events_event_name_occurred", "event_name", "occurred_at"),
+        Index("ix_analytics_events_user_occurred", "user_id", "occurred_at"),
+        Index("ix_analytics_events_user_event_occurred", "user_id", "event_name", "occurred_at"),
+        Index("ix_analytics_events_session_occurred", "session_id", "occurred_at"),
+    )
+
+    event_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_name: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    session_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    extension_version: Mapped[str | None] = mapped_column(String(64))
+    os: Mapped[str | None] = mapped_column(String(32))
+    chrome_version: Mapped[str | None] = mapped_column(String(128))
+    user_plan: Mapped[str | None] = mapped_column(String(32))
+    source: Mapped[str | None] = mapped_column(String(32))
+    properties: Mapped[dict | None] = mapped_column(JSON, nullable=True)

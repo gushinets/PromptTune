@@ -1,4 +1,5 @@
 import type { AudienceMode, ImproveGoal, ImproveResponse } from "./types";
+import type { AnalyticsTrackPayload, AnalyticsTrackContext } from "./analytics-types";
 
 export type Message =
   | {
@@ -9,6 +10,7 @@ export type Message =
         goal?: ImproveGoal;
         site?: string;
         page_url?: string;
+        analytics_context?: AnalyticsTrackContext & { view_mode?: "popup" | "sidepanel"; attempt_n?: number };
       };
     }
   | { type: "IMPROVE_RESULT"; payload: ImproveResponse }
@@ -26,4 +28,7 @@ export type Message =
     }
   | { type: "PASTE_TEXT"; payload: { text: string } }
   | { type: "OPEN_AND_PASTE"; payload: { url: string; text: string } }
-  | { type: "IMPROVE_ACTIVE_FIELD" };
+  | { type: "IMPROVE_ACTIVE_FIELD" }
+  | { type: "TRACK_EVENT"; payload: AnalyticsTrackPayload }
+  | { type: "TRACK_EVENTS"; payload: { events: AnalyticsTrackPayload[] } }
+  | { type: "FLUSH_ANALYTICS" };

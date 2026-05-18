@@ -34,6 +34,8 @@ export interface ImproveResponse {
   request_id: string;
   improved_text: string;
   changes?: string[];
+  model?: string;
+  latency_ms?: number;
   rate_limit?: {
     per_minute_remaining: number;
     per_day_remaining: number;

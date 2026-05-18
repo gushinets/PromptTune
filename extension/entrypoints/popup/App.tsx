@@ -15,6 +15,7 @@ import {
   extractRateLimitResponse,
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
+import { trackEvent } from "@shared/analytics";
 import type { AiImproveGoal, AudienceMode, ImproveGoal } from "@shared/types";
 
 // TODO: Replace with actual upgrade URL
@@ -122,7 +123,14 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [siteHostname, setSiteHostname] = useState<string | undefined>(undefined);
+  const [siteResolved, setSiteResolved] = useState(false);
+  const [lastRequestId, setLastRequestId] = useState<string | null>(null);
+  const [lastModel, setLastModel] = useState<string | null>(null);
+  const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
+  const [attemptN, setAttemptN] = useState(0);
   const hasUserSelectedGoalRef = useRef(false);
+  const hasTrackedPopupOpenedRef = useRef(false);
 
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
@@ -142,13 +150,35 @@ export function App({ viewMode = "popup" }: AppProps) {
     browser.tabs
       .query({ active: true, currentWindow: true })
       .then((tabs) => {
+        try {
+          setSiteHostname(tabs[0]?.url ? new URL(tabs[0].url).hostname : undefined);
+        } catch {
+          setSiteHostname(undefined);
+        }
         const goalFromSite = detectAiGoalFromUrl(tabs[0]?.url);
         setDetectedAiGoal(goalFromSite);
+        setSiteResolved(true);
       })
       .catch(() => {
         setDetectedAiGoal("general");
+        setSiteResolved(true);
       });
   }, []);
+
+  useEffect(() => {
+    if (!siteResolved || hasTrackedPopupOpenedRef.current) return;
+    hasTrackedPopupOpenedRef.current = true;
+    void trackEvent(
+      "popup_opened",
+      {
+        site_hostname: siteHostname,
+        hour: new Date().getHours(),
+        user_plan: "free",
+        view_mode: viewMode,
+      },
+      viewMode,
+    );
+  }, [siteHostname, siteResolved, viewMode]);
 
   useEffect(() => {
     if (!modeReady || !audienceMode) return;
@@ -286,13 +316,28 @@ export function App({ viewMode = "popup" }: AppProps) {
 
     setLoading(true);
     setError(null);
+    if (lastRequestId) {
+      const regenAttempt = attemptN + 1;
+      void trackEvent(
+        "result_regenerated",
+        { attempt_n: regenAttempt, request_id: lastRequestId },
+        viewMode,
+      );
+    }
     setImproved("");
     setChanges([]);
 
     try {
+      const nextAttempt = lastRequestId ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
-        payload: { text: trimmed, audience_mode: audienceMode, goal },
+        payload: {
+          text: trimmed,
+          audience_mode: audienceMode,
+          goal,
+          site: siteHostname,
+          analytics_context: { source: viewMode, view_mode: viewMode, attempt_n: nextAttempt },
+        },
       });
       const result = extractImproveResponse(response);
 
@@ -300,6 +345,19 @@ export function App({ viewMode = "popup" }: AppProps) {
         if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
         setImproved(result.improved_text);
         setChanges(result.changes ?? []);
+        setLastRequestId(result.request_id);
+        setLastModel(result.model ?? null);
+        setLastLatencyMs(typeof result.latency_ms === "number" ? result.latency_ms : null);
+        setAttemptN(nextAttempt);
+        void trackEvent(
+          "result_displayed",
+          {
+            request_id: result.request_id,
+            model: result.model,
+            latency_ms: result.latency_ms,
+          },
+          viewMode,
+        );
         if (result.rate_limit) {
           setRateLimit({
             remaining: result.rate_limit.per_day_remaining,
@@ -540,7 +598,15 @@ export function App({ viewMode = "popup" }: AppProps) {
                 </button>
               </div>
             )}
-            <ActionBar improved={improved} disabled={!improved} onSave={handleSave} />
+            <ActionBar
+              improved={improved}
+              disabled={!improved}
+              onSave={handleSave}
+              requestId={lastRequestId}
+              source={viewMode}
+              model={lastModel}
+              latencyMs={lastLatencyMs}
+            />
             {FEATURES.OPEN_AND_PASTE && <SiteIcons improved={improved} disabled={!improved} />}
           </>
         ) : (

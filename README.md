@@ -8,6 +8,7 @@ Browser extension for AI prompt improvement. Supports Chrome, Edge, and Firefox.
 - **backend/** — FastAPI + LiteLLM + PostgreSQL + Redis
 - **infra/** — Docker Compose configs, Caddy reverse proxy
 - **docs/** — Project documentation
+  - Metrics runbook: `docs/metrics.md`
 
 ## Quick Start
 

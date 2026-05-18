@@ -104,4 +104,35 @@ describe("apiClient", () => {
     expect((err as ApiError).status).toBe(422);
     expect((err as ApiError).detail).toBe("Input text exceeds maximum length.");
   });
+
+  it("events sends analytics batch to backend", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ accepted: 1, deduplicated: 0 }),
+    });
+
+    const result = await apiClient.events([
+      {
+        event_id: "evt-1",
+        name: "popup_opened",
+        user_id: "inst-1",
+        session_id: "sess-1",
+        occurred_at: new Date("2026-05-15T10:00:00.000Z").toISOString(),
+        extension_version: "0.1.0",
+        os: "mac",
+        chrome_version: "136",
+        user_plan: "free",
+        source: "popup",
+        properties: { view_mode: "popup" },
+      },
+    ]);
+
+    expect(result).toEqual({ accepted: 1, deduplicated: 0 });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://api.anytoolai.store/v1/events",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
 });

@@ -17,6 +17,8 @@ describe("response utils", () => {
           "Added concrete context",
           "Specified success criteria",
         ],
+        model: "openrouter/openai/gpt-4o-mini",
+        latency_ms: 512,
       },
     });
 
@@ -24,6 +26,8 @@ describe("response utils", () => {
       request_id: "r1",
       improved_text: "better prompt",
       changes: ["Clarified output format", "Added concrete context", "Specified success criteria"],
+      model: "openrouter/openai/gpt-4o-mini",
+      latency_ms: 512,
     });
   });
 
