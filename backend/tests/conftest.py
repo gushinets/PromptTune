@@ -9,6 +9,14 @@ from app.dependencies import get_db, get_redis
 from app.main import app
 
 
+class _AsyncNullContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 @pytest.fixture
 async def client() -> AsyncGenerator[AsyncClient]:
     app.dependency_overrides.clear()
@@ -69,6 +77,7 @@ def mock_db():
     session.get = AsyncMock(return_value=None)
     session.flush = AsyncMock(return_value=None)
     session.commit = AsyncMock(return_value=None)
+    session.begin_nested = Mock(return_value=_AsyncNullContext())
 
     async def override_get_db():
         yield session

@@ -7,9 +7,13 @@ from app.config import settings
 from app.db.models import AnalyticsEvent
 
 
-def retention_cutoff_utc(now: datetime | None = None, retention_months: int | None = None) -> datetime:
+def retention_cutoff_utc(
+    now: datetime | None = None, retention_months: int | None = None
+) -> datetime:
     current = now or datetime.now(UTC)
-    months = retention_months if retention_months is not None else settings.analytics_retention_months
+    months = (
+        retention_months if retention_months is not None else settings.analytics_retention_months
+    )
     # 13 months retention (approx 395 days) keeps policy simple and explicit.
     return current - timedelta(days=months * 30 + 5)
 
