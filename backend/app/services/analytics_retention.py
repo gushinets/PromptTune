@@ -1,10 +1,27 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db.models import AnalyticsEvent
+
+
+def _days_in_month(year: int, month: int) -> int:
+    if month == 2:
+        is_leap = year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+        return 29 if is_leap else 28
+    if month in {4, 6, 9, 11}:
+        return 30
+    return 31
+
+
+def _subtract_calendar_months(value: datetime, months: int) -> datetime:
+    month_index = value.month - months
+    year = value.year + (month_index - 1) // 12
+    month = (month_index - 1) % 12 + 1
+    day = min(value.day, _days_in_month(year, month))
+    return value.replace(year=year, month=month, day=day)
 
 
 def retention_cutoff_utc(
@@ -14,8 +31,7 @@ def retention_cutoff_utc(
     months = (
         retention_months if retention_months is not None else settings.analytics_retention_months
     )
-    # 13 months retention (approx 395 days) keeps policy simple and explicit.
-    return current - timedelta(days=months * 30 + 5)
+    return _subtract_calendar_months(current, months)
 
 
 async def cleanup_analytics_events(

@@ -352,7 +352,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         if (isRegeneration) {
           void trackEvent(
             "result_regenerated",
-            { attempt_n: nextAttempt, request_id: lastRequestId },
+            { attempt_n: nextAttempt, request_id: result.request_id },
             viewMode,
           );
         }
