@@ -1,11 +1,17 @@
 import { useState } from "react";
 import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
+import { trackEvent } from "@shared/analytics";
+import type { AnalyticsSource } from "@shared/analytics-types";
 
 interface ActionBarProps {
   improved: string;
   disabled: boolean;
   onSave: () => Promise<boolean>;
+  requestId: string | null;
+  source: AnalyticsSource;
+  model?: string | null;
+  latencyMs?: number | null;
 }
 
 function CopyIcon({ className }: { className?: string }) {
@@ -75,7 +81,15 @@ function InsertIcon({ className }: { className?: string }) {
   );
 }
 
-export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
+export function ActionBar({
+  improved,
+  disabled,
+  onSave,
+  requestId,
+  source,
+  model,
+  latencyMs,
+}: ActionBarProps) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
@@ -83,6 +97,18 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(improved);
+    if (requestId) {
+      void trackEvent(
+        "result_copied",
+        {
+          request_id: requestId,
+          copy_method: "copy_button",
+          model,
+          latency_ms: latencyMs,
+        },
+        source,
+      );
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -103,6 +129,18 @@ export function ActionBar({ improved, disabled, onSave }: ActionBarProps) {
         type: "PASTE_TEXT",
         payload: { text: improved },
       });
+      if (requestId) {
+        void trackEvent(
+          "result_copied",
+          {
+            request_id: requestId,
+            copy_method: "insert_button",
+            model,
+            latency_ms: latencyMs,
+          },
+          source,
+        );
+      }
       setInserted(true);
       setTimeout(() => setInserted(false), 1500);
     } catch {

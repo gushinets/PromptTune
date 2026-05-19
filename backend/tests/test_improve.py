@@ -24,6 +24,8 @@ async def test_improve_works_without_authorization_header(
     assert response.status_code == 200
     body = response.json()
     assert body["improved_text"] == "better result"
+    assert "model" in body
+    assert "latency_ms" in body
     assert isinstance(body["changes"], list)
     assert 1 <= len(body["changes"]) <= 5
     assert body["rate_limit"]["per_minute_remaining"] == 9

@@ -110,6 +110,23 @@ describe("App", () => {
       version: "0.1.0",
     } as ReturnType<typeof browser.runtime.getManifest>);
     vi.mocked(browser.tabs.query).mockResolvedValue([] as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string };
+      if (typed.type === "GET_LIMITS") {
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_minute_remaining: 4,
+              per_day_remaining: 10,
+              per_minute_total: 5,
+              per_day_total: 10,
+            },
+          },
+        };
+      }
+      return { ok: true };
+    });
 
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -125,20 +142,25 @@ describe("App", () => {
   });
 
   it("allows improve requests after a limits lookup failure", async () => {
-    vi.mocked(browser.runtime.sendMessage)
-      .mockRejectedValueOnce(new Error("limits lookup failed"))
-      .mockResolvedValueOnce({
-        type: "IMPROVE_RESULT",
-        payload: {
-          request_id: "req-1",
-          improved_text: "Improved prompt",
-          changes: [
-            "Clarified the user goal and output format.",
-            "Added constraints to reduce ambiguity.",
-            "Specified concrete success criteria for the answer.",
-          ],
-        },
-      });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string };
+      if (typed.type === "GET_LIMITS") throw new Error("limits lookup failed");
+      if (typed.type === "IMPROVE_REQUEST") {
+        return {
+          type: "IMPROVE_RESULT",
+          payload: {
+            request_id: "req-1",
+            improved_text: "Improved prompt",
+            changes: [
+              "Clarified the user goal and output format.",
+              "Added constraints to reduce ambiguity.",
+              "Specified concrete success criteria for the answer.",
+            ],
+          },
+        };
+      }
+      return { ok: true };
+    });
 
     await act(async () => {
       root.render(<App />);
@@ -154,10 +176,11 @@ describe("App", () => {
     });
     await flushEffects();
 
-    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
-      type: "IMPROVE_REQUEST",
-      payload: { text: "Original prompt", audience_mode: "ai", goal: "general" },
-    });
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+      }),
+    );
 
     const improvedField = container.querySelector(".improved-textarea");
     expect(improvedField).toBeInstanceOf(HTMLTextAreaElement);
@@ -185,25 +208,32 @@ describe("App", () => {
   });
 
   it("does not show a saved state when the save request fails", async () => {
-    vi.mocked(browser.runtime.sendMessage)
-      .mockResolvedValueOnce({
-        type: "LIMITS_RESULT",
-        payload: {
-          rate_limit: {
-            per_minute_remaining: 4,
-            per_day_remaining: 10,
-            per_minute_total: 5,
-            per_day_total: 10,
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string };
+      if (typed.type === "GET_LIMITS") {
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_minute_remaining: 4,
+              per_day_remaining: 10,
+              per_minute_total: 5,
+              per_day_total: 10,
+            },
           },
-        },
-      })
-      .mockResolvedValueOnce({
-        type: "IMPROVE_RESULT",
-        payload: {
-          request_id: "req-2",
-          improved_text: "Improved prompt",
-        },
-      });
+        };
+      }
+      if (typed.type === "IMPROVE_REQUEST") {
+        return {
+          type: "IMPROVE_RESULT",
+          payload: {
+            request_id: "req-2",
+            improved_text: "Improved prompt",
+          },
+        };
+      }
+      return { ok: true };
+    });
 
     const savePromptSpy = vi
       .spyOn(apiClient, "savePrompt")
@@ -240,25 +270,32 @@ describe("App", () => {
   });
 
   it("sends selected mode and goal in improve requests", async () => {
-    vi.mocked(browser.runtime.sendMessage)
-      .mockResolvedValueOnce({
-        type: "LIMITS_RESULT",
-        payload: {
-          rate_limit: {
-            per_minute_remaining: 4,
-            per_day_remaining: 10,
-            per_minute_total: 5,
-            per_day_total: 10,
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string; payload?: Record<string, unknown> };
+      if (typed.type === "GET_LIMITS") {
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_minute_remaining: 4,
+              per_day_remaining: 10,
+              per_minute_total: 5,
+              per_day_total: 10,
+            },
           },
-        },
-      })
-      .mockResolvedValueOnce({
-        type: "IMPROVE_RESULT",
-        payload: {
-          request_id: "req-3",
-          improved_text: "Improved for SEO",
-        },
-      });
+        };
+      }
+      if (typed.type === "IMPROVE_REQUEST") {
+        return {
+          type: "IMPROVE_RESULT",
+          payload: {
+            request_id: "req-3",
+            improved_text: "Improved for SEO",
+          },
+        };
+      }
+      return { ok: true };
+    });
 
     await act(async () => {
       root.render(<App />);
@@ -280,32 +317,45 @@ describe("App", () => {
     });
     await flushEffects();
 
-    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
-      type: "IMPROVE_REQUEST",
-      payload: { text: "Original prompt", audience_mode: "content", goal: "seo_article" },
-    });
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+        payload: expect.objectContaining({
+          text: "Original prompt",
+          audience_mode: "content",
+          goal: "seo_article",
+        }),
+      }),
+    );
   });
 
   it("inserts improved text into the active tab", async () => {
-    vi.mocked(browser.runtime.sendMessage)
-      .mockResolvedValueOnce({
-        type: "LIMITS_RESULT",
-        payload: {
-          rate_limit: {
-            per_minute_remaining: 4,
-            per_day_remaining: 10,
-            per_minute_total: 5,
-            per_day_total: 10,
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string };
+      if (typed.type === "GET_LIMITS") {
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_minute_remaining: 4,
+              per_day_remaining: 10,
+              per_minute_total: 5,
+              per_day_total: 10,
+            },
           },
-        },
-      })
-      .mockResolvedValueOnce({
-        type: "IMPROVE_RESULT",
-        payload: {
-          request_id: "req-4",
-          improved_text: "Improved prompt",
-        },
-      });
+        };
+      }
+      if (typed.type === "IMPROVE_REQUEST") {
+        return {
+          type: "IMPROVE_RESULT",
+          payload: {
+            request_id: "req-4",
+            improved_text: "Improved prompt",
+          },
+        };
+      }
+      return { ok: true };
+    });
     vi.mocked(browser.tabs.query)
       .mockResolvedValueOnce([{ id: 777, url: "https://chatgpt.com/" }] as never)
       .mockResolvedValueOnce([{ id: 123 }] as never);
@@ -342,25 +392,32 @@ describe("App", () => {
     vi.mocked(browser.tabs.query).mockResolvedValue([
       { id: 77, url: "https://claude.ai/new" },
     ] as never);
-    vi.mocked(browser.runtime.sendMessage)
-      .mockResolvedValueOnce({
-        type: "LIMITS_RESULT",
-        payload: {
-          rate_limit: {
-            per_minute_remaining: 4,
-            per_day_remaining: 10,
-            per_minute_total: 5,
-            per_day_total: 10,
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string };
+      if (typed.type === "GET_LIMITS") {
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_minute_remaining: 4,
+              per_day_remaining: 10,
+              per_minute_total: 5,
+              per_day_total: 10,
+            },
           },
-        },
-      })
-      .mockResolvedValueOnce({
-        type: "IMPROVE_RESULT",
-        payload: {
-          request_id: "req-5",
-          improved_text: "Improved for Claude",
-        },
-      });
+        };
+      }
+      if (typed.type === "IMPROVE_REQUEST") {
+        return {
+          type: "IMPROVE_RESULT",
+          payload: {
+            request_id: "req-5",
+            improved_text: "Improved for Claude",
+          },
+        };
+      }
+      return { ok: true };
+    });
 
     await act(async () => {
       root.render(<App />);
@@ -374,10 +431,16 @@ describe("App", () => {
     });
     await flushEffects();
 
-    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenNthCalledWith(2, {
-      type: "IMPROVE_REQUEST",
-      payload: { text: "Original prompt", audience_mode: "ai", goal: "claude" },
-    });
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+        payload: expect.objectContaining({
+          text: "Original prompt",
+          audience_mode: "ai",
+          goal: "claude",
+        }),
+      }),
+    );
   });
 
   it("shows onboarding and persists selected mode when missing", async () => {

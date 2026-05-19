@@ -67,5 +67,7 @@ async def improve(
         request_id=result.id,
         improved_text=result.improved_text,
         changes=_extract_changes(result.llm_meta),
+        model=result.model,
+        latency_ms=result.latency_ms,
         rate_limit=remaining,
     )

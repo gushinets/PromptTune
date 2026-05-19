@@ -36,6 +36,12 @@ function toImproveResponse(value: Record<string, unknown>): ImproveResponse | nu
   if (changes) {
     response.changes = changes;
   }
+  if (typeof value.model === "string") {
+    response.model = value.model;
+  }
+  if (typeof value.latency_ms === "number") {
+    response.latency_ms = value.latency_ms;
+  }
 
   return response;
 }

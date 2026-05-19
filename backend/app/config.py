@@ -60,6 +60,22 @@ def _get_optional_float_env(name: str) -> float | None:
     return float(value)
 
 
+def _get_bool_env(name: str, default: bool) -> bool:
+    value = _get_env(name)
+    if value is None:
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise ValueError(
+        f"{name} must be a boolean-like value: "
+        "'1/0', 'true/false', 'yes/no', 'on/off'. Got: {value}"
+    )
+
+
 _load_env()
 
 
@@ -87,6 +103,9 @@ class BotConfig:
     openrouter_app_name: str | None
     installation_id_salt: str
     ip_salt: str
+    analytics_enabled: bool
+    analytics_retention_months: int
+    analytics_ingest_req_per_min: int
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -121,6 +140,9 @@ class BotConfig:
             installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
             or "prompttune-installation",
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
+            analytics_enabled=_get_bool_env("ANALYTICS_ENABLED", True),
+            analytics_retention_months=_get_int_env("ANALYTICS_RETENTION_MONTHS", 13),
+            analytics_ingest_req_per_min=_get_int_env("ANALYTICS_INGEST_REQ_PER_MIN", 120),
         )
 
     def validate(self) -> None:
@@ -172,6 +194,16 @@ class BotConfig:
             raise ValueError("INSTALLATION_ID_SALT must not be empty")
         if not self.ip_salt:
             raise ValueError("IP_SALT must not be empty")
+        if self.analytics_retention_months <= 0:
+            raise ValueError(
+                "ANALYTICS_RETENTION_MONTHS must be positive. "
+                f"Got: {self.analytics_retention_months}"
+            )
+        if self.analytics_ingest_req_per_min <= 0:
+            raise ValueError(
+                "ANALYTICS_INGEST_REQ_PER_MIN must be positive. "
+                f"Got: {self.analytics_ingest_req_per_min}"
+            )
 
     def litellm_model_id(self) -> str:
         """Model string passed to LiteLLM (provider-prefixed)."""

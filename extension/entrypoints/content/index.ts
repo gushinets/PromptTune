@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { getAdapter } from "@adapters/registry";
+import { trackEvent } from "@shared/analytics";
 import { extractImproveResponse } from "@shared/response-utils";
 import type { Message } from "@shared/messages";
 import type { ImproveGoal } from "@shared/types";
@@ -73,12 +74,32 @@ export default defineContentScript({
               goal: detectAiGoalFromHostname(location.hostname),
               site: location.hostname,
               page_url: location.href,
+              analytics_context: { source: "content" },
             },
           });
           const result = extractImproveResponse(response);
 
           if (result?.improved_text.trim()) {
             adapter.setText(field, result.improved_text);
+            void trackEvent(
+              "result_displayed",
+              {
+                request_id: result.request_id,
+                model: result.model,
+                latency_ms: result.latency_ms,
+              },
+              "content",
+            );
+            void trackEvent(
+              "result_copied",
+              {
+                request_id: result.request_id,
+                copy_method: "hotkey_auto_insert",
+                model: result.model,
+                latency_ms: result.latency_ms,
+              },
+              "content",
+            );
           }
           break;
         }
