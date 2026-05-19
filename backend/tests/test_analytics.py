@@ -2,9 +2,11 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from fastapi import HTTPException
 from httpx import AsyncClient
 from sqlalchemy.exc import IntegrityError
 
+from app.api.v1.analytics import _validate_event_payload
 from app.config import settings
 
 
@@ -396,6 +398,17 @@ async def test_events_ingest_returns_503_when_analytics_disabled(
         settings.analytics_enabled = previous
 
     assert response.status_code == 503
+
+
+def test_validate_event_payload_rejects_invalid_json_properties():
+    circular: dict[str, object] = {}
+    circular["self"] = circular
+
+    with pytest.raises(HTTPException) as exc:
+        _validate_event_payload(circular)
+
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "analytics properties invalid"
 
 
 @pytest.mark.asyncio

@@ -37,6 +37,7 @@ export default defineBackground(() => {
   let sessionOpChain: Promise<void> = Promise.resolve();
   let queueOpChain: Promise<void> = Promise.resolve();
   let flushInFlight = false;
+  let flushPending = false;
 
   const enqueueSessionOp = async <T>(op: () => Promise<T>): Promise<T> => {
     let resolveOut: (value: T) => void;
@@ -180,7 +181,10 @@ export default defineBackground(() => {
   }
 
   async function flushAnalytics(): Promise<void> {
-    if (flushInFlight) return;
+    if (flushInFlight) {
+      flushPending = true;
+      return;
+    }
     flushInFlight = true;
     try {
       while (true) {
@@ -239,6 +243,10 @@ export default defineBackground(() => {
       // Keep queue for later retry.
     } finally {
       flushInFlight = false;
+      if (flushPending) {
+        flushPending = false;
+        void flushAnalytics();
+      }
     }
   }
 

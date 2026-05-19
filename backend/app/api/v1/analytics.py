@@ -65,7 +65,10 @@ def _validate_event_payload(properties: dict[str, Any]) -> None:
         keys = ", ".join(sorted(intersect))
         raise HTTPException(status_code=422, detail=f"forbidden analytics properties: {keys}")
 
-    encoded = json.dumps(properties, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    try:
+        encoded = json.dumps(properties, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError, RecursionError) as err:
+        raise HTTPException(status_code=422, detail="analytics properties invalid") from err
     if len(encoded) > _MAX_PROPERTIES_JSON_BYTES:
         raise HTTPException(status_code=422, detail="analytics properties too large")
 
