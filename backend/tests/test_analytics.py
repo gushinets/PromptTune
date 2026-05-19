@@ -308,6 +308,36 @@ async def test_events_ingest_allows_nullable_session_for_forms_import(
 
 
 @pytest.mark.asyncio
+async def test_events_ingest_rejects_forms_import_without_installation_id(
+    client: AsyncClient, mock_db, mock_redis
+):
+    response = await client.post(
+        "/v1/events",
+        json={
+            "events": [
+                {
+                    "event_id": "evt-forms-missing-inst-1",
+                    "name": "uninstall_reason_submitted",
+                    "user_id": " ",
+                    "session_id": None,
+                    "occurred_at": datetime.now(UTC).isoformat(),
+                    "source": "forms_import",
+                    "properties": {"reason": "too_many_bugs"},
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["accepted"] == 0
+    assert payload["deduplicated"] == 0
+    assert len(payload["rejected"]) == 1
+    assert payload["rejected"][0]["event_id"] == "evt-forms-missing-inst-1"
+    assert payload["rejected"][0]["reason"] == "Your login is invalid"
+
+
+@pytest.mark.asyncio
 async def test_events_ingest_rejects_oversized_properties(client: AsyncClient, mock_db, mock_redis):
     response = await client.post(
         "/v1/events",

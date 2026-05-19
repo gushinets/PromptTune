@@ -127,8 +127,7 @@ async def ingest_events(
 
         try:
             _validate_event_payload(event.properties)
-            if event.source in _EXTENSION_SOURCES:
-                await ensure_installation_id_when_ip_present(client_ip, event.user_id, redis)
+            await ensure_installation_id_when_ip_present(client_ip, event.user_id, redis)
         except HTTPException as exc:
             rejected.append({"event_id": event.event_id, "reason": str(exc.detail)})
             continue

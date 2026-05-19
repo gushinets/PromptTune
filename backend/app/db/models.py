@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import JSON, DateTime, Index, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -66,4 +67,4 @@ class AnalyticsEvent(Base):
     chrome_version: Mapped[str | None] = mapped_column(String(128))
     user_plan: Mapped[str | None] = mapped_column(String(32))
     source: Mapped[str | None] = mapped_column(String(32))
-    properties: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    properties: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
