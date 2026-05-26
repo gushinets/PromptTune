@@ -39,7 +39,7 @@ Before the first deploy, verify all of the following:
 On the VPS:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 cp .env.example .env
 ```
 
@@ -75,14 +75,14 @@ Why `ALLOWED_ORIGINS=*` for now:
 ## 2. Validate the production compose config
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 make prod-config
 ```
 
 If `make` is not installed:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml config --quiet
 ```
 
@@ -93,7 +93,7 @@ This validates the Compose configuration without printing resolved env values. O
 For routine production deploys, use the guarded script:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 make prod-preflight
 make prod-deploy
 ```
@@ -101,7 +101,7 @@ make prod-deploy
 Or run the script directly:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 ./scripts/deploy-prod.sh --preflight-only
 ./scripts/deploy-prod.sh
 ```
@@ -134,7 +134,7 @@ Environment overrides:
 Run the production deployment in this order:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 make prod-db-up
 make prod-migrate
 make prod-up
@@ -143,7 +143,7 @@ make prod-up
 If `make` is not installed:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d postgres redis
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml run --rm --build api alembic upgrade head
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up --build -d api caddy
@@ -162,7 +162,7 @@ This manual sequence remains available as the low-level fallback behind the guar
 Check container state:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 make prod-ps
 make prod-logs
 ```
@@ -170,7 +170,7 @@ make prod-logs
 If `make` is not installed:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml ps
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml logs -f
 ```
@@ -216,7 +216,7 @@ curl -i https://api.anytoolai.store/v1/limits?installation_id=test-installation
 When new backend or infra changes are pulled onto the VPS:
 
 ```bash
-cd /path/to/PromptOptimizer
+cd /path/to/PromptTune
 git pull
 cd infra
 make prod-deploy
@@ -225,7 +225,7 @@ make prod-deploy
 If `make` is not installed:
 
 ```bash
-cd /path/to/PromptOptimizer
+cd /path/to/PromptTune
 git pull
 cd infra
 ./scripts/deploy-prod.sh
@@ -242,7 +242,7 @@ Notes:
 Code/config rollback procedure:
 
 ```bash
-cd /path/to/PromptOptimizer
+cd /path/to/PromptTune
 git log --oneline -n 5
 git switch --detach <previous-good-commit>
 cd infra
@@ -256,7 +256,7 @@ This leaves the repo in detached HEAD state. Before the next normal deploy, swit
 After rollback, verify again:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 make prod-ps
 curl -i https://api.anytoolai.store/healthz
 curl -i https://api.anytoolai.store/readyz
@@ -265,7 +265,7 @@ curl -i https://api.anytoolai.store/readyz
 If `make` is not installed:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml ps
 curl -i https://api.anytoolai.store/healthz
 curl -i https://api.anytoolai.store/readyz
@@ -276,14 +276,14 @@ curl -i https://api.anytoolai.store/readyz
 To stop the production stack:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 make prod-down
 ```
 
 If `make` is not installed:
 
 ```bash
-cd /path/to/PromptOptimizer/infra
+cd /path/to/PromptTune/infra
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml down
 ```
 

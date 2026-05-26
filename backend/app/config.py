@@ -81,7 +81,7 @@ _load_env()
 
 @dataclass
 class BotConfig:
-    """Configuration for PromptOptimizer application."""
+    """Configuration for PromptTune application."""
 
     database_url: str
     redis_url: str
@@ -243,7 +243,7 @@ def _apply_openrouter_litellm_env(cfg: BotConfig) -> None:
     if cfg.llm_backend != "OPENROUTER":
         return
     os.environ["OR_SITE_URL"] = cfg.openrouter_site_url or "https://prompttune.local"
-    os.environ["OR_APP_NAME"] = cfg.openrouter_app_name or "PromptOptimizer"
+    os.environ["OR_APP_NAME"] = cfg.openrouter_app_name or "PromptTune"
 
 
 settings = BotConfig.from_env()
