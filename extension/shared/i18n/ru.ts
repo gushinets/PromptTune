@@ -2,7 +2,7 @@ import type { TranslationKeys } from "./en";
 
 export const ru: TranslationKeys = {
   // Header
-  appName: "PromptTune",
+  appName: "PromptOptimizer",
   modeBadgeAi: "AI режим",
   modeBadgeContent: "Content режим",
   settingsOpen: "Открыть настройки",
