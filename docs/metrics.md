@@ -1,4 +1,4 @@
-# PromptTune Metrics (MVP)
+# PromptOptimizer Metrics (MVP)
 
 ## Reporting rules
 - Source of truth: `analytics_events` in Postgres.

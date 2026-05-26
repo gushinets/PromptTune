@@ -31,7 +31,7 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/deploy-prod.sh [options]
 
-Deploy the current PromptTune production checkout with preflight checks.
+Deploy the current PromptOptimizer production checkout with preflight checks.
 
 Options:
   --preflight-only       Run validation checks without changing containers

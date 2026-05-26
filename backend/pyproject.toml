@@ -1,7 +1,7 @@
 [project]
 name = "prompttune-backend"
 version = "0.1.0"
-description = "PromptTune backend - AI prompt improvement API"
+description = "PromptOptimizer backend - AI prompt improvement API"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi==0.135.1",

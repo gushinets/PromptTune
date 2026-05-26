@@ -24,7 +24,7 @@ export default defineConfig({
     },
   }),
   manifest: {
-    name: "PromptTune",
+    name: "PromptOptimizer",
     description: "Improve your AI prompts with one click",
     version: "0.1.0",
     icons: {

@@ -1,6 +1,6 @@
 ## Infra (Docker) quickstart
 
-This folder contains Docker Compose configurations for the PromptTune backend stack:
+This folder contains Docker Compose configurations for the PromptOptimizer backend stack:
 - FastAPI (`api`)
 - PostgreSQL (`postgres`)
 - Redis (`redis`)

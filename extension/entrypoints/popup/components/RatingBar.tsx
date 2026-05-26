@@ -2,7 +2,7 @@ import { useState } from "react";
 import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
 
-const CWS_URL = "https://chromewebstore.google.com/detail/prompttune/YOUR_EXTENSION_ID";
+const CWS_URL = "https://chromewebstore.google.com/detail/promptoptimizer/YOUR_EXTENSION_ID";
 const FEEDBACK_URL = "https://docs.google.com/forms/d/e/YOUR_FORM_ID/viewform";
 
 export function RatingBar() {

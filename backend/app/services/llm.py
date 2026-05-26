@@ -298,7 +298,7 @@ class LiteLLMClient:
         if settings.llm_backend == "OPENROUTER":
             extra_headers = {
                 "HTTP-Referer": settings.openrouter_site_url or "https://prompttune.local",
-                "X-Title": settings.openrouter_app_name or "PromptTune",
+                "X-Title": settings.openrouter_app_name or "PromptOptimizer",
             }
 
         completion_tokens = settings.llm_completion_tokens

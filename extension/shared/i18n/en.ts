@@ -1,6 +1,6 @@
 export const en = {
   // Header
-  appName: "PromptTune",
+  appName: "PromptOptimizer",
   modeBadgeAi: "AI Mode",
   modeBadgeContent: "Content Mode",
   settingsOpen: "Open settings",

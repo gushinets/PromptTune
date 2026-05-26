@@ -1,4 +1,4 @@
-# PromptTune
+# PromptOptimizer
 
 Browser extension for AI prompt improvement. Supports Chrome, Edge, and Firefox.
 
@@ -64,9 +64,9 @@ npm run zip:firefox  # Firefox package
 
 Generated files:
 
-- `extension/.output/prompttune-extension-0.1.0-chrome.zip`
-- `extension/.output/prompttune-extension-0.1.0-firefox.zip`
-- `extension/.output/prompttune-extension-0.1.0-sources.zip` (generated with the Firefox build)
+- `extension/.output/promptoptimizer-extension-0.1.0-chrome.zip`
+- `extension/.output/promptoptimizer-extension-0.1.0-firefox.zip`
+- `extension/.output/promptoptimizer-extension-0.1.0-sources.zip` (generated with the Firefox build)
 
 Notes:
 - `npm run zip` builds the Chrome Manifest V3 package used by Chrome and Edge.
