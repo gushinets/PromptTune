@@ -754,4 +754,3 @@ export function App({ viewMode = "popup" }: AppProps) {
     </div>
   );
 }
-
