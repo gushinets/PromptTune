@@ -23,19 +23,6 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return match;
 }
 
-function findButtonByAria(container: HTMLElement, label: string): HTMLButtonElement {
-  const match = Array.from(container.querySelectorAll("button")).find(
-    (button) =>
-      button.getAttribute("aria-label") === label || button.getAttribute("title") === label,
-  );
-
-  if (!(match instanceof HTMLButtonElement)) {
-    throw new Error(`Button not found by aria/title: ${label}`);
-  }
-
-  return match;
-}
-
 function getImproveButton(container: HTMLElement): HTMLButtonElement {
   const match = container.querySelector(".btn-improve");
   if (!(match instanceof HTMLButtonElement)) {
