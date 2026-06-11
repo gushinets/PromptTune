@@ -62,7 +62,9 @@ async function selectMode(container: HTMLElement, mode: "ai" | "content") {
     await Promise.resolve();
   });
 
-  const target = container.querySelector(`.settings-popover .settings-mode-card[data-mode="${mode}"]`);
+  const target = container.querySelector(
+    `.settings-popover .settings-mode-card[data-mode="${mode}"]`,
+  );
   if (!(target instanceof HTMLButtonElement)) {
     throw new Error(`Mode card not found: ${mode}`);
   }
