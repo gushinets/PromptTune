@@ -169,6 +169,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
   const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
+  const settingsRef = useRef<HTMLDivElement | null>(null);
   const hasUserSelectedGoalRef = useRef(false);
   const hasTrackedPopupOpenedRef = useRef(false);
 
@@ -249,12 +250,6 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, [audienceMode, detectedAiGoal, modeReady]);
 
   useEffect(() => {
-    if (modeReady && !audienceMode) {
-      setShowSettings(true);
-    }
-  }, [modeReady, audienceMode]);
-
-  useEffect(() => {
     if (!sessionDraftLoaded) return;
 
     void setPopupSessionDraft({
@@ -282,6 +277,21 @@ export function App({ viewMode = "popup" }: AppProps) {
     original,
     sessionDraftLoaded,
   ]);
+
+  useEffect(() => {
+    if (!showSettings) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!settingsRef.current?.contains(event.target as Node)) {
+        setShowSettings(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [showSettings]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -566,15 +576,39 @@ export function App({ viewMode = "popup" }: AppProps) {
         </div>
 
         <div className="header-actions">
-          <button
-            type="button"
-            className="layout-toggle-btn settings-btn"
-            title={t.settingsOpen}
-            aria-label={t.settingsOpen}
-            onClick={() => setShowSettings(true)}
-          >
-            <SettingsIcon className="settings-icon" />
-          </button>
+          <div className="settings-menu" ref={settingsRef}>
+            <button
+              type="button"
+              className="layout-toggle-btn settings-btn"
+              title={t.settingsOpen}
+              aria-label={t.settingsOpen}
+              aria-expanded={showSettings}
+              onClick={() => setShowSettings((current) => !current)}
+            >
+              <SettingsIcon className="settings-icon" />
+            </button>
+            {showSettings && (
+              <div className="settings-popover" role="dialog" aria-label={t.settingsTitle}>
+                <p className="settings-hint">{t.settingsModeHint}</p>
+                <div className="settings-mode-field">
+                  <button
+                    type="button"
+                    className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
+                    onClick={() => handleModeSelection("ai")}
+                  >
+                    <strong>{t.onboardingAiTitle}</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
+                    onClick={() => handleModeSelection("content")}
+                  >
+                    <strong>{t.onboardingContentTitle}</strong>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           {/* Layout toggle button */}
           <button
             type="button"
@@ -699,16 +733,24 @@ export function App({ viewMode = "popup" }: AppProps) {
                 onImprove={handleImprove}
               />
             ) : (
-              <div className="mode-onboarding compact">
+              <div className="mode-onboarding">
                 <h3>{t.settingsModeRequiredTitle}</h3>
                 <p>{t.settingsModeRequiredSubtitle}</p>
                 <button
                   type="button"
                   className="mode-onboarding-card"
-                  onClick={() => setShowSettings(true)}
+                  onClick={() => handleModeSelection("ai")}
                 >
-                  <strong>{t.settingsOpen}</strong>
-                  <span>{t.settingsModeHint}</span>
+                  <strong>{t.onboardingAiTitle}</strong>
+                  <span>{t.onboardingAiDescription}</span>
+                </button>
+                <button
+                  type="button"
+                  className="mode-onboarding-card"
+                  onClick={() => handleModeSelection("content")}
+                >
+                  <strong>{t.onboardingContentTitle}</strong>
+                  <span>{t.onboardingContentDescription}</span>
                 </button>
               </div>
             )}
@@ -728,50 +770,6 @@ export function App({ viewMode = "popup" }: AppProps) {
         )}
       </div>
       <RatingBar />
-
-      {showSettings && (
-        <div
-          className="settings-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.settingsTitle}
-        >
-          <div className="settings-modal">
-            <div className="settings-modal-header">
-              <h3>{t.settingsTitle}</h3>
-              <button
-                type="button"
-                className="settings-close"
-                onClick={() => setShowSettings(false)}
-                aria-label={t.settingsClose}
-              >
-                ×
-              </button>
-            </div>
-            <p className="settings-hint">{t.settingsModeHint}</p>
-            <div className="settings-mode-grid" role="radiogroup" aria-label={t.modeLabel}>
-              <button
-                type="button"
-                className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
-                aria-pressed={audienceMode === "ai"}
-                onClick={() => handleModeSelection("ai")}
-              >
-                <strong>{t.onboardingAiTitle}</strong>
-                <span>{t.onboardingAiDescription}</span>
-              </button>
-              <button
-                type="button"
-                className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
-                aria-pressed={audienceMode === "content"}
-                onClick={() => handleModeSelection("content")}
-              >
-                <strong>{t.onboardingContentTitle}</strong>
-                <span>{t.onboardingContentDescription}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

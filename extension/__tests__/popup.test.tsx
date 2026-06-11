@@ -60,7 +60,7 @@ async function selectMode(container: HTMLElement, mode: "ai" | "content") {
     await Promise.resolve();
   });
 
-  const cards = Array.from(container.querySelectorAll(".settings-mode-card"));
+  const cards = Array.from(container.querySelectorAll(".settings-popover .settings-mode-card"));
   const target = cards[mode === "ai" ? 0 : 1];
   if (!(target instanceof HTMLButtonElement)) {
     throw new Error(`Mode card not found: ${mode}`);
@@ -468,10 +468,7 @@ describe("App", () => {
     await flushEffects();
 
     expect(container.textContent).toContain("Choose mode to continue");
-    await act(async () => {
-      findButton(container, "I work with AI prompts").click();
-      await Promise.resolve();
-    });
+    await selectMode(container, "ai");
     await flushEffects();
 
     expect(browser.storage.local.set).toHaveBeenCalledWith({ audience_mode: "ai" });
