@@ -228,6 +228,11 @@ body.sidepanel-body {
 }
 
 .mode-badge {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-mono);
   font-size: 7px;
   font-weight: 700;
@@ -236,6 +241,30 @@ body.sidepanel-body {
   padding: 1px 6px;
   border: 1px solid transparent;
   white-space: nowrap;
+  background-clip: padding-box;
+}
+
+.mode-switch-menu {
+  position: relative;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.mode-switch-btn {
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.mode-switch-btn:hover {
+  transform: translateY(-1px);
+}
+
+.mode-switch-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.35);
 }
 
 .mode-badge.ai {
@@ -269,17 +298,8 @@ body.sidepanel-body {
   flex-shrink: 0;
 }
 
-.settings-btn {
-  font-size: 0;
-}
-
 .settings-menu {
   position: relative;
-}
-
-.settings-icon {
-  width: 11px;
-  height: 11px;
 }
 
 .layout-toggle-btn:hover {
@@ -844,10 +864,10 @@ button:disabled {
 .settings-popover {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;
   z-index: 30;
   width: 200px;
-  max-width: calc(100vw - 20px);
+  max-width: 200px;
   border-radius: 12px;
   border: 1px solid var(--border2);
   background: #1a1550;

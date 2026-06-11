@@ -95,23 +95,6 @@ function BookmarkIcon({ className }: { className?: string }) {
   );
 }
 
-function SettingsIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .16 1.7 1.7 0 0 0-.94 1.53V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-.94-1.53 1.7 1.7 0 0 0-1-.16 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.16-1 1.7 1.7 0 0 0-1.53-.94H2.9a2 2 0 0 1 0-4h.01a1.7 1.7 0 0 0 1.53-.94 1.7 1.7 0 0 0 .16-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.16 1.7 1.7 0 0 0 .94-1.53V2.9a2 2 0 0 1 4 0v.01a1.7 1.7 0 0 0 .94 1.53 1.7 1.7 0 0 0 1 .16 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .16 1 1.7 1.7 0 0 0 1.53.94h.01a2 2 0 0 1 0 4h-.01a1.7 1.7 0 0 0-1.53.94 1.7 1.7 0 0 0-.16 1z" />
-    </svg>
-  );
-}
-
 function LayoutSidebarRightIcon({
   className,
   mirrored = false,
@@ -567,25 +550,20 @@ export function App({ viewMode = "popup" }: AppProps) {
           <SparkleIcon className="header-icon" />
           <div className="header-brand-text">
             <span className="header-title">{t.appName}</span>
-            {audienceMode && (
-              <span className={`mode-badge ${audienceMode}`}>
-                {audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}
-              </span>
-            )}
           </div>
         </div>
 
-        <div className="header-actions">
-          <div className="settings-menu" ref={settingsRef}>
+        {audienceMode && (
+          <div className="settings-menu mode-switch-menu" ref={settingsRef}>
             <button
               type="button"
-              className="layout-toggle-btn settings-btn"
+              className={`mode-badge mode-switch-btn ${audienceMode}`}
               title={t.settingsOpen}
               aria-label={t.settingsOpen}
               aria-expanded={showSettings}
               onClick={() => setShowSettings((current) => !current)}
             >
-              <SettingsIcon className="settings-icon" />
+              {audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}
             </button>
             {showSettings && (
               <div className="settings-popover" role="dialog" aria-label={t.settingsTitle}>
@@ -609,6 +587,9 @@ export function App({ viewMode = "popup" }: AppProps) {
               </div>
             )}
           </div>
+        )}
+
+        <div className="header-actions">
           {/* Layout toggle button */}
           <button
             type="button"

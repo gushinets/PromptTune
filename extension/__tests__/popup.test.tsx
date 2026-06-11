@@ -55,8 +55,25 @@ function selectGoal(container: HTMLElement, goal: string) {
 }
 
 async function selectMode(container: HTMLElement, mode: "ai" | "content") {
+  const settingsTrigger = Array.from(container.querySelectorAll("button")).find(
+    (button) =>
+      button.getAttribute("aria-label") === "Open settings" ||
+      button.getAttribute("title") === "Open settings",
+  );
+
+  if (!(settingsTrigger instanceof HTMLButtonElement)) {
+    await act(async () => {
+      findButton(
+        container,
+        mode === "ai" ? "I work with AI prompts" : "I create marketing content",
+      ).click();
+      await Promise.resolve();
+    });
+    return;
+  }
+
   await act(async () => {
-    findButtonByAria(container, "Open settings").click();
+    settingsTrigger.click();
     await Promise.resolve();
   });
 
