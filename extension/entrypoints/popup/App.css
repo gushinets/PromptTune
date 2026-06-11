@@ -498,8 +498,49 @@ textarea::placeholder {
 textarea.improved-textarea {
   border-left: 3px solid var(--acc);
   min-height: 72px;
-  resize: vertical;
+  padding-bottom: 18px;
+  resize: none;
   overflow: auto;
+}
+
+.improved-textarea-shell {
+  position: relative;
+}
+
+.improved-output-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.improved-textarea-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 4px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.improved-textarea-resize-grip {
+  width: 11px;
+  height: 11px;
+  opacity: 0.9;
+  background:
+    linear-gradient(135deg, transparent 0 46%, rgba(240, 239, 248, 0.58) 46% 54%, transparent 54%)
+      bottom right / 8px 8px no-repeat,
+    linear-gradient(135deg, transparent 0 46%, rgba(240, 239, 248, 0.34) 46% 54%, transparent 54%)
+      bottom right / 12px 12px no-repeat;
+  transition: opacity 0.15s ease;
+}
+
+.improved-textarea-resize:hover .improved-textarea-resize-grip {
+  opacity: 1;
 }
 
 /* =========================================

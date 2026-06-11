@@ -3,7 +3,7 @@ import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
 
 const REVIEWS_URL =
-  "https://chromewebstore.google.com/detail/promptoptimizer/YOUR_EXTENSION_ID/reviews";
+  "https://chromewebstore.google.com/detail/promptoptimizer/prompt-optimizer_ID/reviews";
 const FEEDBACK_URL =
   "https://docs.google.com/forms/d/e/1FAIpQLSd7Q5SmtvSEuxBDvZRvtNMPojqH7k69olXajFSZGOO4-EZ7CQ/viewform?usp=dialog";
 

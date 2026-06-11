@@ -1,6 +1,9 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { locale, useT } from "@shared/i18n";
 import type { AudienceMode, ImproveGoal } from "@shared/types";
+
+const IMPROVED_TEXTAREA_MIN_HEIGHT = 72;
+const RESIZE_BOTTOM_SAFE_GAP = 12;
 
 const AI_GOAL_ORDER: ImproveGoal[] = [
   "general",
@@ -103,6 +106,10 @@ export function PromptForm({
   const t = useT();
   const goalGroupName = useId();
   const [isImprovementsOpen, setIsImprovementsOpen] = useState(false);
+  const [improvedHeight, setImprovedHeight] = useState<number | null>(null);
+  const promptFormRef = useRef<HTMLDivElement | null>(null);
+  const improvedShellRef = useRef<HTMLDivElement | null>(null);
+  const improvedTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isCompactLayout = loading || Boolean(improved) || improvements.length > 0;
   const goalLabels: Record<ImproveGoal, string> = {
     general: t.goalGeneral,
@@ -124,6 +131,12 @@ export function PromptForm({
     }
   }, [improvements]);
 
+  useEffect(() => {
+    if (!improved.trim()) {
+      setImprovedHeight(null);
+    }
+  }, [improved]);
+
   const localizedImprovements = useMemo(() => {
     if (locale !== "ru") return improvements;
     return improvements.map((line) => CHANGE_LINE_TRANSLATIONS_RU[line] ?? line);
@@ -132,7 +145,7 @@ export function PromptForm({
   const goalOrder = mode === "ai" ? AI_GOAL_ORDER : CONTENT_GOAL_ORDER;
 
   return (
-    <div className="prompt-form">
+    <div className="prompt-form" ref={promptFormRef}>
       <span className="section-label">{t.labelOriginalPrompt}</span>
       <textarea
         value={original}
@@ -182,15 +195,79 @@ export function PromptForm({
           <div className="skeleton-line" />
         </div>
       ) : (
-        <>
-          <textarea
-            className="improved-textarea"
-            value={improved}
-            readOnly
-            placeholder={t.placeholderImproved}
-            rows={localizedImprovements.length > 0 ? 2 : 3}
-          />
-          {improved && <p className="improve-hint">{t.improveHint}</p>}
+        <div className="improved-output-section">
+          <div className="improved-textarea-shell" ref={improvedShellRef}>
+            <textarea
+              ref={improvedTextareaRef}
+              className="improved-textarea"
+              value={improved}
+              readOnly
+              placeholder={t.placeholderImproved}
+              rows={localizedImprovements.length > 0 ? 2 : 3}
+              style={improvedHeight ? { height: `${improvedHeight}px` } : undefined}
+            />
+            <div
+              className="improved-textarea-resize"
+              role="separator"
+              aria-label="Resize improved prompt area"
+              aria-orientation="vertical"
+              onPointerDown={(event) => {
+                const textarea = improvedTextareaRef.current;
+                const shell = improvedShellRef.current;
+                const promptForm = promptFormRef.current;
+                const ownerWindow = textarea?.ownerDocument.defaultView;
+                const tabContent = promptForm?.closest(".tab-content");
+                if (!textarea || !shell || !promptForm || !ownerWindow || !tabContent) return;
+
+                event.preventDefault();
+
+                const startY = event.clientY;
+                const startHeight = textarea.getBoundingClientRect().height;
+                const shellHeight = shell.getBoundingClientRect().height;
+                const promptFormRect = promptForm.getBoundingClientRect();
+                const tabContentRect = tabContent.getBoundingClientRect();
+
+                let followingSiblingHeight = 0;
+                let sibling = promptForm.nextElementSibling as HTMLElement | null;
+                while (sibling) {
+                  followingSiblingHeight += sibling.getBoundingClientRect().height;
+                  sibling = sibling.nextElementSibling as HTMLElement | null;
+                }
+
+                const promptFormOtherContentHeight = Math.max(
+                  0,
+                  promptForm.scrollHeight - shellHeight,
+                );
+                const availableHeight = Math.max(
+                  IMPROVED_TEXTAREA_MIN_HEIGHT,
+                  tabContentRect.bottom -
+                    promptFormRect.top -
+                    promptFormOtherContentHeight -
+                    followingSiblingHeight -
+                    RESIZE_BOTTOM_SAFE_GAP,
+                );
+
+                const handlePointerMove = (moveEvent: PointerEvent) => {
+                  const nextHeight = Math.max(
+                    IMPROVED_TEXTAREA_MIN_HEIGHT,
+                    Math.min(availableHeight, startHeight + (moveEvent.clientY - startY)),
+                  );
+                  setImprovedHeight(nextHeight);
+                };
+
+                const handlePointerUp = () => {
+                  ownerWindow.removeEventListener("pointermove", handlePointerMove);
+                  ownerWindow.removeEventListener("pointerup", handlePointerUp);
+                };
+
+                ownerWindow.addEventListener("pointermove", handlePointerMove);
+                ownerWindow.addEventListener("pointerup", handlePointerUp);
+              }}
+            >
+              <span className="improved-textarea-resize-grip" />
+            </div>
+          </div>
+          {improved && !isImprovementsOpen && <p className="improve-hint">{t.improveHint}</p>}
           {localizedImprovements.length > 0 && (
             <details
               className="improvements-details"
@@ -205,7 +282,7 @@ export function PromptForm({
               </ul>
             </details>
           )}
-        </>
+        </div>
       )}
     </div>
   );

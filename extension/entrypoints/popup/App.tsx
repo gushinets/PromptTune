@@ -6,7 +6,15 @@ import { SiteIcons } from "./components/SiteIcons";
 import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
-import { getAll, save, getInstallationId, getAudienceMode, setAudienceMode } from "@shared/storage";
+import {
+  getAll,
+  save,
+  getInstallationId,
+  getAudienceMode,
+  getPopupSessionDraft,
+  setAudienceMode,
+  setPopupSessionDraft,
+} from "@shared/storage";
 import { FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
@@ -55,6 +63,8 @@ function SparkleIcon({ className }: { className?: string }) {
     <svg
       className={className}
       viewBox="0 0 24 24"
+      width="15"
+      height="15"
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -72,6 +82,8 @@ function BookmarkIcon({ className }: { className?: string }) {
     <svg
       className={className}
       viewBox="0 0 24 24"
+      width="15"
+      height="15"
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -111,6 +123,8 @@ function LayoutSidebarRightIcon({
     <svg
       className={className}
       viewBox="0 0 24 24"
+      width="15"
+      height="15"
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -154,6 +168,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [lastModel, setLastModel] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
+  const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
   const hasUserSelectedGoalRef = useRef(false);
   const hasTrackedPopupOpenedRef = useRef(false);
 
@@ -166,9 +181,31 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, [refreshLibraryCount]);
 
   useEffect(() => {
-    getAudienceMode()
-      .then((mode) => setAudienceModeState(mode))
-      .finally(() => setModeReady(true));
+    Promise.all([getAudienceMode(), getPopupSessionDraft()])
+      .then(([mode, draft]) => {
+        setAudienceModeState(mode);
+
+        if (!draft) return;
+
+        setActiveTab(draft.activeTab);
+        setOriginal(draft.original);
+        setImproved(draft.improved);
+        setChanges(draft.changes);
+        setLastRequestId(draft.lastRequestId);
+        setLastRequestContextKey(draft.lastRequestContextKey);
+        setLastModel(draft.lastModel);
+        setLastLatencyMs(draft.lastLatencyMs);
+        setAttemptN(draft.attemptN);
+
+        if (draft.goal) {
+          hasUserSelectedGoalRef.current = true;
+          setGoal(draft.goal);
+        }
+      })
+      .finally(() => {
+        setSessionDraftLoaded(true);
+        setModeReady(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -216,6 +253,35 @@ export function App({ viewMode = "popup" }: AppProps) {
       setShowSettings(true);
     }
   }, [modeReady, audienceMode]);
+
+  useEffect(() => {
+    if (!sessionDraftLoaded) return;
+
+    void setPopupSessionDraft({
+      activeTab,
+      original,
+      improved,
+      changes,
+      goal,
+      lastRequestId,
+      lastRequestContextKey,
+      lastModel,
+      lastLatencyMs,
+      attemptN,
+    });
+  }, [
+    activeTab,
+    attemptN,
+    changes,
+    goal,
+    improved,
+    lastLatencyMs,
+    lastModel,
+    lastRequestContextKey,
+    lastRequestId,
+    original,
+    sessionDraftLoaded,
+  ]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -599,7 +665,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         </button>
       </nav>
 
-      <div className={`tab-content${activeTab === "improve" ? " no-scroll" : ""}`}>
+      <div className="tab-content">
         {activeTab === "improve" ? (
           <>
             {error && (
