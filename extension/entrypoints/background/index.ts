@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { apiClient, ApiError } from "@shared/api-client";
-import { ANALYTICS_ENABLED, STORAGE_KEYS } from "@shared/constants";
+import { ANALYTICS_ENABLED, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
 import type {
@@ -310,6 +310,7 @@ export default defineBackground(() => {
 
     const installAt = new Date().toISOString();
     await browser.storage.local.set({ [STORAGE_KEYS.INSTALL_AT]: installAt });
+    void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
 
     if (ANALYTICS_ENABLED) {
       await track({

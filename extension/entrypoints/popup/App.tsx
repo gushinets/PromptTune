@@ -100,6 +100,30 @@ function SettingsIcon({ className }: { className?: string }) {
   );
 }
 
+function LayoutSidebarRightIcon({
+  className,
+  mirrored = false,
+}: {
+  className?: string;
+  mirrored?: boolean;
+}) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={mirrored ? { transform: "scaleX(-1)" } : undefined}
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M15 4v16" />
+    </svg>
+  );
+}
+
 interface AppProps {
   /** Whether the App is rendered inside the Chrome side panel. Defaults to false (popup). */
   viewMode?: ViewMode;
@@ -491,8 +515,12 @@ export function App({ viewMode = "popup" }: AppProps) {
             className="layout-toggle-btn"
             title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
             onClick={handleLayoutToggle}
+            aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           >
-            {viewMode === "popup" ? "⊟" : "⊞"}
+            <LayoutSidebarRightIcon
+              className="layout-toggle-icon"
+              mirrored={viewMode === "sidepanel"}
+            />
           </button>
 
           {/* Rate-limit badge */}

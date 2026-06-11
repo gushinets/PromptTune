@@ -497,6 +497,9 @@ textarea::placeholder {
 
 textarea.improved-textarea {
   border-left: 3px solid var(--acc);
+  min-height: 72px;
+  resize: vertical;
+  overflow: auto;
 }
 
 /* =========================================

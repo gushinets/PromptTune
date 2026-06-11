@@ -8,6 +8,9 @@ export const BACKEND_MODE: BackendMode =
 export const N8N_WEBHOOK_URL =
   import.meta.env.VITE_N8N_WEBHOOK_URL ?? "http://localhost:5678/webhook/improve-prompt";
 export const ANALYTICS_ENABLED = (import.meta.env.VITE_ANALYTICS_ENABLED ?? "true") === "true";
+export const WELCOME_PAGE_URL =
+  import.meta.env.VITE_WELCOME_PAGE_URL ??
+  "https://anytoolai-welcome.netlify.app/prompt-optimizer/";
 
 export const STORAGE_KEYS = {
   INSTALLATION_ID: "installation_id",
