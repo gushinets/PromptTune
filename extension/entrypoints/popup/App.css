@@ -879,7 +879,7 @@ button:disabled {
   border: 1px solid var(--border2);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
-  color: var(--txt1);
+  color: var(--txt);
   padding: 10px 11px;
   font: inherit;
 }
