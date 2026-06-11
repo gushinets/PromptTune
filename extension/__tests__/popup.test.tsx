@@ -42,18 +42,16 @@ function selectGoal(container: HTMLElement, goal: string) {
 }
 
 async function selectMode(container: HTMLElement, mode: "ai" | "content") {
-  const settingsTrigger = Array.from(container.querySelectorAll("button")).find(
-    (button) =>
-      button.getAttribute("aria-label") === "Open settings" ||
-      button.getAttribute("title") === "Open settings",
-  );
+  const settingsTrigger = container.querySelector('[data-testid="mode-switch-trigger"]');
 
   if (!(settingsTrigger instanceof HTMLButtonElement)) {
+    const onboardingTarget = container.querySelector(`.mode-onboarding-card[data-mode="${mode}"]`);
+    if (!(onboardingTarget instanceof HTMLButtonElement)) {
+      throw new Error(`Onboarding mode card not found: ${mode}`);
+    }
+
     await act(async () => {
-      findButton(
-        container,
-        mode === "ai" ? "I work with AI prompts" : "I create marketing content",
-      ).click();
+      onboardingTarget.click();
       await Promise.resolve();
     });
     return;
@@ -64,8 +62,7 @@ async function selectMode(container: HTMLElement, mode: "ai" | "content") {
     await Promise.resolve();
   });
 
-  const cards = Array.from(container.querySelectorAll(".settings-popover .settings-mode-card"));
-  const target = cards[mode === "ai" ? 0 : 1];
+  const target = container.querySelector(`.settings-popover .settings-mode-card[data-mode="${mode}"]`);
   if (!(target instanceof HTMLButtonElement)) {
     throw new Error(`Mode card not found: ${mode}`);
   }

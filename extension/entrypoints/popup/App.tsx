@@ -560,6 +560,7 @@ export function App({ viewMode = "popup" }: AppProps) {
               className={`mode-badge mode-switch-btn ${audienceMode}`}
               title={t.settingsOpen}
               aria-label={t.settingsOpen}
+              data-testid="mode-switch-trigger"
               aria-expanded={showSettings}
               onClick={() => setShowSettings((current) => !current)}
             >
@@ -572,6 +573,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                   <button
                     type="button"
                     className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
+                    data-mode="ai"
                     onClick={() => handleModeSelection("ai")}
                   >
                     <strong>{t.onboardingAiTitle}</strong>
@@ -579,6 +581,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                   <button
                     type="button"
                     className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
+                    data-mode="content"
                     onClick={() => handleModeSelection("content")}
                   >
                     <strong>{t.onboardingContentTitle}</strong>
@@ -720,6 +723,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                 <button
                   type="button"
                   className="mode-onboarding-card"
+                  data-mode="ai"
                   onClick={() => handleModeSelection("ai")}
                 >
                   <strong>{t.onboardingAiTitle}</strong>
@@ -728,6 +732,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                 <button
                   type="button"
                   className="mode-onboarding-card"
+                  data-mode="content"
                   onClick={() => handleModeSelection("content")}
                 >
                   <strong>{t.onboardingContentTitle}</strong>
