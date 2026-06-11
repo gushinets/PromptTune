@@ -6,7 +6,15 @@ import { SiteIcons } from "./components/SiteIcons";
 import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
-import { getAll, save, getInstallationId, getAudienceMode, setAudienceMode } from "@shared/storage";
+import {
+  getAll,
+  save,
+  getInstallationId,
+  getAudienceMode,
+  getPopupSessionDraft,
+  setAudienceMode,
+  setPopupSessionDraft,
+} from "@shared/storage";
 import { FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
@@ -55,6 +63,8 @@ function SparkleIcon({ className }: { className?: string }) {
     <svg
       className={className}
       viewBox="0 0 24 24"
+      width="15"
+      height="15"
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -72,6 +82,8 @@ function BookmarkIcon({ className }: { className?: string }) {
     <svg
       className={className}
       viewBox="0 0 24 24"
+      width="15"
+      height="15"
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -96,6 +108,32 @@ function SettingsIcon({ className }: { className?: string }) {
     >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .16 1.7 1.7 0 0 0-.94 1.53V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-.94-1.53 1.7 1.7 0 0 0-1-.16 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.16-1 1.7 1.7 0 0 0-1.53-.94H2.9a2 2 0 0 1 0-4h.01a1.7 1.7 0 0 0 1.53-.94 1.7 1.7 0 0 0 .16-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.16 1.7 1.7 0 0 0 .94-1.53V2.9a2 2 0 0 1 4 0v.01a1.7 1.7 0 0 0 .94 1.53 1.7 1.7 0 0 0 1 .16 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .16 1 1.7 1.7 0 0 0 1.53.94h.01a2 2 0 0 1 0 4h-.01a1.7 1.7 0 0 0-1.53.94 1.7 1.7 0 0 0-.16 1z" />
+    </svg>
+  );
+}
+
+function LayoutSidebarRightIcon({
+  className,
+  mirrored = false,
+}: {
+  className?: string;
+  mirrored?: boolean;
+}) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={mirrored ? { transform: "scaleX(-1)" } : undefined}
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M15 4v16" />
     </svg>
   );
 }
@@ -130,6 +168,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [lastModel, setLastModel] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
+  const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
   const hasUserSelectedGoalRef = useRef(false);
   const hasTrackedPopupOpenedRef = useRef(false);
 
@@ -142,9 +181,31 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, [refreshLibraryCount]);
 
   useEffect(() => {
-    getAudienceMode()
-      .then((mode) => setAudienceModeState(mode))
-      .finally(() => setModeReady(true));
+    Promise.all([getAudienceMode(), getPopupSessionDraft()])
+      .then(([mode, draft]) => {
+        setAudienceModeState(mode);
+
+        if (!draft) return;
+
+        setActiveTab(draft.activeTab);
+        setOriginal(draft.original);
+        setImproved(draft.improved);
+        setChanges(draft.changes);
+        setLastRequestId(draft.lastRequestId);
+        setLastRequestContextKey(draft.lastRequestContextKey);
+        setLastModel(draft.lastModel);
+        setLastLatencyMs(draft.lastLatencyMs);
+        setAttemptN(draft.attemptN);
+
+        if (draft.goal) {
+          hasUserSelectedGoalRef.current = true;
+          setGoal(draft.goal);
+        }
+      })
+      .finally(() => {
+        setSessionDraftLoaded(true);
+        setModeReady(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -192,6 +253,35 @@ export function App({ viewMode = "popup" }: AppProps) {
       setShowSettings(true);
     }
   }, [modeReady, audienceMode]);
+
+  useEffect(() => {
+    if (!sessionDraftLoaded) return;
+
+    void setPopupSessionDraft({
+      activeTab,
+      original,
+      improved,
+      changes,
+      goal,
+      lastRequestId,
+      lastRequestContextKey,
+      lastModel,
+      lastLatencyMs,
+      attemptN,
+    });
+  }, [
+    activeTab,
+    attemptN,
+    changes,
+    goal,
+    improved,
+    lastLatencyMs,
+    lastModel,
+    lastRequestContextKey,
+    lastRequestId,
+    original,
+    sessionDraftLoaded,
+  ]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -491,8 +581,12 @@ export function App({ viewMode = "popup" }: AppProps) {
             className="layout-toggle-btn"
             title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
             onClick={handleLayoutToggle}
+            aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           >
-            {viewMode === "popup" ? "⊟" : "⊞"}
+            <LayoutSidebarRightIcon
+              className="layout-toggle-icon"
+              mirrored={viewMode === "sidepanel"}
+            />
           </button>
 
           {/* Rate-limit badge */}
@@ -571,7 +665,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         </button>
       </nav>
 
-      <div className={`tab-content${activeTab === "improve" ? " no-scroll" : ""}`}>
+      <div className="tab-content">
         {activeTab === "improve" ? (
           <>
             {error && (

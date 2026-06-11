@@ -266,7 +266,9 @@ describe("App", () => {
     expect(container.textContent).toContain(
       "You've used all 10 requests today. Resets at midnight UTC.",
     );
-    expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalled();
+    expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ library: expect.anything() }),
+    );
   });
 
   it("sends selected mode and goal in improve requests", async () => {

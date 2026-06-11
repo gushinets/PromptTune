@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { STORAGE_KEYS, LIMITS } from "./constants";
-import type { AudienceMode } from "./types";
+import type { AudienceMode, ImproveGoal } from "./types";
 
 export interface LibraryEntry {
   id: string;
@@ -10,6 +10,19 @@ export interface LibraryEntry {
   site?: string;
   title?: string;
   tags?: string[];
+}
+
+export interface PopupSessionDraft {
+  activeTab: "improve" | "library";
+  original: string;
+  improved: string;
+  changes: string[];
+  goal: ImproveGoal | null;
+  lastRequestId: string | null;
+  lastRequestContextKey: string | null;
+  lastModel: string | null;
+  lastLatencyMs: number | null;
+  attemptN: number;
 }
 
 export async function getInstallationId(): Promise<string> {
@@ -57,4 +70,13 @@ export async function getAudienceMode(): Promise<AudienceMode | null> {
 
 export async function setAudienceMode(mode: AudienceMode): Promise<void> {
   await browser.storage.local.set({ [STORAGE_KEYS.AUDIENCE_MODE]: mode });
+}
+
+export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> {
+  const data = await browser.storage.local.get(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+  return (data[STORAGE_KEYS.POPUP_SESSION_DRAFT] as PopupSessionDraft | undefined) ?? null;
+}
+
+export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<void> {
+  await browser.storage.local.set({ [STORAGE_KEYS.POPUP_SESSION_DRAFT]: draft });
 }
