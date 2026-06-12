@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import browser from "webextension-polyfill";
 import { locale, useT } from "@shared/i18n";
 import type { AudienceMode, ImproveGoal } from "@shared/types";
 
@@ -75,22 +76,7 @@ interface PromptFormProps {
   onImprove: () => void;
 }
 
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z" />
-      <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z" />
-    </svg>
-  );
-}
+const APP_ICON_SRC = browser.runtime.getURL("icon-32.png");
 
 export function PromptForm({
   original,
@@ -181,7 +167,7 @@ export function PromptForm({
           </>
         ) : (
           <>
-            <SparkleIcon className="btn-icon" />
+            <img className="btn-icon" src={APP_ICON_SRC} alt="" aria-hidden="true" />
             {t.btnImprove}
           </>
         )}
