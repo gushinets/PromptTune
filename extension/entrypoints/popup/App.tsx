@@ -95,23 +95,6 @@ function BookmarkIcon({ className }: { className?: string }) {
   );
 }
 
-function SettingsIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .16 1.7 1.7 0 0 0-.94 1.53V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-.94-1.53 1.7 1.7 0 0 0-1-.16 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.16-1 1.7 1.7 0 0 0-1.53-.94H2.9a2 2 0 0 1 0-4h.01a1.7 1.7 0 0 0 1.53-.94 1.7 1.7 0 0 0 .16-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.16 1.7 1.7 0 0 0 .94-1.53V2.9a2 2 0 0 1 4 0v.01a1.7 1.7 0 0 0 .94 1.53 1.7 1.7 0 0 0 1 .16 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 .16 1 1.7 1.7 0 0 0 1.53.94h.01a2 2 0 0 1 0 4h-.01a1.7 1.7 0 0 0-1.53.94 1.7 1.7 0 0 0-.16 1z" />
-    </svg>
-  );
-}
-
 function LayoutSidebarRightIcon({
   className,
   mirrored = false,
@@ -134,6 +117,25 @@ function LayoutSidebarRightIcon({
     >
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M15 4v16" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
@@ -169,6 +171,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
   const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
+  const settingsRef = useRef<HTMLDivElement | null>(null);
   const hasUserSelectedGoalRef = useRef(false);
   const hasTrackedPopupOpenedRef = useRef(false);
 
@@ -249,12 +252,6 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, [audienceMode, detectedAiGoal, modeReady]);
 
   useEffect(() => {
-    if (modeReady && !audienceMode) {
-      setShowSettings(true);
-    }
-  }, [modeReady, audienceMode]);
-
-  useEffect(() => {
     if (!sessionDraftLoaded) return;
 
     void setPopupSessionDraft({
@@ -282,6 +279,21 @@ export function App({ viewMode = "popup" }: AppProps) {
     original,
     sessionDraftLoaded,
   ]);
+
+  useEffect(() => {
+    if (!showSettings) return;
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!settingsRef.current?.contains(event.target as Node)) {
+        setShowSettings(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [showSettings]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -557,24 +569,50 @@ export function App({ viewMode = "popup" }: AppProps) {
           <SparkleIcon className="header-icon" />
           <div className="header-brand-text">
             <span className="header-title">{t.appName}</span>
-            {audienceMode && (
-              <span className={`mode-badge ${audienceMode}`}>
-                {audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}
-              </span>
-            )}
           </div>
         </div>
 
+        {audienceMode && (
+          <div className="settings-menu mode-switch-menu" ref={settingsRef}>
+            <button
+              type="button"
+              className={`mode-badge mode-switch-btn ${audienceMode}`}
+              title={t.settingsOpen}
+              aria-label={t.settingsOpen}
+              data-testid="mode-switch-trigger"
+              aria-expanded={showSettings}
+              onClick={() => setShowSettings((current) => !current)}
+            >
+              <span>{audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}</span>
+              <ChevronDownIcon className={`mode-switch-chevron${showSettings ? " open" : ""}`} />
+            </button>
+            {showSettings && (
+              <div className="settings-popover" role="dialog" aria-label={t.settingsTitle}>
+                <p className="settings-hint">{t.settingsModeHint}</p>
+                <div className="settings-mode-field">
+                  <button
+                    type="button"
+                    className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
+                    data-mode="ai"
+                    onClick={() => handleModeSelection("ai")}
+                  >
+                    <strong>{t.onboardingAiTitle}</strong>
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
+                    data-mode="content"
+                    onClick={() => handleModeSelection("content")}
+                  >
+                    <strong>{t.onboardingContentTitle}</strong>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="header-actions">
-          <button
-            type="button"
-            className="layout-toggle-btn settings-btn"
-            title={t.settingsOpen}
-            aria-label={t.settingsOpen}
-            onClick={() => setShowSettings(true)}
-          >
-            <SettingsIcon className="settings-icon" />
-          </button>
           {/* Layout toggle button */}
           <button
             type="button"
@@ -699,16 +737,26 @@ export function App({ viewMode = "popup" }: AppProps) {
                 onImprove={handleImprove}
               />
             ) : (
-              <div className="mode-onboarding compact">
+              <div className="mode-onboarding">
                 <h3>{t.settingsModeRequiredTitle}</h3>
                 <p>{t.settingsModeRequiredSubtitle}</p>
                 <button
                   type="button"
                   className="mode-onboarding-card"
-                  onClick={() => setShowSettings(true)}
+                  data-mode="ai"
+                  onClick={() => handleModeSelection("ai")}
                 >
-                  <strong>{t.settingsOpen}</strong>
-                  <span>{t.settingsModeHint}</span>
+                  <strong>{t.onboardingAiTitle}</strong>
+                  <span>{t.onboardingAiDescription}</span>
+                </button>
+                <button
+                  type="button"
+                  className="mode-onboarding-card"
+                  data-mode="content"
+                  onClick={() => handleModeSelection("content")}
+                >
+                  <strong>{t.onboardingContentTitle}</strong>
+                  <span>{t.onboardingContentDescription}</span>
                 </button>
               </div>
             )}
@@ -728,50 +776,6 @@ export function App({ viewMode = "popup" }: AppProps) {
         )}
       </div>
       <RatingBar />
-
-      {showSettings && (
-        <div
-          className="settings-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.settingsTitle}
-        >
-          <div className="settings-modal">
-            <div className="settings-modal-header">
-              <h3>{t.settingsTitle}</h3>
-              <button
-                type="button"
-                className="settings-close"
-                onClick={() => setShowSettings(false)}
-                aria-label={t.settingsClose}
-              >
-                ×
-              </button>
-            </div>
-            <p className="settings-hint">{t.settingsModeHint}</p>
-            <div className="settings-mode-grid" role="radiogroup" aria-label={t.modeLabel}>
-              <button
-                type="button"
-                className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
-                aria-pressed={audienceMode === "ai"}
-                onClick={() => handleModeSelection("ai")}
-              >
-                <strong>{t.onboardingAiTitle}</strong>
-                <span>{t.onboardingAiDescription}</span>
-              </button>
-              <button
-                type="button"
-                className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
-                aria-pressed={audienceMode === "content"}
-                onClick={() => handleModeSelection("content")}
-              >
-                <strong>{t.onboardingContentTitle}</strong>
-                <span>{t.onboardingContentDescription}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

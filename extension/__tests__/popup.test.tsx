@@ -23,19 +23,6 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   return match;
 }
 
-function findButtonByAria(container: HTMLElement, label: string): HTMLButtonElement {
-  const match = Array.from(container.querySelectorAll("button")).find(
-    (button) =>
-      button.getAttribute("aria-label") === label || button.getAttribute("title") === label,
-  );
-
-  if (!(match instanceof HTMLButtonElement)) {
-    throw new Error(`Button not found by aria/title: ${label}`);
-  }
-
-  return match;
-}
-
 function getImproveButton(container: HTMLElement): HTMLButtonElement {
   const match = container.querySelector(".btn-improve");
   if (!(match instanceof HTMLButtonElement)) {
@@ -55,13 +42,33 @@ function selectGoal(container: HTMLElement, goal: string) {
 }
 
 async function selectMode(container: HTMLElement, mode: "ai" | "content") {
+  const settingsTrigger = container.querySelector('[data-testid="mode-switch-trigger"]');
+
+  if (!settingsTrigger) {
+    const onboardingTarget = container.querySelector(`.mode-onboarding-card[data-mode="${mode}"]`);
+    if (!(onboardingTarget instanceof HTMLButtonElement)) {
+      throw new Error(`Onboarding mode card not found: ${mode}`);
+    }
+
+    await act(async () => {
+      onboardingTarget.click();
+      await Promise.resolve();
+    });
+    return;
+  }
+
+  if (!(settingsTrigger instanceof HTMLButtonElement)) {
+    throw new Error("Settings trigger found but is not a button element");
+  }
+
   await act(async () => {
-    findButtonByAria(container, "Open settings").click();
+    settingsTrigger.click();
     await Promise.resolve();
   });
 
-  const cards = Array.from(container.querySelectorAll(".settings-mode-card"));
-  const target = cards[mode === "ai" ? 0 : 1];
+  const target = container.querySelector(
+    `.settings-popover .settings-mode-card[data-mode="${mode}"]`,
+  );
   if (!(target instanceof HTMLButtonElement)) {
     throw new Error(`Mode card not found: ${mode}`);
   }
@@ -305,9 +312,7 @@ describe("App", () => {
     await flushEffects();
 
     await setOriginalPrompt(container, "Original prompt");
-    await act(async () => {
-      await selectMode(container, "content");
-    });
+    await selectMode(container, "content");
     await flushEffects();
     await act(async () => {
       selectGoal(container, "seo_article");
@@ -468,10 +473,7 @@ describe("App", () => {
     await flushEffects();
 
     expect(container.textContent).toContain("Choose mode to continue");
-    await act(async () => {
-      findButton(container, "I work with AI prompts").click();
-      await Promise.resolve();
-    });
+    await selectMode(container, "ai");
     await flushEffects();
 
     expect(browser.storage.local.set).toHaveBeenCalledWith({ audience_mode: "ai" });
