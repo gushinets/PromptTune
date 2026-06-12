@@ -58,24 +58,7 @@ export interface ErrorInfo {
   message: string;
 }
 
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z" />
-      <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75z" />
-    </svg>
-  );
-}
+const APP_ICON_SRC = browser.runtime.getURL("icon-32.png");
 
 function BookmarkIcon({ className }: { className?: string }) {
   return (
@@ -566,7 +549,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     <div className={`popup-container ${viewMode}`}>
       <header className="header">
         <div className="header-brand">
-          <SparkleIcon className="header-icon" />
+          <img className="header-icon" src={APP_ICON_SRC} alt="" aria-hidden="true" />
           <div className="header-brand-text">
             <span className="header-title">{t.appName}</span>
           </div>
@@ -687,7 +670,7 @@ export function App({ viewMode = "popup" }: AppProps) {
           className={`tab${activeTab === "improve" ? " active" : ""}`}
           onClick={() => setActiveTab("improve")}
         >
-          <SparkleIcon className="tab-icon" />
+          <img className="tab-icon" src={APP_ICON_SRC} alt="" aria-hidden="true" />
           {t.tabImprove}
         </button>
         <button

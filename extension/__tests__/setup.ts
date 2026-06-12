@@ -45,6 +45,7 @@ vi.mock("webextension-polyfill", () => ({
     runtime: {
       sendMessage: vi.fn().mockResolvedValue(undefined),
       getManifest: vi.fn().mockReturnValue({ version: "0.1.0" }),
+      getURL: vi.fn((path: string) => path),
       onMessage: { addListener: vi.fn() },
     },
     tabs: {
