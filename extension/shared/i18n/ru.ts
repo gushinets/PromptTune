@@ -4,7 +4,7 @@ export const ru: TranslationKeys = {
   // Header
   appName: "PromptOptimizer",
   modeBadgeAi: "AI режим",
-  modeBadgeContent: "Content режим",
+  modeBadgeContent: "Контент",
   settingsOpen: "Открыть настройки",
   settingsTitle: "Настройки",
   settingsClose: "Закрыть настройки",

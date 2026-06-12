@@ -555,47 +555,46 @@ export function App({ viewMode = "popup" }: AppProps) {
           </div>
         </div>
 
-        {audienceMode && (
-          <div className="settings-menu mode-switch-menu" ref={settingsRef}>
-            <button
-              type="button"
-              className={`mode-badge mode-switch-btn ${audienceMode}`}
-              title={t.settingsOpen}
-              aria-label={t.settingsOpen}
-              data-testid="mode-switch-trigger"
-              aria-expanded={showSettings}
-              onClick={() => setShowSettings((current) => !current)}
-            >
-              <span>{audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}</span>
-              <ChevronDownIcon className={`mode-switch-chevron${showSettings ? " open" : ""}`} />
-            </button>
-            {showSettings && (
-              <div className="settings-popover" role="dialog" aria-label={t.settingsTitle}>
-                <p className="settings-hint">{t.settingsModeHint}</p>
-                <div className="settings-mode-field">
-                  <button
-                    type="button"
-                    className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
-                    data-mode="ai"
-                    onClick={() => handleModeSelection("ai")}
-                  >
-                    <strong>{t.onboardingAiTitle}</strong>
-                  </button>
-                  <button
-                    type="button"
-                    className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
-                    data-mode="content"
-                    onClick={() => handleModeSelection("content")}
-                  >
-                    <strong>{t.onboardingContentTitle}</strong>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         <div className="header-actions">
+          {audienceMode && (
+            <div className="settings-menu mode-switch-menu" ref={settingsRef}>
+              <button
+                type="button"
+                className={`mode-badge mode-switch-btn ${audienceMode}`}
+                title={t.settingsOpen}
+                aria-label={t.settingsOpen}
+                data-testid="mode-switch-trigger"
+                aria-expanded={showSettings}
+                onClick={() => setShowSettings((current) => !current)}
+              >
+                <span>{audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}</span>
+                <ChevronDownIcon className={`mode-switch-chevron${showSettings ? " open" : ""}`} />
+              </button>
+              {showSettings && (
+                <div className="settings-popover" role="dialog" aria-label={t.settingsTitle}>
+                  <p className="settings-hint">{t.settingsModeHint}</p>
+                  <div className="settings-mode-field">
+                    <button
+                      type="button"
+                      className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
+                      data-mode="ai"
+                      onClick={() => handleModeSelection("ai")}
+                    >
+                      <strong>{t.onboardingAiTitle}</strong>
+                    </button>
+                    <button
+                      type="button"
+                      className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
+                      data-mode="content"
+                      onClick={() => handleModeSelection("content")}
+                    >
+                      <strong>{t.onboardingContentTitle}</strong>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {/* Layout toggle button */}
           <button
             type="button"
