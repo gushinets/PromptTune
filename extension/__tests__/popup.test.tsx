@@ -44,7 +44,7 @@ function selectGoal(container: HTMLElement, goal: string) {
 async function selectMode(container: HTMLElement, mode: "ai" | "content") {
   const settingsTrigger = container.querySelector('[data-testid="mode-switch-trigger"]');
 
-  if (!(settingsTrigger instanceof HTMLButtonElement)) {
+  if (!settingsTrigger) {
     const onboardingTarget = container.querySelector(`.mode-onboarding-card[data-mode="${mode}"]`);
     if (!(onboardingTarget instanceof HTMLButtonElement)) {
       throw new Error(`Onboarding mode card not found: ${mode}`);
@@ -55,6 +55,10 @@ async function selectMode(container: HTMLElement, mode: "ai" | "content") {
       await Promise.resolve();
     });
     return;
+  }
+
+  if (!(settingsTrigger instanceof HTMLButtonElement)) {
+    throw new Error("Settings trigger found but is not a button element");
   }
 
   await act(async () => {
@@ -308,9 +312,7 @@ describe("App", () => {
     await flushEffects();
 
     await setOriginalPrompt(container, "Original prompt");
-    await act(async () => {
-      await selectMode(container, "content");
-    });
+    await selectMode(container, "content");
     await flushEffects();
     await act(async () => {
       selectGoal(container, "seo_article");
