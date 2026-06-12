@@ -121,6 +121,25 @@ function LayoutSidebarRightIcon({
   );
 }
 
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 interface AppProps {
   /** Whether the App is rendered inside the Chrome side panel. Defaults to false (popup). */
   viewMode?: ViewMode;
@@ -564,7 +583,8 @@ export function App({ viewMode = "popup" }: AppProps) {
               aria-expanded={showSettings}
               onClick={() => setShowSettings((current) => !current)}
             >
-              {audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}
+              <span>{audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}</span>
+              <ChevronDownIcon className={`mode-switch-chevron${showSettings ? " open" : ""}`} />
             </button>
             {showSettings && (
               <div className="settings-popover" role="dialog" aria-label={t.settingsTitle}>

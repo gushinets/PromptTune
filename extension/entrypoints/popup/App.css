@@ -233,12 +233,13 @@ body.sidepanel-body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   font-family: var(--font-mono);
   font-size: 7px;
   font-weight: 700;
   letter-spacing: 0.06em;
   border-radius: 100px;
-  padding: 1px 6px;
+  padding: 1px 6px 1px 7px;
   border: 1px solid transparent;
   white-space: nowrap;
   background-clip: padding-box;
@@ -265,6 +266,18 @@ body.sidepanel-body {
 .mode-switch-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.35);
+}
+
+.mode-switch-chevron {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  opacity: 0.9;
+  transition: transform 160ms ease;
+}
+
+.mode-switch-chevron.open {
+  transform: rotate(180deg);
 }
 
 .mode-badge.ai {
