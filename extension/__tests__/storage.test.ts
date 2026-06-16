@@ -137,6 +137,45 @@ describe("storage", () => {
       expect(browser.storage.local.remove).not.toHaveBeenCalled();
     });
 
+    it("migrates a legacy draft without timestamp", async () => {
+      vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "legacy draft",
+          improved: "legacy improved",
+          changes: ["change"],
+          goal: "general",
+          lastRequestId: "req-legacy",
+          lastRequestContextKey: "ctx-legacy",
+          lastModel: "gpt",
+          lastLatencyMs: 123,
+          attemptN: 2,
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toEqual({
+        activeTab: "improve",
+        original: "legacy draft",
+        improved: "legacy improved",
+        changes: ["change"],
+        goal: "general",
+        lastRequestId: "req-legacy",
+        lastRequestContextKey: "ctx-legacy",
+        lastModel: "gpt",
+        lastLatencyMs: 123,
+        attemptN: 2,
+      });
+      expect(browser.storage.local.set).toHaveBeenCalledWith({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: expect.objectContaining({
+          original: "legacy draft",
+          improved: "legacy improved",
+          updatedAt: new Date("2026-06-16T12:00:00.000Z").getTime(),
+        }),
+      });
+      expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    });
+
     it("clears an expired draft", async () => {
       vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
       vi.mocked(browser.storage.local.get).mockResolvedValue({
