@@ -95,25 +95,42 @@ To point the extension at a local FastAPI instance instead, override:
 ```bash
 python -m venv .venv
 source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -e "backend[dev]" # with dev dependencies (pytest, ruff)
-# OR runtime only
-pip install -e backend
+python -m pip install -e "./backend[dev]"  # use the same interpreter for install + checks
 cd backend
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
 Backend dependency policy and validation:
 - Use `backend/pyproject.toml` as the single source of truth for Python dependencies.
 - Do not maintain `backend/requirements.in` or `backend/requirements.txt`.
-- From `backend/`, run:
-  - `pip install -e .` (runtime)
-  - `pip install -e ".[dev]"` (dev/test/lint)
-  - `pytest -q`
+- From the repo root, run:
+  - `python -m pip install -e "./backend[dev]"` (dev/test/lint; use the same interpreter you will run checks with)
+  - `python scripts/agent/quick_check.py` for the canonical backend baseline
+- Additional backend-only commands from `backend/`:
+  - `python -m pip install -e .` (runtime)
+  - `python -m pip install -e ".[dev]"` (dev/test/lint)
   - `ruff check .`
   - `ruff format --check .`
 - One-time sanity check:
-  - `pip install -e "backend[dev]"`
+  - `python -m pip install -e "./backend[dev]"`
   - `python -c "from importlib.metadata import version; print(version('litellm'))"` (expected: `1.82.2`)
+
+Baseline command details:
+- `python scripts/agent/quick_check.py` runs:
+  - Alembic migration preflight against `DATABASE_URL`
+  - config validation via `backend/tests/test_config.py`
+  - architecture validation via `backend/tests/test_infra_coverage.py`
+  - the remaining backend pytest suite
+- `python scripts/agent/quick_check.py --frontend` additionally runs optional extension checks (`npm run lint` and `npm run test`)
+- `python scripts/agent/quick_check.py --no-db-migrate` skips the migration preflight when you only need fast local test feedback
+
+Test DB / Redis for baseline runs:
+- The baseline command reads `DATABASE_URL` and `REDIS_URL` from the environment, and otherwise defaults to test-safe local values.
+- Recommended local test values:
+  - `DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttune_test`
+  - `REDIS_URL=redis://localhost:6379/0`
+- You only need to override those values when your test services live elsewhere; otherwise `python scripts/agent/quick_check.py` uses them automatically.
+- GitHub Actions uses the same `python scripts/agent/quick_check.py` entrypoint with those CI env vars pointed at the workflow service containers.
 
 Then set env vars for the extension:
 
