@@ -25,6 +25,10 @@ export interface PopupSessionDraft {
   attemptN: number;
 }
 
+interface StoredPopupSessionDraft extends PopupSessionDraft {
+  updatedAt: number;
+}
+
 export async function getInstallationId(): Promise<string> {
   const data = await browser.storage.local.get(STORAGE_KEYS.INSTALLATION_ID);
   if (data[STORAGE_KEYS.INSTALLATION_ID]) {
@@ -74,9 +78,28 @@ export async function setAudienceMode(mode: AudienceMode): Promise<void> {
 
 export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> {
   const data = await browser.storage.local.get(STORAGE_KEYS.POPUP_SESSION_DRAFT);
-  return (data[STORAGE_KEYS.POPUP_SESSION_DRAFT] as PopupSessionDraft | undefined) ?? null;
+  const draft = data[STORAGE_KEYS.POPUP_SESSION_DRAFT] as StoredPopupSessionDraft | undefined;
+  if (!draft) return null;
+
+  if (typeof draft.updatedAt !== "number") {
+    await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    return null;
+  }
+
+  if (Date.now() - draft.updatedAt > LIMITS.POPUP_SESSION_TTL_MS) {
+    await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    return null;
+  }
+
+  const { updatedAt: _updatedAt, ...sessionDraft } = draft;
+  return sessionDraft;
 }
 
 export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<void> {
-  await browser.storage.local.set({ [STORAGE_KEYS.POPUP_SESSION_DRAFT]: draft });
+  await browser.storage.local.set({
+    [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+      ...draft,
+      updatedAt: Date.now(),
+    } satisfies StoredPopupSessionDraft,
+  });
 }
