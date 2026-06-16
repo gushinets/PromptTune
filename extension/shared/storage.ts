@@ -43,8 +43,10 @@ function isPopupSessionDraft(value: unknown): value is PopupSessionDraft {
     (draft.lastRequestId === null || typeof draft.lastRequestId === "string") &&
     (draft.lastRequestContextKey === null || typeof draft.lastRequestContextKey === "string") &&
     (draft.lastModel === null || typeof draft.lastModel === "string") &&
-    (draft.lastLatencyMs === null || typeof draft.lastLatencyMs === "number") &&
-    typeof draft.attemptN === "number"
+    (draft.lastLatencyMs === null ||
+      (typeof draft.lastLatencyMs === "number" && Number.isFinite(draft.lastLatencyMs))) &&
+    typeof draft.attemptN === "number" &&
+    Number.isFinite(draft.attemptN)
   );
 }
 
@@ -100,8 +102,16 @@ export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> 
   const draft = data[STORAGE_KEYS.POPUP_SESSION_DRAFT] as
     | StoredPopupSessionDraft
     | PopupSessionDraft
+    | string
+    | number
+    | boolean
     | undefined;
   if (!draft) return null;
+
+  if (typeof draft !== "object") {
+    await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    return null;
+  }
 
   if (!("updatedAt" in draft)) {
     if (!isPopupSessionDraft(draft)) {

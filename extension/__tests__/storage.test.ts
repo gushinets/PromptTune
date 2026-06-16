@@ -176,6 +176,40 @@ describe("storage", () => {
       expect(browser.storage.local.remove).not.toHaveBeenCalled();
     });
 
+    it("clears a truthy primitive draft value", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: "corrupted",
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toBeNull();
+      expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    });
+
+    it("clears a legacy draft with non-finite numeric fields", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "legacy draft",
+          improved: "legacy improved",
+          changes: ["change"],
+          goal: "general",
+          lastRequestId: "req-legacy",
+          lastRequestContextKey: "ctx-legacy",
+          lastModel: "gpt",
+          lastLatencyMs: Number.POSITIVE_INFINITY,
+          attemptN: 2,
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toBeNull();
+      expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+      expect(browser.storage.local.set).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          [STORAGE_KEYS.POPUP_SESSION_DRAFT]: expect.anything(),
+        }),
+      );
+    });
+
     it("clears an expired draft", async () => {
       vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
       vi.mocked(browser.storage.local.get).mockResolvedValue({
