@@ -159,5 +159,26 @@ describe("storage", () => {
       await expect(getPopupSessionDraft()).resolves.toBeNull();
       expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
     });
+
+    it("clears a draft with a non-finite timestamp", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "corrupted",
+          improved: "corrupted improved",
+          changes: [],
+          goal: "general",
+          lastRequestId: null,
+          lastRequestContextKey: null,
+          lastModel: null,
+          lastLatencyMs: null,
+          attemptN: 1,
+          updatedAt: Number.NaN,
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toBeNull();
+      expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    });
   });
 });

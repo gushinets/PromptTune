@@ -81,7 +81,7 @@ export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> 
   const draft = data[STORAGE_KEYS.POPUP_SESSION_DRAFT] as StoredPopupSessionDraft | undefined;
   if (!draft) return null;
 
-  if (typeof draft.updatedAt !== "number") {
+  if (typeof draft.updatedAt !== "number" || !Number.isFinite(draft.updatedAt)) {
     await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
     return null;
   }
