@@ -501,8 +501,7 @@ describe("App", () => {
         lastModel: null,
         lastLatencyMs: null,
         attemptN: 1,
-        updatedAt:
-          new Date("2026-06-16T12:00:00.000Z").getTime() - LIMITS.POPUP_SESSION_TTL_MS - 1,
+        updatedAt: new Date("2026-06-16T12:00:00.000Z").getTime() - LIMITS.POPUP_SESSION_TTL_MS - 1,
       },
     });
 
