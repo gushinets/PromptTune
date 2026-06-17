@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { ApiError, apiClient } from "@shared/api-client";
+import { LIMITS } from "@shared/constants";
 import { App } from "../entrypoints/popup/App";
 
 function flushEffects() {
@@ -107,12 +108,15 @@ describe("App", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
     vi.mocked(browser.storage.local.get).mockResolvedValue({
       installation_id: "install-1",
       library: [],
       audience_mode: "ai",
     });
     vi.mocked(browser.storage.local.set).mockResolvedValue(undefined);
+    vi.mocked(browser.storage.local.remove).mockResolvedValue(undefined);
     vi.mocked(browser.runtime.getManifest).mockReturnValue({
       version: "0.1.0",
     } as ReturnType<typeof browser.runtime.getManifest>);
@@ -146,6 +150,7 @@ describe("App", () => {
     });
     container.remove();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("allows improve requests after a limits lookup failure", async () => {
@@ -478,5 +483,37 @@ describe("App", () => {
 
     expect(browser.storage.local.set).toHaveBeenCalledWith({ audience_mode: "ai" });
     expect(container.textContent).toContain("AI Mode");
+  });
+
+  it("does not restore an expired popup session draft", async () => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      installation_id: "install-1",
+      library: [],
+      audience_mode: "ai",
+      popup_session_draft: {
+        activeTab: "improve",
+        original: "Old original",
+        improved: "Old improved",
+        changes: [],
+        goal: "general",
+        lastRequestId: null,
+        lastRequestContextKey: null,
+        lastModel: null,
+        lastLatencyMs: null,
+        attemptN: 1,
+        updatedAt: new Date("2026-06-16T12:00:00.000Z").getTime() - LIMITS.POPUP_SESSION_TTL_MS - 1,
+      },
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+
+    const originalField = container.querySelector("textarea");
+    expect(originalField).toBeInstanceOf(HTMLTextAreaElement);
+    expect((originalField as HTMLTextAreaElement).value).toBe("");
+    expect(container.textContent).not.toContain("Old improved");
+    expect(vi.mocked(browser.storage.local.remove)).toHaveBeenCalledWith("popup_session_draft");
   });
 });

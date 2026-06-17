@@ -7,11 +7,15 @@ import {
   remove,
   getAudienceMode,
   setAudienceMode,
+  getPopupSessionDraft,
+  setPopupSessionDraft,
 } from "@shared/storage";
+import { LIMITS, STORAGE_KEYS } from "@shared/constants";
 
 describe("storage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
   });
 
   describe("getInstallationId", () => {
@@ -71,6 +75,183 @@ describe("storage", () => {
     it("persists mode", async () => {
       await setAudienceMode("ai");
       expect(browser.storage.local.set).toHaveBeenCalledWith({ audience_mode: "ai" });
+    });
+  });
+
+  describe("popup session draft", () => {
+    it("stores draft with last activity timestamp", async () => {
+      vi.setSystemTime(new Date("2026-06-16T09:00:00.000Z"));
+
+      await setPopupSessionDraft({
+        activeTab: "improve",
+        original: "draft",
+        improved: "better draft",
+        changes: [],
+        goal: "general",
+        lastRequestId: null,
+        lastRequestContextKey: null,
+        lastModel: null,
+        lastLatencyMs: null,
+        attemptN: 1,
+      });
+
+      expect(browser.storage.local.set).toHaveBeenCalledWith({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: expect.objectContaining({
+          original: "draft",
+          improved: "better draft",
+          updatedAt: new Date("2026-06-16T09:00:00.000Z").getTime(),
+        }),
+      });
+    });
+
+    it("returns a fresh draft", async () => {
+      vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "draft",
+          improved: "better draft",
+          changes: ["change"],
+          goal: "general",
+          lastRequestId: "req-1",
+          lastRequestContextKey: "ctx",
+          lastModel: "gpt",
+          lastLatencyMs: 123,
+          attemptN: 2,
+          updatedAt: new Date("2026-06-16T11:00:00.000Z").getTime(),
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toEqual({
+        activeTab: "improve",
+        original: "draft",
+        improved: "better draft",
+        changes: ["change"],
+        goal: "general",
+        lastRequestId: "req-1",
+        lastRequestContextKey: "ctx",
+        lastModel: "gpt",
+        lastLatencyMs: 123,
+        attemptN: 2,
+      });
+      expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    });
+
+    it("migrates a legacy draft without timestamp", async () => {
+      vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "legacy draft",
+          improved: "legacy improved",
+          changes: ["change"],
+          goal: "general",
+          lastRequestId: "req-legacy",
+          lastRequestContextKey: "ctx-legacy",
+          lastModel: "gpt",
+          lastLatencyMs: 123,
+          attemptN: 2,
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toEqual({
+        activeTab: "improve",
+        original: "legacy draft",
+        improved: "legacy improved",
+        changes: ["change"],
+        goal: "general",
+        lastRequestId: "req-legacy",
+        lastRequestContextKey: "ctx-legacy",
+        lastModel: "gpt",
+        lastLatencyMs: 123,
+        attemptN: 2,
+      });
+      expect(browser.storage.local.set).toHaveBeenCalledWith({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: expect.objectContaining({
+          original: "legacy draft",
+          improved: "legacy improved",
+          updatedAt: new Date("2026-06-16T12:00:00.000Z").getTime(),
+        }),
+      });
+      expect(browser.storage.local.remove).not.toHaveBeenCalled();
+    });
+
+    it("clears a truthy primitive draft value", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: "corrupted",
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toBeNull();
+      expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    });
+
+    it("clears a legacy draft with non-finite numeric fields", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "legacy draft",
+          improved: "legacy improved",
+          changes: ["change"],
+          goal: "general",
+          lastRequestId: "req-legacy",
+          lastRequestContextKey: "ctx-legacy",
+          lastModel: "gpt",
+          lastLatencyMs: Number.POSITIVE_INFINITY,
+          attemptN: 2,
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toBeNull();
+      expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+      expect(browser.storage.local.set).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          [STORAGE_KEYS.POPUP_SESSION_DRAFT]: expect.anything(),
+        }),
+      );
+    });
+
+    it("clears an expired draft", async () => {
+      vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "stale",
+          improved: "stale improved",
+          changes: [],
+          goal: "general",
+          lastRequestId: null,
+          lastRequestContextKey: null,
+          lastModel: null,
+          lastLatencyMs: null,
+          attemptN: 1,
+          updatedAt:
+            new Date("2026-06-16T12:00:00.000Z").getTime() - LIMITS.POPUP_SESSION_TTL_MS - 1,
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toBeNull();
+      expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    });
+
+    it("clears a draft with a non-finite timestamp", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+          activeTab: "improve",
+          original: "corrupted",
+          improved: "corrupted improved",
+          changes: [],
+          goal: "general",
+          lastRequestId: null,
+          lastRequestContextKey: null,
+          lastModel: null,
+          lastLatencyMs: null,
+          attemptN: 1,
+          updatedAt: Number.NaN,
+        },
+      });
+
+      await expect(getPopupSessionDraft()).resolves.toBeNull();
+      expect(browser.storage.local.remove).toHaveBeenCalledWith(STORAGE_KEYS.POPUP_SESSION_DRAFT);
     });
   });
 });

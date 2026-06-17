@@ -41,6 +41,7 @@ export const STORAGE_KEYS = {
 
 export const LIMITS = {
   MAX_LIBRARY_ENTRIES: 200,
+  POPUP_SESSION_TTL_MS: 3 * 60 * 60 * 1000,
 } as const;
 
 export const FEATURES = {
