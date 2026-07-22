@@ -18,6 +18,7 @@ const ANALYTICS_BATCH_SIZE = 50;
 const FIREFOX_ANALYTICS_PERMISSION = {
   data_collection: ["technicalAndInteraction" as const],
 };
+type FirefoxRuntimeState = "firefox" | "other" | "unknown";
 
 function detectChromeMajor(): string {
   const match = navigator.userAgent.match(/(?:Chrome|Chromium)\/(\d+)/i);
@@ -39,7 +40,7 @@ export default defineBackground(() => {
 
   let sessionOpChain: Promise<void> = Promise.resolve();
   let queueOpChain: Promise<void> = Promise.resolve();
-  let isFirefoxRuntimePromise: Promise<boolean> | null = null;
+  let firefoxRuntimeStatePromise: Promise<FirefoxRuntimeState> | null = null;
   let flushInFlight = false;
   let flushPending = false;
 
@@ -154,6 +155,10 @@ export default defineBackground(() => {
     });
   }
 
+  async function clearAnalyticsQueue(): Promise<void> {
+    await enqueueQueueOp(async () => setQueue([]));
+  }
+
   async function markFirstEvent(
     storageKey: string,
   ): Promise<{ isFirst: boolean; timeSinceInstallMin?: number }> {
@@ -184,22 +189,27 @@ export default defineBackground(() => {
     });
   }
 
-  async function isFirefoxRuntime(): Promise<boolean> {
-    isFirefoxRuntimePromise ??= (async () => {
+  async function getFirefoxRuntimeState(): Promise<FirefoxRuntimeState> {
+    if (!import.meta.env.FIREFOX) return "other";
+
+    firefoxRuntimeStatePromise ??= (async () => {
       try {
         const browserInfo = await browser.runtime.getBrowserInfo();
-        return browserInfo.name.toLowerCase().includes("firefox");
+        return browserInfo.name.toLowerCase().includes("firefox") ? "firefox" : "other";
       } catch {
-        return false;
+        return "unknown";
       }
     })();
 
-    return isFirefoxRuntimePromise;
+    return firefoxRuntimeStatePromise;
   }
 
   async function canTrackAnalytics(): Promise<boolean> {
     if (!ANALYTICS_ENABLED) return false;
-    if (!(await isFirefoxRuntime())) return true;
+
+    const firefoxRuntimeState = await getFirefoxRuntimeState();
+    if (firefoxRuntimeState === "unknown") return false;
+    if (firefoxRuntimeState === "other") return true;
 
     try {
       return await browser.permissions.contains(FIREFOX_ANALYTICS_PERMISSION);
@@ -209,7 +219,10 @@ export default defineBackground(() => {
   }
 
   async function flushAnalytics(): Promise<void> {
-    if (!(await canTrackAnalytics())) return;
+    if (!(await canTrackAnalytics())) {
+      await clearAnalyticsQueue();
+      return;
+    }
 
     if (flushInFlight) {
       flushPending = true;
@@ -227,6 +240,11 @@ export default defineBackground(() => {
         }
 
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
+        if (!(await canTrackAnalytics())) {
+          await clearAnalyticsQueue();
+          return;
+        }
+
         let sentEventIds = new Set<string>();
         try {
           await apiClient.events(batch);
@@ -242,6 +260,10 @@ export default defineBackground(() => {
           ) {
             for (const event of batch) {
               try {
+                if (!(await canTrackAnalytics())) {
+                  await clearAnalyticsQueue();
+                  return;
+                }
                 await apiClient.events([event]);
                 // Single-item 200 is terminal as well, including rejected.
                 sentEventIds.add(event.event_id);
@@ -279,6 +301,12 @@ export default defineBackground(() => {
       }
     }
   }
+
+  browser.permissions.onRemoved.addListener((permissions) => {
+    if (permissions.data_collection?.includes("technicalAndInteraction")) {
+      void clearAnalyticsQueue();
+    }
+  });
 
   async function buildEvent(
     name: AnalyticsEventName,
