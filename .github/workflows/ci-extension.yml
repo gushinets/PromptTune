@@ -3,9 +3,17 @@ name: CI Extension
 on:
   push:
     branches: [main]
-    paths: [extension/**]
+    paths:
+      - extension/**
+      - .gitattributes
+      - .editorconfig
+      - .github/workflows/ci-extension.yml
   pull_request:
-    paths: [extension/**]
+    paths:
+      - extension/**
+      - .gitattributes
+      - .editorconfig
+      - .github/workflows/ci-extension.yml
 
 jobs:
   lint-and-build:
@@ -19,7 +27,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.13.0
           cache: npm
           cache-dependency-path: extension/package-lock.json
 

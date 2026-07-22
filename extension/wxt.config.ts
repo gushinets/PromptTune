@@ -23,7 +23,7 @@ export default defineConfig({
       },
     },
   }),
-  manifest: {
+  manifest: (env) => ({
     name: "PromptOptimizer",
     description: "Improve your AI prompts with one click",
     version: "0.1.0",
@@ -54,7 +54,18 @@ export default defineConfig({
     side_panel: {
       default_path: "sidepanel.html",
     },
-  },
+    ...(env.browser === "firefox"
+      ? {
+          browser_specific_settings: {
+            gecko: {
+              data_collection_permissions: {
+                optional: ["technicalAndInteraction"],
+              },
+            },
+          },
+        }
+      : {}),
+  }),
   webExt: {
     startUrls: ["https://chatgpt.com"],
   },
