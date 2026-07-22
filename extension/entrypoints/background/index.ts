@@ -15,6 +15,10 @@ import type {
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_QUEUE_ITEMS = 500;
 const ANALYTICS_BATCH_SIZE = 50;
+const FIREFOX_ANALYTICS_PERMISSION = {
+  data_collection: ["technicalAndInteraction" as const],
+};
+type FirefoxRuntimeState = "firefox" | "other" | "unknown";
 
 function detectChromeMajor(): string {
   const match = navigator.userAgent.match(/(?:Chrome|Chromium)\/(\d+)/i);
@@ -36,6 +40,7 @@ export default defineBackground(() => {
 
   let sessionOpChain: Promise<void> = Promise.resolve();
   let queueOpChain: Promise<void> = Promise.resolve();
+  let firefoxRuntimeStatePromise: Promise<FirefoxRuntimeState> | null = null;
   let flushInFlight = false;
   let flushPending = false;
 
@@ -150,6 +155,10 @@ export default defineBackground(() => {
     });
   }
 
+  async function clearAnalyticsQueue(): Promise<void> {
+    await enqueueQueueOp(async () => setQueue([]));
+  }
+
   async function markFirstEvent(
     storageKey: string,
   ): Promise<{ isFirst: boolean; timeSinceInstallMin?: number }> {
@@ -180,7 +189,41 @@ export default defineBackground(() => {
     });
   }
 
+  async function getFirefoxRuntimeState(): Promise<FirefoxRuntimeState> {
+    if (!import.meta.env.FIREFOX) return "other";
+
+    firefoxRuntimeStatePromise ??= (async () => {
+      try {
+        const browserInfo = await browser.runtime.getBrowserInfo();
+        return browserInfo.name.toLowerCase().includes("firefox") ? "firefox" : "other";
+      } catch {
+        return "unknown";
+      }
+    })();
+
+    return firefoxRuntimeStatePromise;
+  }
+
+  async function canTrackAnalytics(): Promise<boolean> {
+    if (!ANALYTICS_ENABLED) return false;
+
+    const firefoxRuntimeState = await getFirefoxRuntimeState();
+    if (firefoxRuntimeState === "unknown") return false;
+    if (firefoxRuntimeState === "other") return true;
+
+    try {
+      return await browser.permissions.contains(FIREFOX_ANALYTICS_PERMISSION);
+    } catch {
+      return false;
+    }
+  }
+
   async function flushAnalytics(): Promise<void> {
+    if (!(await canTrackAnalytics())) {
+      await clearAnalyticsQueue();
+      return;
+    }
+
     if (flushInFlight) {
       flushPending = true;
       return;
@@ -197,6 +240,11 @@ export default defineBackground(() => {
         }
 
         const batch = queue.slice(0, ANALYTICS_BATCH_SIZE);
+        if (!(await canTrackAnalytics())) {
+          await clearAnalyticsQueue();
+          return;
+        }
+
         let sentEventIds = new Set<string>();
         try {
           await apiClient.events(batch);
@@ -212,6 +260,10 @@ export default defineBackground(() => {
           ) {
             for (const event of batch) {
               try {
+                if (!(await canTrackAnalytics())) {
+                  await clearAnalyticsQueue();
+                  return;
+                }
                 await apiClient.events([event]);
                 // Single-item 200 is terminal as well, including rejected.
                 sentEventIds.add(event.event_id);
@@ -250,6 +302,12 @@ export default defineBackground(() => {
     }
   }
 
+  browser.permissions.onRemoved.addListener((permissions) => {
+    if (permissions.data_collection?.includes("technicalAndInteraction")) {
+      void clearAnalyticsQueue();
+    }
+  });
+
   async function buildEvent(
     name: AnalyticsEventName,
     properties: AnalyticsProperties,
@@ -283,7 +341,7 @@ export default defineBackground(() => {
   }
 
   async function track(payload: AnalyticsTrackPayload): Promise<void> {
-    if (!ANALYTICS_ENABLED) return;
+    if (!(await canTrackAnalytics())) return;
     const source = payload.context?.source ?? "background";
     const event = await buildEvent(payload.name, payload.properties ?? {}, source);
     await enqueueEvent(event);
@@ -312,7 +370,7 @@ export default defineBackground(() => {
     await browser.storage.local.set({ [STORAGE_KEYS.INSTALL_AT]: installAt });
     void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
 
-    if (ANALYTICS_ENABLED) {
+    if (await canTrackAnalytics()) {
       await track({
         name: "extension_installed",
         context: { source: "background" },
@@ -321,9 +379,7 @@ export default defineBackground(() => {
     }
   });
 
-  if (ANALYTICS_ENABLED) {
-    void flushAnalytics();
-  }
+  void flushAnalytics();
 
   browser.runtime.onMessage.addListener(async (raw: unknown) => {
     const msg = raw as Message;
@@ -342,7 +398,7 @@ export default defineBackground(() => {
       }
 
       case "FLUSH_ANALYTICS": {
-        if (ANALYTICS_ENABLED) {
+        if (await canTrackAnalytics()) {
           await flushAnalytics();
         }
         return { ok: true };
@@ -356,7 +412,7 @@ export default defineBackground(() => {
           throw new Error("Prompt text is required");
         }
 
-        if (ANALYTICS_ENABLED) {
+        if (await canTrackAnalytics()) {
           try {
             const promptEvent = await buildEvent(
               "prompt_submitted",
@@ -412,7 +468,7 @@ export default defineBackground(() => {
 
           return { type: "IMPROVE_RESULT", payload: result };
         } catch (error: unknown) {
-          if (ANALYTICS_ENABLED && error instanceof ApiError) {
+          if ((await canTrackAnalytics()) && error instanceof ApiError) {
             try {
               const apiErrorEvent = await buildEvent(
                 "api_error",
