@@ -15,7 +15,7 @@ import {
   setAudienceMode,
   setPopupSessionDraft,
 } from "@shared/storage";
-import { FEATURES, BACKEND_MODE } from "@shared/constants";
+import { FEATURES, BACKEND_MODE, UPGRADE_URL } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
   describeUnexpectedBackgroundResponse,
@@ -26,8 +26,6 @@ import { useT } from "@shared/i18n";
 import { trackEvent } from "@shared/analytics";
 import type { AiImproveGoal, AudienceMode, ImproveGoal } from "@shared/types";
 
-// TODO: Replace with actual upgrade URL
-const UPGRADE_URL = "https://forgekit.io/upgrade";
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
 
@@ -727,12 +725,14 @@ export function App({ viewMode = "popup" }: AppProps) {
             {isExhausted && (
               <div className="upgrade-banner">
                 <p>{t.exhaustedTitle}</p>
-                <button
-                  className="btn-upgrade"
-                  onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
-                >
-                  {t.btnUpgrade}
-                </button>
+                {UPGRADE_URL && (
+                  <button
+                    className="btn-upgrade"
+                    onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
+                  >
+                    {t.btnUpgrade}
+                  </button>
+                )}
               </div>
             )}
             {!modeReady ? null : audienceMode ? (

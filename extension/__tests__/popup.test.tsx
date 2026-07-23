@@ -219,6 +219,70 @@ describe("App", () => {
     expect((detailsRequeried as HTMLDetailsElement).open).toBe(true);
   });
 
+  it("keeps exhausted-state upgrade disabled when no release URL is configured", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string };
+      if (typed.type === "GET_LIMITS") {
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_minute_remaining: 0,
+              per_day_remaining: 0,
+              per_minute_total: 5,
+              per_day_total: 10,
+            },
+          },
+        };
+      }
+      return { ok: true };
+    });
+
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+
+    expect(container.textContent).toContain("You've used all free improvements today.");
+    expect(container.textContent).not.toContain("Upgrade for unlimited");
+  });
+
+  it("does not route high ratings anywhere until the store review URL is configured", async () => {
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+
+    const fiveStar = container.querySelector('[aria-label="Rate 5 stars"]');
+    expect(fiveStar).toBeInstanceOf(HTMLElement);
+
+    await act(async () => {
+      (fiveStar as HTMLElement).click();
+      await Promise.resolve();
+    });
+
+    expect(browser.tabs.create).not.toHaveBeenCalled();
+  });
+
+  it("routes low ratings to the product feedback form", async () => {
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+
+    const threeStar = container.querySelector('[aria-label="Rate 3 stars"]');
+    expect(threeStar).toBeInstanceOf(HTMLElement);
+
+    await act(async () => {
+      (threeStar as HTMLElement).click();
+      await Promise.resolve();
+    });
+
+    expect(browser.tabs.create).toHaveBeenCalledWith({
+      url: expect.stringContaining("https://docs.google.com/forms/d/e/"),
+    });
+  });
+
   it("does not show a saved state when the save request fails", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };
