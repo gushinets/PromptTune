@@ -29,18 +29,36 @@ import type { AiImproveGoal, AudienceMode, ImproveGoal } from "@shared/types";
 // TODO: Replace with actual upgrade URL
 const UPGRADE_URL = "https://forgekit.io/upgrade";
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
+const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
+
+function isSupportedAiSiteHost(hostname: string): boolean {
+  return SUPPORTED_AI_SITE_HOSTS.some(
+    (supportedHost) => hostname === supportedHost || hostname.endsWith(`.${supportedHost}`),
+  );
+}
 
 function detectAiGoalFromUrl(rawUrl: string | undefined): AiImproveGoal {
   if (!rawUrl) return "general";
   try {
     const host = new URL(rawUrl).hostname.toLowerCase();
-    if (host.endsWith("chatgpt.com")) return "chatgpt";
-    if (host.endsWith("claude.ai")) return "claude";
-    if (host.endsWith("perplexity.ai")) return "perplexity";
+    if (!isSupportedAiSiteHost(host)) return "general";
+    if (host === "chatgpt.com" || host.endsWith(".chatgpt.com")) return "chatgpt";
+    if (host === "claude.ai" || host.endsWith(".claude.ai")) return "claude";
+    if (host === "perplexity.ai" || host.endsWith(".perplexity.ai")) return "perplexity";
   } catch {
     // Ignore malformed tab URLs.
   }
   return "general";
+}
+
+function getSupportedSiteHostname(rawUrl: string | undefined): string | undefined {
+  if (!rawUrl) return undefined;
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase();
+    return isSupportedAiSiteHost(hostname) ? hostname : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function defaultGoalForMode(mode: AudienceMode, detectedAiGoal: AiImproveGoal): ImproveGoal {
@@ -198,12 +216,9 @@ export function App({ viewMode = "popup" }: AppProps) {
     browser.tabs
       .query({ active: true, currentWindow: true })
       .then((tabs) => {
-        try {
-          setSiteHostname(tabs[0]?.url ? new URL(tabs[0].url).hostname : undefined);
-        } catch {
-          setSiteHostname(undefined);
-        }
-        const goalFromSite = detectAiGoalFromUrl(tabs[0]?.url);
+        const tabUrl = tabs[0]?.url;
+        setSiteHostname(getSupportedSiteHostname(tabUrl));
+        const goalFromSite = detectAiGoalFromUrl(tabUrl);
         setDetectedAiGoal(goalFromSite);
         setSiteResolved(true);
       })
