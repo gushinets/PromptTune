@@ -26,8 +26,6 @@ import { useT } from "@shared/i18n";
 import { trackEvent } from "@shared/analytics";
 import type { AiImproveGoal, AudienceMode, ImproveGoal } from "@shared/types";
 
-// TODO: Replace with actual upgrade URL
-const UPGRADE_URL = "https://forgekit.io/upgrade";
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
 
@@ -163,6 +161,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showProComingSoon, setShowProComingSoon] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [siteHostname, setSiteHostname] = useState<string | undefined>(undefined);
   const [siteResolved, setSiteResolved] = useState(false);
@@ -379,6 +378,23 @@ export function App({ viewMode = "popup" }: AppProps) {
       setShowTooltip(false);
     }
   }, []);
+
+  const handleUpgradeClick = useCallback(
+    (surface: "rate_limit_tooltip" | "rate_limit_banner") => {
+      setShowProComingSoon(true);
+      void trackEvent(
+        "upgrade_clicked",
+        {
+          surface,
+          destination: "coming_soon",
+          email_collected: false,
+          paid_checkout_enabled: false,
+        },
+        viewMode,
+      );
+    },
+    [viewMode],
+  );
 
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
@@ -674,16 +690,17 @@ export function App({ viewMode = "popup" }: AppProps) {
                     <p>
                       {rateLimit.total > 0 ? t.tooltipDailyLimit(rateLimit.total) : ""}
                       {t.tooltipResets}{" "}
-                      <a
-                        href="#"
+                      <button
+                        type="button"
+                        className="rate-limit-tooltip-link"
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          browser.tabs.create({ url: UPGRADE_URL });
+                          handleUpgradeClick("rate_limit_tooltip");
                         }}
                       >
                         {t.tooltipUpgrade}
-                      </a>
+                      </button>
                     </p>
                   </>
                 )}
@@ -729,10 +746,16 @@ export function App({ viewMode = "popup" }: AppProps) {
                 <p>{t.exhaustedTitle}</p>
                 <button
                   className="btn-upgrade"
-                  onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
+                  onClick={() => handleUpgradeClick("rate_limit_banner")}
                 >
                   {t.btnUpgrade}
                 </button>
+                {showProComingSoon && (
+                  <div className="pro-coming-soon" role="status">
+                    <strong>{t.proComingSoonTitle}</strong>
+                    <span>{t.proComingSoonSubtitle}</span>
+                  </div>
+                )}
               </div>
             )}
             {!modeReady ? null : audienceMode ? (

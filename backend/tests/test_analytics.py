@@ -224,7 +224,7 @@ async def test_events_ingest_handles_deep_nested_properties_without_500(
 
 
 @pytest.mark.asyncio
-async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, mock_db, mock_redis):
+async def test_events_ingest_accepts_all_14_event_names(client: AsyncClient, mock_db, mock_redis):
     names = [
         "extension_installed",
         "onboarding_completed",
@@ -236,6 +236,7 @@ async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, moc
         "result_displayed",
         "result_copied",
         "result_regenerated",
+        "upgrade_clicked",
         "api_error",
         "extension_disabled",
         "uninstall_reason_submitted",
@@ -257,7 +258,7 @@ async def test_events_ingest_accepts_all_13_event_names(client: AsyncClient, moc
     response = await client.post("/v1/events", json={"events": events})
 
     assert response.status_code == 200
-    assert response.json() == {"accepted": 13, "deduplicated": 0, "rejected": []}
+    assert response.json() == {"accepted": 14, "deduplicated": 0, "rejected": []}
 
 
 @pytest.mark.asyncio

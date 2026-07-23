@@ -9,6 +9,7 @@ export const ANALYTICS_EVENT_NAMES = [
   "result_displayed",
   "result_copied",
   "result_regenerated",
+  "upgrade_clicked",
   "api_error",
   "extension_disabled",
   "uninstall_reason_submitted",

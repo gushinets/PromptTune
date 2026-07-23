@@ -60,6 +60,7 @@ class AnalyticsEventName(StrEnum):
     result_displayed = "result_displayed"
     result_copied = "result_copied"
     result_regenerated = "result_regenerated"
+    upgrade_clicked = "upgrade_clicked"
     api_error = "api_error"
     extension_disabled = "extension_disabled"
     uninstall_reason_submitted = "uninstall_reason_submitted"

@@ -1,18 +1,21 @@
 import { useState } from "react";
 import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
-
-const REVIEWS_URL =
-  "https://chromewebstore.google.com/detail/promptoptimizer/prompt-optimizer_ID/reviews";
-const FEEDBACK_URL =
-  "https://docs.google.com/forms/d/e/1FAIpQLSd7Q5SmtvSEuxBDvZRvtNMPojqH7k69olXajFSZGOO4-EZ7CQ/viewform?usp=dialog";
+import { CWS_REVIEW_URL, FEEDBACK_URL } from "@shared/constants";
 
 export function RatingBar() {
   const t = useT();
   const [hoveredStar, setHoveredStar] = useState<number | null>(null);
 
   const handleRate = (star: number) => {
-    void browser.tabs.create({ url: star >= 4 ? REVIEWS_URL : FEEDBACK_URL });
+    if (star >= 4) {
+      if (CWS_REVIEW_URL) {
+        void browser.tabs.create({ url: CWS_REVIEW_URL });
+      }
+      return;
+    }
+
+    void browser.tabs.create({ url: FEEDBACK_URL });
   };
 
   return (

@@ -35,6 +35,8 @@ export const en = {
   // Improve tab
   exhaustedTitle: "You've used all free improvements today.",
   btnUpgrade: "Upgrade for unlimited",
+  proComingSoonTitle: "Pro soon",
+  proComingSoonSubtitle: "Paid plans and waitlist are not open yet.",
 
   // PromptForm
   modeLabel: "Mode",
