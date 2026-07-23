@@ -268,6 +268,50 @@ describe("App", () => {
     });
   });
 
+  it("tracks upgrade intent and shows coming soon from the rate-limit tooltip", async () => {
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+
+    const limitBadge = container.querySelector(".rate-limit-badge");
+    expect(limitBadge).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (limitBadge as HTMLButtonElement).focus();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("improvements left today");
+    expect(container.querySelector(".rate-limit-tooltip")?.textContent).toContain(
+      "Upgrade for unlimited",
+    );
+    expect(findButton(container, "Upgrade for unlimited").className).toBe(
+      "rate-limit-tooltip-link",
+    );
+
+    await act(async () => {
+      findButton(container, "Upgrade for unlimited").click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector(".rate-limit-tooltip")?.textContent).toContain("Pro soon");
+    expect(browser.tabs.create).not.toHaveBeenCalled();
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "TRACK_EVENT",
+      payload: {
+        name: "upgrade_clicked",
+        properties: {
+          surface: "rate_limit_tooltip",
+          destination: "coming_soon",
+          email_collected: false,
+          paid_checkout_enabled: false,
+        },
+        context: { source: "popup" },
+      },
+    });
+  });
+
   it("does not route high ratings anywhere until the store review URL is configured", async () => {
     await act(async () => {
       root.render(<App />);

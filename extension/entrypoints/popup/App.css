@@ -351,6 +351,15 @@ body.sidepanel-body {
   animation: fadeIn 0.15s ease-out;
 }
 
+.rate-limit-tooltip::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
+
 .rate-limit-tooltip p {
   font-family: var(--font-sans);
   font-size: 11px;
@@ -374,8 +383,8 @@ body.sidepanel-body {
   border: 0;
   color: var(--acc);
   text-decoration: none;
-  font-weight: 600;
   font: inherit;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -445,6 +454,23 @@ body.sidepanel-body {
 .pro-coming-soon span {
   font-size: 11px;
   color: var(--txt3);
+}
+
+.rate-limit-tooltip .tooltip-pro-coming-soon {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(240, 239, 248, 0.72);
+}
+
+.tooltip-pro-coming-soon strong {
+  color: var(--amber);
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+.tooltip-pro-coming-soon span {
+  font-size: 10px;
 }
 
 /* =========================================
