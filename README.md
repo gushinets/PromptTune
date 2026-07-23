@@ -72,7 +72,7 @@ Notes:
 - `npm run zip` builds the Chrome Manifest V3 package used by Chrome and Edge.
 - If you need the extension to point at a non-default backend, set the relevant `VITE_*` env vars before running the zip command.
 - Release-facing external URLs are documented in `docs/extension-external-destinations.md`.
-  `VITE_CWS_REVIEW_URL` and `VITE_UPGRADE_URL` are optional and disabled unless valid HTTPS URLs are provided.
+  `VITE_CWS_REVIEW_URL` is optional and disabled unless a valid HTTPS URL is provided.
 
 ### Backend
 

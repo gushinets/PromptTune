@@ -44,7 +44,6 @@ export const WELCOME_PAGE_URL = getHttpsUrl(
 );
 export const FEEDBACK_URL = getHttpsUrl(import.meta.env.VITE_FEEDBACK_URL, DEFAULT_FEEDBACK_URL);
 export const CWS_REVIEW_URL = getOptionalHttpsUrl(import.meta.env.VITE_CWS_REVIEW_URL);
-export const UPGRADE_URL = getOptionalHttpsUrl(import.meta.env.VITE_UPGRADE_URL);
 
 export const STORAGE_KEYS = {
   INSTALLATION_ID: "installation_id",

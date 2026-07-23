@@ -219,7 +219,7 @@ describe("App", () => {
     expect((detailsRequeried as HTMLDetailsElement).open).toBe(true);
   });
 
-  it("keeps exhausted-state upgrade disabled when no release URL is configured", async () => {
+  it("tracks upgrade intent and shows coming soon without external navigation", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };
       if (typed.type === "GET_LIMITS") {
@@ -244,7 +244,28 @@ describe("App", () => {
     await flushEffects();
 
     expect(container.textContent).toContain("You've used all free improvements today.");
-    expect(container.textContent).not.toContain("Upgrade for unlimited");
+    expect(container.textContent).toContain("Upgrade for unlimited");
+
+    await act(async () => {
+      findButton(container, "Upgrade for unlimited").click();
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain("Pro soon");
+    expect(browser.tabs.create).not.toHaveBeenCalled();
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "TRACK_EVENT",
+      payload: {
+        name: "upgrade_clicked",
+        properties: {
+          surface: "rate_limit_banner",
+          destination: "coming_soon",
+          email_collected: false,
+          paid_checkout_enabled: false,
+        },
+        context: { source: "popup" },
+      },
+    });
   });
 
   it("does not route high ratings anywhere until the store review URL is configured", async () => {

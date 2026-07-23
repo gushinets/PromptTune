@@ -15,7 +15,7 @@ import {
   setAudienceMode,
   setPopupSessionDraft,
 } from "@shared/storage";
-import { FEATURES, BACKEND_MODE, UPGRADE_URL } from "@shared/constants";
+import { FEATURES, BACKEND_MODE } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
   describeUnexpectedBackgroundResponse,
@@ -161,6 +161,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showProComingSoon, setShowProComingSoon] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [siteHostname, setSiteHostname] = useState<string | undefined>(undefined);
   const [siteResolved, setSiteResolved] = useState(false);
@@ -377,6 +378,23 @@ export function App({ viewMode = "popup" }: AppProps) {
       setShowTooltip(false);
     }
   }, []);
+
+  const handleUpgradeClick = useCallback(
+    (surface: "rate_limit_tooltip" | "rate_limit_banner") => {
+      setShowProComingSoon(true);
+      void trackEvent(
+        "upgrade_clicked",
+        {
+          surface,
+          destination: "coming_soon",
+          email_collected: false,
+          paid_checkout_enabled: false,
+        },
+        viewMode,
+      );
+    },
+    [viewMode],
+  );
 
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
@@ -672,16 +690,17 @@ export function App({ viewMode = "popup" }: AppProps) {
                     <p>
                       {rateLimit.total > 0 ? t.tooltipDailyLimit(rateLimit.total) : ""}
                       {t.tooltipResets}{" "}
-                      <a
-                        href="#"
+                      <button
+                        type="button"
+                        className="rate-limit-tooltip-link"
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          browser.tabs.create({ url: UPGRADE_URL });
+                          handleUpgradeClick("rate_limit_tooltip");
                         }}
                       >
                         {t.tooltipUpgrade}
-                      </a>
+                      </button>
                     </p>
                   </>
                 )}
@@ -725,13 +744,17 @@ export function App({ viewMode = "popup" }: AppProps) {
             {isExhausted && (
               <div className="upgrade-banner">
                 <p>{t.exhaustedTitle}</p>
-                {UPGRADE_URL && (
-                  <button
-                    className="btn-upgrade"
-                    onClick={() => browser.tabs.create({ url: UPGRADE_URL })}
-                  >
-                    {t.btnUpgrade}
-                  </button>
+                <button
+                  className="btn-upgrade"
+                  onClick={() => handleUpgradeClick("rate_limit_banner")}
+                >
+                  {t.btnUpgrade}
+                </button>
+                {showProComingSoon && (
+                  <div className="pro-coming-soon" role="status">
+                    <strong>{t.proComingSoonTitle}</strong>
+                    <span>{t.proComingSoonSubtitle}</span>
+                  </div>
                 )}
               </div>
             )}

@@ -37,6 +37,8 @@ export const ru: TranslationKeys = {
   // Improve tab
   exhaustedTitle: "Вы использовали все бесплатные улучшения сегодня.",
   btnUpgrade: "Перейти на безлимит",
+  proComingSoonTitle: "Pro скоро",
+  proComingSoonSubtitle: "Платные планы и waitlist пока не открыты.",
 
   // PromptForm
   modeLabel: "Режим",
