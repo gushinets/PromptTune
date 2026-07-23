@@ -455,6 +455,71 @@ describe("App", () => {
     );
   });
 
+  it("refreshes active tab context while rendered as a side panel", async () => {
+    vi.mocked(browser.tabs.query)
+      .mockResolvedValueOnce([{ id: 77, url: "https://chatgpt.com/" }] as never)
+      .mockResolvedValueOnce([{ id: 88, url: "https://claude.ai/new" }] as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const typed = msg as { type?: string };
+      if (typed.type === "GET_LIMITS") {
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_minute_remaining: 4,
+              per_day_remaining: 10,
+              per_minute_total: 5,
+              per_day_total: 10,
+            },
+          },
+        };
+      }
+      if (typed.type === "IMPROVE_REQUEST") {
+        return {
+          type: "IMPROVE_RESULT",
+          payload: {
+            request_id: "req-6",
+            improved_text: "Improved for current tab",
+          },
+        };
+      }
+      return { ok: true };
+    });
+
+    await act(async () => {
+      root.render(<App viewMode="sidepanel" />);
+    });
+    await flushEffects();
+
+    const activationListener = vi.mocked(browser.tabs.onActivated.addListener).mock.calls[0]?.[0];
+    expect(activationListener).toBeTypeOf("function");
+
+    await act(async () => {
+      activationListener({ tabId: 88, windowId: 1 });
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    await setOriginalPrompt(container, "Original prompt");
+    await act(async () => {
+      getImproveButton(container).click();
+      await Promise.resolve();
+    });
+    await flushEffects();
+
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+        payload: expect.objectContaining({
+          text: "Original prompt",
+          audience_mode: "ai",
+          goal: "claude",
+          site: "claude.ai",
+        }),
+      }),
+    );
+  });
+
   it("shows onboarding and persists selected mode when missing", async () => {
     vi.mocked(browser.storage.local.get).mockResolvedValue({
       installation_id: "install-1",

@@ -180,6 +180,22 @@ export function App({ viewMode = "popup" }: AppProps) {
     getAll().then((entries) => setLibraryCount(entries.length));
   }, []);
 
+  const refreshActiveTabContext = useCallback(() => {
+    browser.tabs
+      .query({ active: true, currentWindow: true })
+      .then((tabs) => {
+        const tabUrl = tabs[0]?.url;
+        setSiteHostname(getSupportedSiteHostname(tabUrl));
+        setDetectedAiGoal(detectAiGoalFromUrl(tabUrl));
+        setSiteResolved(true);
+      })
+      .catch(() => {
+        setSiteHostname(undefined);
+        setDetectedAiGoal("general");
+        setSiteResolved(true);
+      });
+  }, []);
+
   useEffect(() => {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
@@ -213,20 +229,18 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, []);
 
   useEffect(() => {
-    browser.tabs
-      .query({ active: true, currentWindow: true })
-      .then((tabs) => {
-        const tabUrl = tabs[0]?.url;
-        setSiteHostname(getSupportedSiteHostname(tabUrl));
-        const goalFromSite = detectAiGoalFromUrl(tabUrl);
-        setDetectedAiGoal(goalFromSite);
-        setSiteResolved(true);
-      })
-      .catch(() => {
-        setDetectedAiGoal("general");
-        setSiteResolved(true);
-      });
-  }, []);
+    refreshActiveTabContext();
+
+    if (viewMode !== "sidepanel") return;
+
+    browser.tabs.onActivated.addListener(refreshActiveTabContext);
+    browser.tabs.onUpdated.addListener(refreshActiveTabContext);
+
+    return () => {
+      browser.tabs.onActivated.removeListener(refreshActiveTabContext);
+      browser.tabs.onUpdated.removeListener(refreshActiveTabContext);
+    };
+  }, [refreshActiveTabContext, viewMode]);
 
   useEffect(() => {
     if (!siteResolved || hasTrackedPopupOpenedRef.current) return;

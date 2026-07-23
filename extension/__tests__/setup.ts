@@ -24,6 +24,7 @@ const browserMock = {
     create: vi.fn().mockResolvedValue({ id: 1 }),
     query: vi.fn().mockResolvedValue([]),
     sendMessage: vi.fn().mockResolvedValue(undefined),
+    onActivated: { addListener: vi.fn(), removeListener: vi.fn() },
     onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
   },
   commands: {
@@ -53,6 +54,7 @@ vi.mock("webextension-polyfill", () => ({
       create: vi.fn().mockResolvedValue({ id: 1 }),
       query: vi.fn().mockResolvedValue([]),
       sendMessage: vi.fn().mockResolvedValue(undefined),
+      onActivated: { addListener: vi.fn(), removeListener: vi.fn() },
       onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
     },
     commands: {
