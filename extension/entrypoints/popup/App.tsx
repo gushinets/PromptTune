@@ -702,6 +702,12 @@ export function App({ viewMode = "popup" }: AppProps) {
                         {t.tooltipUpgrade}
                       </button>
                     </p>
+                    {showProComingSoon && (
+                      <p className="tooltip-pro-coming-soon" role="status">
+                        <strong>{t.proComingSoonTitle}</strong>
+                        <span>{t.proComingSoonSubtitle}</span>
+                      </p>
+                    )}
                   </>
                 )}
               </div>
