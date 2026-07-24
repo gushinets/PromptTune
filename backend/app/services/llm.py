@@ -57,12 +57,25 @@ def _configure_litellm_http_proxy() -> None:
         return
 
     if litellm.aclient_session is None:
-        litellm.aclient_session = httpx.AsyncClient(proxy=proxy_url, follow_redirects=True)
+        litellm.aclient_session = httpx.AsyncClient(proxy=proxy_url)
     if litellm.client_session is None:
-        litellm.client_session = httpx.Client(proxy=proxy_url, follow_redirects=True)
+        litellm.client_session = httpx.Client(proxy=proxy_url)
 
 
 _configure_litellm_http_proxy()
+
+
+async def close_litellm_http_clients() -> None:
+    """Close proxy-aware LiteLLM HTTP clients created by this module."""
+    async_client = litellm.aclient_session
+    sync_client = litellm.client_session
+
+    if async_client is not None:
+        await async_client.aclose()
+        litellm.aclient_session = None
+    if sync_client is not None:
+        sync_client.close()
+        litellm.client_session = None
 
 GOAL_PROMPT_HINTS: dict[tuple[AudienceMode, CanonicalGoal], str] = {
     ("ai", "chatgpt"): (

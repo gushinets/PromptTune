@@ -92,4 +92,4 @@ Both config targets use `docker compose ... config --quiet`, so success produces
 
 ## Optional outbound provider proxy
 
-Provider traffic from the `api` container can be routed through a standard HTTP proxy by setting `HTTPS_PROXY` and `HTTP_PROXY` in `infra/.env`. Keep `NO_PROXY=localhost,127.0.0.1,postgres,redis` so Docker-internal Postgres and Redis traffic stays local. See `docs/deployment.md` for the full proxy setup, verification, and rollback flow.
+Provider HTTP(S) traffic from the `api` container can be routed through a standard HTTP proxy by setting `HTTPS_PROXY` and `HTTP_PROXY` in `infra/.env`. `NO_PROXY=localhost,127.0.0.1,postgres,redis` is a defensive bypass for HTTP clients that honor standard proxy environment variables. See `docs/deployment.md` for the full proxy setup, verification, and rollback flow.

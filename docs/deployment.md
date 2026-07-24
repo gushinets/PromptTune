@@ -169,7 +169,7 @@ HTTP_PROXY=http://PROXY_SERVER_PUBLIC_IP:3128
 NO_PROXY=localhost,127.0.0.1,postgres,redis
 ```
 
-`NO_PROXY` is required so Postgres and Redis traffic stays on the Docker network instead of going through the external proxy.
+These variables configure outbound HTTP(S) provider clients. Postgres and Redis use non-HTTP drivers on the Docker network; `NO_PROXY` is included as a defensive bypass for any HTTP clients that honor standard proxy environment variables.
 
 The proxy server must only allow the backend VPS IP to connect to port `3128`. Do not enable TLS interception / SSL bump, do not log request bodies, and keep provider API keys only on the backend VPS.
 
@@ -180,11 +180,11 @@ cd /path/to/PromptTune/infra
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d api
 ```
 
-Verify the variables are visible inside the API container:
+Verify the proxy variables are set inside the API container without printing their values:
 
 ```bash
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml exec api \
-  env | grep -E 'HTTPS_PROXY|HTTP_PROXY|NO_PROXY'
+  sh -c 'for key in HTTPS_PROXY HTTP_PROXY NO_PROXY; do if [ -n "$(printenv "$key")" ]; then echo "$key=set"; else echo "$key=missing"; fi; done'
 ```
 
 Then verify:
@@ -324,7 +324,7 @@ curl -i https://api.anytoolai.store/healthz
 curl -i https://api.anytoolai.store/readyz
 ```
 
-## 9. Shutdown
+## 10. Shutdown
 
 To stop the production stack:
 
