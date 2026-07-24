@@ -77,6 +77,7 @@ async def close_litellm_http_clients() -> None:
         sync_client.close()
         litellm.client_session = None
 
+
 GOAL_PROMPT_HINTS: dict[tuple[AudienceMode, CanonicalGoal], str] = {
     ("ai", "chatgpt"): (
         "Оптимизируй промпт под ChatGPT: явные шаги, критерии качества и четкий ожидаемый формат."
