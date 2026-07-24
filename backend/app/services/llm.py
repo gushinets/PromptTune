@@ -1,4 +1,5 @@
 import logging
+import os
 import re
 import sys
 import time
@@ -6,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
+import litellm
 from litellm import acompletion
 from litellm.exceptions import (
     APIConnectionError,
@@ -38,6 +41,28 @@ from app.services.errors import (
 logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.INFO)
+
+litellm.aiohttp_trust_env = True
+
+
+def _configure_litellm_http_proxy() -> None:
+    """Make LiteLLM's OpenAI httpx clients honor standard proxy env vars."""
+    proxy_url = (
+        os.getenv("HTTPS_PROXY")
+        or os.getenv("https_proxy")
+        or os.getenv("HTTP_PROXY")
+        or os.getenv("http_proxy")
+    )
+    if not proxy_url:
+        return
+
+    if litellm.aclient_session is None:
+        litellm.aclient_session = httpx.AsyncClient(proxy=proxy_url, follow_redirects=True)
+    if litellm.client_session is None:
+        litellm.client_session = httpx.Client(proxy=proxy_url, follow_redirects=True)
+
+
+_configure_litellm_http_proxy()
 
 GOAL_PROMPT_HINTS: dict[tuple[AudienceMode, CanonicalGoal], str] = {
     ("ai", "chatgpt"): (
