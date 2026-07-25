@@ -157,7 +157,60 @@ What each step does:
 
 This manual sequence remains available as the low-level fallback behind the guarded script.
 
-## 5. Verify the deploy
+## 5. Optional outbound HTTPS proxy
+
+If the provider blocks direct egress from the backend VPS, route outbound provider traffic through a locked-down HTTP proxy such as Squid.
+
+Add these variables to `infra/.env` on the backend VPS:
+
+```bash
+HTTPS_PROXY=http://PROXY_SERVER_PUBLIC_IP:3128
+HTTP_PROXY=http://PROXY_SERVER_PUBLIC_IP:3128
+NO_PROXY=localhost,127.0.0.1,postgres,redis
+```
+
+These variables configure outbound HTTP(S) provider clients. Postgres and Redis use non-HTTP drivers on the Docker network; `NO_PROXY` is included as a defensive bypass for any HTTP clients that honor standard proxy environment variables.
+
+The proxy server must only allow the backend VPS IP to connect to port `3128`. Do not enable TLS interception / SSL bump, do not log request bodies, and keep provider API keys only on the backend VPS.
+
+Restart the API service after changing `infra/.env`:
+
+```bash
+cd /path/to/PromptTune/infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d api
+```
+
+Verify the proxy variables are set inside the API container without printing their values:
+
+```bash
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml exec api \
+  sh -c 'for key in HTTPS_PROXY HTTP_PROXY NO_PROXY; do if [ -n "$(printenv "$key")" ]; then echo "$key=set"; else echo "$key=missing"; fi; done'
+```
+
+Then verify:
+
+```bash
+curl -i https://api.anytoolai.store/healthz
+curl -i https://api.anytoolai.store/readyz
+```
+
+Send a normal `/v1/improve` request and confirm the Squid access log shows a provider `CONNECT`, for example:
+
+```bash
+tail -f /var/log/squid/access.log
+```
+
+Rollback:
+
+```bash
+cd /path/to/PromptTune/infra
+# remove HTTPS_PROXY, HTTP_PROXY, and NO_PROXY from .env
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d api
+```
+
+After rollback, confirm `/v1/improve` works through direct provider egress again.
+
+## 6. Verify the deploy
 
 Check container state:
 
@@ -187,7 +240,7 @@ Expected result:
 - both endpoints return `200 OK`
 - `readyz` only returns `200` after Postgres and Redis are reachable
 
-## 6. Verify CORS for MVP browser traffic
+## 7. Verify CORS for MVP browser traffic
 
 The backend currently allows all origins so browser requests can work before the final extension IDs are known.
 
@@ -211,7 +264,7 @@ Application request smoke test:
 curl -i https://api.anytoolai.store/v1/limits?installation_id=test-installation
 ```
 
-## 7. Redeploy after changes
+## 8. Redeploy after changes
 
 When new backend or infra changes are pulled onto the VPS:
 
@@ -237,7 +290,7 @@ Notes:
 - the script deploys the current local checkout; run `git pull` first if you want the latest remote changes
 - migrations remain safe to run on every deploy; if there are no new revisions they become a no-op
 
-## 8. Rollback
+## 9. Rollback
 
 Code/config rollback procedure:
 
@@ -271,7 +324,7 @@ curl -i https://api.anytoolai.store/healthz
 curl -i https://api.anytoolai.store/readyz
 ```
 
-## 9. Shutdown
+## 10. Shutdown
 
 To stop the production stack:
 

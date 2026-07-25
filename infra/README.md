@@ -89,3 +89,7 @@ make prod-down
 Both config targets use `docker compose ... config --quiet`, so success produces no output.
 
 `infra/.env.example` documents `ALLOWED_ORIGINS=*` for the MVP deploy until browser-extension IDs/origins are known.
+
+## Optional outbound provider proxy
+
+Provider HTTP(S) traffic from the `api` container can be routed through a standard HTTP proxy by setting `HTTPS_PROXY` and `HTTP_PROXY` in `infra/.env`. `NO_PROXY=localhost,127.0.0.1,postgres,redis` is a defensive bypass for HTTP clients that honor standard proxy environment variables. See `docs/deployment.md` for the full proxy setup, verification, and rollback flow.

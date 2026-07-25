@@ -17,7 +17,7 @@ from app.services.errors import (
     UpstreamServiceError,
     UpstreamTimeoutError,
 )
-from app.services.llm import setup_file_logging
+from app.services.llm import close_litellm_http_clients, setup_file_logging
 
 
 @asynccontextmanager
@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
     setup_file_logging()
     yield
     # Shutdown
+    await close_litellm_http_clients()
     await engine.dispose()
 
 
