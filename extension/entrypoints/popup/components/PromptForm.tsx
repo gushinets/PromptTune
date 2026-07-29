@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
@@ -14,6 +15,9 @@ import type { AudienceMode, ImproveGoal } from "@shared/types";
 
 const PROMPT_TEXTAREA_MIN_HEIGHT = 72;
 const RESIZE_BOTTOM_SAFE_GAP = 0;
+const RESIZE_KEYBOARD_STEP = 12;
+const RESIZE_KEYBOARD_LARGE_STEP = 48;
+const PROMPT_TEXTAREA_ARIA_MAX_HEIGHT = 2000;
 
 const AI_GOAL_ORDER: ImproveGoal[] = [
   "general",
@@ -179,14 +183,72 @@ export function PromptForm({
   const goalOrder = mode === "ai" ? AI_GOAL_ORDER : CONTENT_GOAL_ORDER;
   const promptTextareaResizeProps = (
     shellRef: RefObject<HTMLDivElement | null>,
+    currentHeight: number | null,
     setHeight: (height: number) => void,
     otherShellRef: RefObject<HTMLDivElement | null>,
     setOtherHeight: (height: number) => void,
     label: string,
   ) => ({
     role: "separator",
+    tabIndex: 0,
     "aria-label": label,
-    "aria-orientation": "vertical" as const,
+    "aria-orientation": "horizontal" as const,
+    "aria-valuemin": PROMPT_TEXTAREA_MIN_HEIGHT,
+    "aria-valuemax": PROMPT_TEXTAREA_ARIA_MAX_HEIGHT,
+    "aria-valuenow": Math.round(currentHeight ?? PROMPT_TEXTAREA_MIN_HEIGHT),
+    onKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+
+      const shell = shellRef.current;
+      const otherShell = otherShellRef.current;
+      const promptForm = promptFormRef.current;
+      const ownerWindow = shell?.ownerDocument.defaultView;
+      if (!shell || !promptForm || !ownerWindow) return;
+
+      event.preventDefault();
+
+      const shellRect = shell.getBoundingClientRect();
+      const otherStartHeight = otherShell?.getBoundingClientRect().height ?? 0;
+      const tabContent = promptForm.closest(".tab-content") as HTMLElement | null;
+      const promptFormNextSibling = promptForm.nextElementSibling as HTMLElement | null;
+      const tabContentGap =
+        tabContent !== null
+          ? Number.parseFloat(ownerWindow.getComputedStyle(tabContent).rowGap || "0") || 0
+          : 0;
+      const bottomLimit =
+        (promptFormNextSibling?.getBoundingClientRect().top ??
+          tabContent?.getBoundingClientRect().bottom ??
+          promptForm.getBoundingClientRect().bottom) - tabContentGap;
+      const promptFormContentBottom = Array.from(promptForm.children)
+        .filter((child): child is HTMLElement => child instanceof HTMLElement)
+        .reduce(
+          (bottom, child) => Math.max(bottom, child.getBoundingClientRect().bottom),
+          shellRect.bottom,
+        );
+      const contentBelowActiveShell = Math.max(0, promptFormContentBottom - shellRect.bottom);
+      const maxActiveHeight = Math.max(
+        PROMPT_TEXTAREA_MIN_HEIGHT,
+        bottomLimit - shellRect.top - contentBelowActiveShell - RESIZE_BOTTOM_SAFE_GAP,
+      );
+
+      if (otherShell) {
+        setOtherHeight(Math.max(PROMPT_TEXTAREA_MIN_HEIGHT, otherStartHeight));
+      }
+
+      const step = event.shiftKey ? RESIZE_KEYBOARD_LARGE_STEP : RESIZE_KEYBOARD_STEP;
+      const currentShellHeight = shellRect.height;
+      const nextHeight =
+        event.key === "Home"
+          ? PROMPT_TEXTAREA_MIN_HEIGHT
+          : event.key === "End"
+            ? maxActiveHeight
+            : clampHeight(
+                currentShellHeight + (event.key === "ArrowDown" ? step : -step),
+                PROMPT_TEXTAREA_MIN_HEIGHT,
+                maxActiveHeight,
+              );
+      setHeight(nextHeight);
+    },
     onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => {
       const shell = shellRef.current;
       const otherShell = otherShellRef.current;
@@ -265,6 +327,7 @@ export function PromptForm({
           className="prompt-textarea-resize"
           {...promptTextareaResizeProps(
             originalShellRef,
+            originalHeight,
             setOriginalHeight,
             improvedShellRef,
             setImprovedHeight,
@@ -334,6 +397,7 @@ export function PromptForm({
               className="prompt-textarea-resize improved-textarea-resize"
               {...promptTextareaResizeProps(
                 improvedShellRef,
+                improvedHeight,
                 setImprovedHeight,
                 originalShellRef,
                 setOriginalHeight,
