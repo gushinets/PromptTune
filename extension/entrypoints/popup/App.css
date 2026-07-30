@@ -541,6 +541,7 @@ body.sidepanel-body {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   padding: 6px 10px;
   gap: 6px;
   overflow-y: auto;
@@ -601,25 +602,35 @@ textarea::placeholder {
   color: var(--txt3);
 }
 
-textarea.improved-textarea {
-  border-left: 3px solid var(--acc);
+textarea.prompt-textarea {
+  display: block;
+  height: 100%;
   min-height: 72px;
   padding-bottom: 18px;
   resize: none;
   overflow: auto;
 }
 
-.improved-textarea-shell {
+.prompt-textarea-shell {
   position: relative;
+  flex: 1 1 0;
+  min-height: 72px;
+  overflow: hidden;
+}
+
+textarea.improved-textarea {
+  border-left: 3px solid var(--acc);
 }
 
 .improved-output-section {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
   gap: 6px;
+  min-height: 0;
 }
 
-.improved-textarea-resize {
+.prompt-textarea-resize {
   position: absolute;
   right: 2px;
   bottom: 4px;
@@ -633,7 +644,7 @@ textarea.improved-textarea {
   user-select: none;
 }
 
-.improved-textarea-resize-grip {
+.prompt-textarea-resize-grip {
   width: 11px;
   height: 11px;
   opacity: 0.9;
@@ -645,7 +656,7 @@ textarea.improved-textarea {
   transition: opacity 0.15s ease;
 }
 
-.improved-textarea-resize:hover .improved-textarea-resize-grip {
+.prompt-textarea-resize:hover .prompt-textarea-resize-grip {
   opacity: 1;
 }
 
@@ -748,7 +759,9 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .goal-pills {
@@ -1012,6 +1025,7 @@ button:disabled {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   width: 100%;
+  flex-shrink: 0;
   margin-top: 2px;
 }
 
@@ -1092,6 +1106,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex-shrink: 0;
   gap: 8px;
   padding-top: 2px;
 }
@@ -1582,6 +1597,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   gap: 6px;
   padding: 5px 10px 6px;
   position: relative;
