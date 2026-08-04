@@ -544,7 +544,7 @@ body.sidepanel-body {
   min-height: 0;
   padding: 6px 10px;
   gap: 6px;
-  overflow-y: auto;
+  overflow: hidden;
   position: relative;
   z-index: 1;
 }
@@ -616,6 +616,11 @@ textarea.prompt-textarea {
   flex: 1 1 0;
   min-height: 72px;
   overflow: hidden;
+}
+
+.prompt-form.has-improvements .prompt-textarea-shell,
+.prompt-form.has-improvements textarea.prompt-textarea {
+  min-height: 56px;
 }
 
 textarea.improved-textarea {
@@ -855,6 +860,7 @@ button:disabled {
   background: rgba(255, 255, 255, 0.04);
   padding: 6px 8px 7px;
   animation: fadeIn 0.3s ease-out;
+  flex-shrink: 0;
 }
 
 .improvements-details summary {
@@ -1352,6 +1358,8 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* =========================================
