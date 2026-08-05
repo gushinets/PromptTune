@@ -70,6 +70,43 @@ def test_parse_improve_response_reads_json_contract():
     assert changes == ["Added subject line", "Clarified the target audience"]
 
 
+def test_parse_improve_response_limits_changes_to_five_entries():
+    improved_text, changes = _parse_improve_response(
+        """
+        {
+          "improved_text": "better prompt",
+          "changes": ["one", "two", "three", "four", "five", "six"]
+        }
+        """
+    )
+
+    assert improved_text == "better prompt"
+    assert changes == ["one", "two", "three", "four", "five"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"changes":["Added structure"]}',
+        '{"improved_text":42,"changes":["Added structure"]}',
+    ],
+)
+def test_parse_improve_response_falls_back_when_improved_text_is_invalid(raw):
+    improved_text, changes = _parse_improve_response(raw)
+
+    assert improved_text == raw
+    assert changes == []
+
+
+def test_parse_improve_response_defaults_non_list_changes_to_empty():
+    improved_text, changes = _parse_improve_response(
+        '{"improved_text":"better prompt","changes":"Added structure"}'
+    )
+
+    assert improved_text == "better prompt"
+    assert changes == []
+
+
 def test_parse_improve_response_falls_back_to_raw_text():
     improved_text, changes = _parse_improve_response("plain improved prompt")
 
