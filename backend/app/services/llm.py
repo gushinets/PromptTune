@@ -197,6 +197,7 @@ STRIP_PATTERNS = [
     re.compile(r"^(Here'?s?\s+(the\s+)?improved\s+prompt:?\s*)", re.IGNORECASE),
     re.compile(r"^(Improved\s+prompt:?\s*)", re.IGNORECASE),
 ]
+JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.IGNORECASE | re.DOTALL)
 EMPTY_COMPLETION_RETRIES = 1
 
 
@@ -216,23 +217,31 @@ class ImproveLLMResult:
 
 
 def _normalize_response(text: str) -> str:
-    text = text.strip()
+    text = text.strip().strip('"').strip("'").strip()
     for pattern in STRIP_PATTERNS:
         text = pattern.sub("", text)
     return text.strip().strip('"').strip("'")
 
 
+def _extract_json_candidate(raw: str) -> str:
+    match = JSON_FENCE_RE.match(raw.strip())
+    if match:
+        return match.group(1).strip()
+    return raw.strip()
+
+
 def _parse_improve_response(raw: str) -> tuple[str, list[str]]:
     raw = raw.strip()
+    json_candidate = _extract_json_candidate(raw)
     try:
-        result = json.loads(raw)
+        result = json.loads(json_candidate)
         improved_text = result["improved_text"]
         changes = result.get("changes", [])
     except (json.JSONDecodeError, KeyError, TypeError):
-        return raw, []
+        return _normalize_response(raw), []
 
     if not isinstance(improved_text, str):
-        return raw, []
+        return _normalize_response(raw), []
     if not isinstance(changes, list):
         changes = []
 

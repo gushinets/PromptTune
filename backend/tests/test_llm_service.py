@@ -70,6 +70,22 @@ def test_parse_improve_response_reads_json_contract():
     assert changes == ["Added subject line", "Clarified the target audience"]
 
 
+def test_parse_improve_response_reads_fenced_json_contract():
+    improved_text, changes = _parse_improve_response(
+        """
+        ```json
+        {
+          "improved_text": "better prompt",
+          "changes": ["Added subject line", "Clarified the target audience"]
+        }
+        ```
+        """
+    )
+
+    assert improved_text == "better prompt"
+    assert changes == ["Added subject line", "Clarified the target audience"]
+
+
 def test_parse_improve_response_limits_changes_to_five_entries():
     improved_text, changes = _parse_improve_response(
         """
@@ -111,6 +127,13 @@ def test_parse_improve_response_falls_back_to_raw_text():
     improved_text, changes = _parse_improve_response("plain improved prompt")
 
     assert improved_text == "plain improved prompt"
+    assert changes == []
+
+
+def test_parse_improve_response_normalizes_plain_text_fallback():
+    improved_text, changes = _parse_improve_response('"Improved prompt: better prompt"')
+
+    assert improved_text == "better prompt"
     assert changes == []
 
 
