@@ -14,6 +14,7 @@ from app.services.errors import (
     UpstreamTimeoutError,
 )
 from app.services.llm import (
+    GOAL_PROMPT_HINTS,
     SYSTEM_PROMPT,
     LiteLLMClient,
     _choice_finish_reason,
@@ -47,6 +48,43 @@ def test_strips_quotes():
 
 def test_preserves_clean_response():
     assert _normalize_response("already clean") == "already clean"
+
+
+def test_goal_prompt_hints_match_v2_mode_requirements():
+    assert ("ai", "general") not in GOAL_PROMPT_HINTS
+    assert "разбей задачу на явные шаги" in GOAL_PROMPT_HINTS[("ai", "chatgpt")]
+    assert "сначала изложить логику" in GOAL_PROMPT_HINTS[("ai", "claude")]
+    assert "ссылки на источники" in GOAL_PROMPT_HINTS[("ai", "perplexity")]
+    assert (
+        "JSON, таблица, список с фиксированными полями" in GOAL_PROMPT_HINTS[("ai", "structured")]
+    )
+    assert "выдвинуть и проверить гипотезы" in GOAL_PROMPT_HINTS[("ai", "deep_research")]
+    assert (
+        "готов к использованию без дополнительной правки"
+        in GOAL_PROMPT_HINTS[("content", "general")]
+    )
+    assert "мета-описанием до 160 символов" in GOAL_PROMPT_HINTS[("content", "seo_article")]
+    assert (
+        "только если они указаны пользователем или прямо следуют из запроса"
+        in GOAL_PROMPT_HINTS[("content", "seo_article")]
+    )
+    assert "Закрытие типичных возражений" in GOAL_PROMPT_HINTS[("content", "product_description")]
+    assert (
+        "только при наличии исходных данных"
+        in GOAL_PROMPT_HINTS[("content", "product_description")]
+    )
+    assert "сильный hook" in GOAL_PROMPT_HINTS[("content", "ad_copy")]
+    assert (
+        "Элемент доверия (proof) добавляй только если" in GOAL_PROMPT_HINTS[("content", "ad_copy")]
+    )
+    assert "subject line" in GOAL_PROMPT_HINTS[("content", "email")]
+    assert (
+        "Каждая секция должна решать одну задачу читателя"
+        in GOAL_PROMPT_HINTS[("content", "landing_page")]
+    )
+    assert (
+        "Блок social proof добавляй только если" in GOAL_PROMPT_HINTS[("content", "landing_page")]
+    )
 
 
 def test_strips_whitespace():
