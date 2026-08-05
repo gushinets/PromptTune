@@ -23,6 +23,7 @@ from app.services.llm import (
     _infer_provider_from_model,
     _map_litellm_error,
     _normalize_response,
+    _parse_improve_response,
     _provider_from_response,
     _resolve_model_name,
     _resolve_provider_api_key,
@@ -48,6 +49,32 @@ def test_strips_quotes():
 
 def test_preserves_clean_response():
     assert _normalize_response("already clean") == "already clean"
+
+
+def test_parse_improve_response_reads_json_contract():
+    improved_text, changes = _parse_improve_response(
+        """
+        {
+          "improved_text": "better prompt",
+          "changes": [
+            "Added subject line",
+            " Clarified the target audience ",
+            "",
+            42
+          ]
+        }
+        """
+    )
+
+    assert improved_text == "better prompt"
+    assert changes == ["Added subject line", "Clarified the target audience"]
+
+
+def test_parse_improve_response_falls_back_to_raw_text():
+    improved_text, changes = _parse_improve_response("plain improved prompt")
+
+    assert improved_text == "plain improved prompt"
+    assert changes == []
 
 
 def test_goal_prompt_hints_match_v2_mode_requirements():
