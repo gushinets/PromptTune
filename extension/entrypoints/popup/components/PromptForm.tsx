@@ -312,7 +312,7 @@ export function PromptForm({
     "aria-orientation": "horizontal" as const,
     "aria-valuemin": minHeight,
     "aria-valuemax": PROMPT_TEXTAREA_ARIA_MAX_HEIGHT,
-    "aria-valuenow": Math.round(currentHeight ?? minHeight),
+    "aria-valuenow": Math.round(Math.max(currentHeight ?? minHeight, minHeight)),
     onKeyDown: (event: ReactKeyboardEvent<HTMLDivElement>) => {
       if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
 
