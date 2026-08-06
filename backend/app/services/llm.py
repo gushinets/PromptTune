@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -196,12 +197,14 @@ STRIP_PATTERNS = [
     re.compile(r"^(Here'?s?\s+(the\s+)?improved\s+prompt:?\s*)", re.IGNORECASE),
     re.compile(r"^(Improved\s+prompt:?\s*)", re.IGNORECASE),
 ]
+JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.IGNORECASE | re.DOTALL)
 EMPTY_COMPLETION_RETRIES = 1
 
 
 @dataclass(frozen=True)
 class ImproveLLMResult:
     improved_text: str
+    changes: list[str]
     model: str
     provider: str | None
     prompt_tokens: int | None
@@ -214,10 +217,38 @@ class ImproveLLMResult:
 
 
 def _normalize_response(text: str) -> str:
-    text = text.strip()
+    text = text.strip().strip('"').strip("'").strip()
     for pattern in STRIP_PATTERNS:
         text = pattern.sub("", text)
     return text.strip().strip('"').strip("'")
+
+
+def _extract_json_candidate(raw: str) -> str:
+    match = JSON_FENCE_RE.match(raw.strip())
+    if match:
+        return match.group(1).strip()
+    return raw.strip()
+
+
+def _parse_improve_response(raw: str) -> tuple[str, list[str]]:
+    raw = raw.strip()
+    json_candidate = _extract_json_candidate(raw)
+    try:
+        result = json.loads(json_candidate)
+        improved_text = result["improved_text"]
+        changes = result.get("changes", [])
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return _normalize_response(raw), []
+
+    if not isinstance(improved_text, str):
+        return _normalize_response(raw), []
+    if not isinstance(changes, list):
+        changes = []
+
+    clean_changes = [
+        change.strip() for change in changes if isinstance(change, str) and change.strip()
+    ]
+    return improved_text.strip(), clean_changes[:5]
 
 
 def _choice_finish_reason(response: object) -> str | None:
@@ -381,6 +412,7 @@ class LiteLLMClient:
         max_attempts = max(1, settings.llm_max_retries)
         response: Any = None
         improved: str = ""
+        changes: list[str] = []
         attempt = 0
         latency_ms = 0
         while attempt < max_attempts:
@@ -418,7 +450,7 @@ class LiteLLMClient:
                     f"Provider message content must be a string, got {type(raw).__name__}"
                 )
 
-            improved = _normalize_response(raw)
+            improved, changes = _parse_improve_response(raw)
             if not improved.strip():
                 detail = _empty_completion_detail(response)
                 diagnostics = _empty_completion_diagnostics(response)
@@ -476,6 +508,7 @@ class LiteLLMClient:
 
         return ImproveLLMResult(
             improved_text=improved,
+            changes=changes,
             model=model_used,
             provider=provider,
             prompt_tokens=pt,

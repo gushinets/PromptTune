@@ -29,7 +29,16 @@ async def client() -> AsyncGenerator[AsyncClient]:
 @pytest.fixture
 def mock_litellm():
     mock_response = SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content="better result"))],
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=(
+                        '{"improved_text":"better result","changes":'
+                        '["Added concrete output requirements","Clarified the response structure"]}'
+                    )
+                )
+            )
+        ],
         model="gpt-4o-mini",
         usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
         id="chatcmpl-test",

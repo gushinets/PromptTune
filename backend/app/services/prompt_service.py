@@ -9,7 +9,6 @@ from app.db.models import Installation, PromptImprovement
 from app.goals import AudienceMode, CanonicalGoal
 from app.security.redaction import redact_secrets
 from app.services.errors import UpstreamServiceError
-from app.services.improvement_changes import build_improvement_changes
 from app.services.llm import improve_text
 from app.services.rate_limiter import RateLimiter
 
@@ -56,16 +55,10 @@ class PromptService:
                 audience_mode=audience_mode,
                 goal=goal,
             )
-            changes = build_improvement_changes(
-                original_text=text,
-                improved_text=llm_result.improved_text,
-                audience_mode=audience_mode,
-                goal=goal,
-            )
             llm_meta = {
                 "audience_mode": audience_mode,
                 "goal": goal,
-                "changes": changes,
+                "changes": llm_result.changes,
                 "model": llm_result.model,
                 "provider": llm_result.provider,
                 "latency_ms": llm_result.latency_ms,
