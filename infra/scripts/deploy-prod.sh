@@ -137,6 +137,7 @@ check_env_file() {
   require_env_key "LLM_BACKEND"
   require_env_key "INSTALLATION_ID_SALT"
   require_env_key "IP_SALT"
+  require_env_key "NTFY_TOPIC"
 
   case "$(read_env_value "LLM_BACKEND")" in
     OPENAI)
@@ -197,6 +198,8 @@ run_preflight() {
 }
 
 run_deploy() {
+  local start_caddy
+
   log "Starting postgres and redis"
   compose up -d postgres redis
 
@@ -209,8 +212,14 @@ run_deploy() {
   log "Applying database migrations"
   compose run --rm --no-deps api alembic upgrade head
 
-  log "Starting api and caddy"
-  compose up -d api caddy
+  start_caddy="$(read_env_value "PROMPTTUNE_START_CADDY")"
+  if [[ "${start_caddy:-true}" == "false" ]]; then
+    log "Starting api and egress services without PromptTune caddy"
+    compose up -d egress-lb egress-alert api
+  else
+    log "Starting api, egress services, and caddy"
+    compose up -d egress-lb egress-alert api caddy
+  fi
 
   log "Current production container state"
   compose ps

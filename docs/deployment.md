@@ -159,56 +159,72 @@ This manual sequence remains available as the low-level fallback behind the guar
 
 ## 5. Optional outbound HTTPS proxy
 
-If the provider blocks direct egress from the backend VPS, route outbound provider traffic through a locked-down HTTP proxy such as Squid.
+If the provider blocks direct egress from the backend VPS, route outbound provider traffic through the internal HAProxy egress load balancer. On the current production host (`135.106.164.145`, repo path `/opt/PromptTune/infra`), public Caddy is owned by the separate `payments-portal-prod` stack and is attached to `infra_prompttune`; do not start the PromptTune `caddy` service on that host.
 
-Add these variables to `infra/.env` on the backend VPS:
+The production egress path is:
+
+```text
+api -> egress-lb:3128 -> Squid forward proxies -> api.openai.com:443
+```
+
+Set these variables in `infra/.env`:
 
 ```bash
-HTTPS_PROXY=http://PROXY_SERVER_PUBLIC_IP:3128
-HTTP_PROXY=http://PROXY_SERVER_PUBLIC_IP:3128
+HTTPS_PROXY=http://egress-lb:3128
+HTTP_PROXY=http://egress-lb:3128
 NO_PROXY=localhost,127.0.0.1,postgres,redis
+
+EGRESS_ALERT_INTERVAL_SECONDS=60
+EGRESS_ALERT_EXPECTED_ACTIVE=1
+EGRESS_ALERT_EXPECTED_AVAILABLE=2
+NTFY_BASE_URL=https://ntfy.sh
+NTFY_TOPIC=prompttune-egress-CHANGE_ME_LONG_RANDOM_SECRET
+
+# Current 135.106.164.145 layout uses payments-portal-prod Caddy.
+PROMPTTUNE_START_CADDY=false
 ```
 
-These variables configure outbound HTTP(S) provider clients. Postgres and Redis use non-HTTP drivers on the Docker network; `NO_PROXY` is included as a defensive bypass for any HTTP clients that honor standard proxy environment variables.
+Configured Squid servers must only allow the backend VPS IP to connect to port `3128`. Do not enable TLS interception / SSL bump, do not log request bodies, and keep provider API keys only on the backend VPS. Additional proxies should be added to HAProxy as `backup` servers only after an authenticated OpenAI smoke check passes from that proxy IP.
 
-The proxy server must only allow the backend VPS IP to connect to port `3128`. Do not enable TLS interception / SSL bump, do not log request bodies, and keep provider API keys only on the backend VPS.
-
-Restart the API service after changing `infra/.env`:
+Start only the backend-related services on the current production host:
 
 ```bash
-cd /path/to/PromptTune/infra
-docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d api
+cd /opt/PromptTune/infra
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d postgres redis egress-lb egress-alert api
 ```
 
-Verify the proxy variables are set inside the API container without printing their values:
+Verify HAProxy sees the active Squid backend:
+
+```bash
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml exec egress-lb \
+  wget -qO- http://localhost:8404/metrics | grep 'haproxy_backend_active_servers{proxy="squid_proxies"}'
+```
+
+Expected active value: `1`. HAProxy should also report the backup Squid as `UP`, but it should not receive traffic while the primary backend is healthy.
+
+Verify provider egress from the API container without printing API keys:
 
 ```bash
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml exec api \
-  sh -c 'for key in HTTPS_PROXY HTTP_PROXY NO_PROXY; do if [ -n "$(printenv "$key")" ]; then echo "$key=set"; else echo "$key=missing"; fi; done'
+  python -c "import httpx; r=httpx.get('https://api.openai.com/v1/models', timeout=30); print(r.status_code, len(r.content))"
 ```
 
-Then verify:
+Without an API key in this smoke request, `401` or `403` from OpenAI is acceptable; the important part is that the request reaches OpenAI through `egress-lb`.
+
+Verify ntfy delivery with the same topic:
 
 ```bash
-curl -i https://api.anytoolai.store/healthz
-curl -i https://api.anytoolai.store/readyz
+curl -d "PromptTune egress alert test" "https://ntfy.sh/${NTFY_TOPIC}"
 ```
 
-Send a normal `/v1/improve` request and confirm the Squid access log shows a provider `CONNECT`, for example:
+Rollback to the direct single-proxy path:
 
 ```bash
-tail -f /var/log/squid/access.log
-```
-
-Rollback:
-
-```bash
-cd /path/to/PromptTune/infra
-# remove HTTPS_PROXY, HTTP_PROXY, and NO_PROXY from .env
+cd /opt/PromptTune/infra
+# set HTTPS_PROXY and HTTP_PROXY back to a known working Squid, or remove them for direct egress
 docker compose -f docker-compose.base.yml -f docker-compose.prod.yml up -d api
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml stop egress-alert egress-lb
 ```
-
-After rollback, confirm `/v1/improve` works through direct provider egress again.
 
 ## 6. Verify the deploy
 
