@@ -1,10 +1,44 @@
 services:
   api:
     restart: unless-stopped
+    depends_on:
+      egress-lb:
+        condition: service_started
     deploy:
       resources:
         limits:
           memory: 512M
+
+  egress-lb:
+    image: haproxy:3.4-alpine
+    restart: unless-stopped
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - prompttune
+
+  egress-alert:
+    image: python:3.13-alpine
+    restart: unless-stopped
+    env_file: .env
+    command: ["python", "/app/egress_proxy_alert.py"]
+    environment:
+      EGRESS_ALERT_METRICS_URL: http://egress-lb:8404/metrics
+      EGRESS_ALERT_NODE: 135.106.164.145/yasmine
+      EGRESS_ALERT_EXPECTED_ACTIVE: "1"
+      EGRESS_ALERT_EXPECTED_AVAILABLE: "2"
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+    volumes:
+      - ./scripts/egress_proxy_alert.py:/app/egress_proxy_alert.py:ro
+      - egress-alert-state:/state
+    depends_on:
+      egress-lb:
+        condition: service_started
+    networks:
+      - prompttune
 
   postgres:
     restart: unless-stopped
@@ -38,3 +72,4 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+  egress-alert-state:

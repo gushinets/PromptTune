@@ -92,4 +92,12 @@ Both config targets use `docker compose ... config --quiet`, so success produces
 
 ## Optional outbound provider proxy
 
-Provider HTTP(S) traffic from the `api` container can be routed through a standard HTTP proxy by setting `HTTPS_PROXY` and `HTTP_PROXY` in `infra/.env`. `NO_PROXY=localhost,127.0.0.1,postgres,redis` is a defensive bypass for HTTP clients that honor standard proxy environment variables. See `docs/deployment.md` for the full proxy setup, verification, and rollback flow.
+Production provider HTTP(S) traffic can be routed from `api` through the internal `egress-lb` HAProxy service:
+
+```bash
+HTTPS_PROXY=http://egress-lb:3128
+HTTP_PROXY=http://egress-lb:3128
+NO_PROXY=localhost,127.0.0.1,postgres,redis
+```
+
+`egress-lb` health-checks configured locked-down Squid forward proxies by opening an HTTP `CONNECT` tunnel to `api.openai.com:443`. Only the primary proxy receives traffic while healthy; additional proxies are configured as HAProxy backups. The companion `egress-alert` service reads HAProxy metrics and sends ntfy notifications when fewer than the expected number of forward proxies are available. See `docs/deployment.md` for the full setup, verification, and rollback flow.
