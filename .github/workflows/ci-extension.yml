@@ -8,12 +8,6 @@ on:
       - .gitattributes
       - .editorconfig
       - .github/workflows/ci-extension.yml
-  pull_request:
-    paths:
-      - extension/**
-      - .gitattributes
-      - .editorconfig
-      - .github/workflows/ci-extension.yml
 
 jobs:
   lint-and-build:
