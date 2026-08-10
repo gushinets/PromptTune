@@ -47,6 +47,9 @@
   --amber: #fbbf24;
   --amber-bg: rgba(251, 191, 36, 0.15);
   --amber-bdr: rgba(251, 191, 36, 0.25);
+
+  --popup-width: 340px;
+  --popup-height: 540px;
 }
 
 /* --- Reset & Base --- */
@@ -68,6 +71,11 @@ body {
   overflow: hidden;
 }
 
+html {
+  overflow: hidden;
+  background: var(--bg);
+}
+
 html,
 body,
 #root {
@@ -76,8 +84,21 @@ body,
 }
 
 body.popup-body {
-  width: 340px;
-  height: 540px;
+  width: var(--popup-width);
+  min-width: var(--popup-width);
+  max-width: var(--popup-width);
+  height: var(--popup-height);
+  min-height: var(--popup-height);
+  max-height: var(--popup-height);
+}
+
+body.popup-body #root {
+  width: var(--popup-width);
+  min-width: var(--popup-width);
+  max-width: var(--popup-width);
+  height: var(--popup-height);
+  min-height: var(--popup-height);
+  max-height: var(--popup-height);
 }
 
 body.sidepanel-body {
@@ -90,14 +111,21 @@ body.sidepanel-body {
 .popup-container {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  min-width: 0;
   height: 100%;
   background: linear-gradient(160deg, #0f0c29 0%, #1a1050 100%);
   position: relative;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .popup-container.popup {
-  height: 540px;
+  width: var(--popup-width);
+  min-width: var(--popup-width);
+  max-width: var(--popup-width);
+  height: var(--popup-height);
+  min-height: var(--popup-height);
+  max-height: var(--popup-height);
 }
 
 .popup-container.sidepanel {
