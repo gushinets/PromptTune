@@ -16,6 +16,9 @@ export default defineConfig({
   srcDir: ".",
   modules: ["@wxt-dev/module-react"],
   vite: () => ({
+    build: {
+      modulePreload: false,
+    },
     resolve: {
       alias: {
         "@shared": path.resolve(__dirname, "shared"),
