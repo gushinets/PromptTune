@@ -13,9 +13,9 @@ Services in the production stack:
 - `redis` - Redis
 - `caddy` - reverse proxy with automatic HTTPS
 
-## MVP deployment posture
+## Production deployment posture
 
-- CORS is temporarily permissive: `ALLOWED_ORIGINS=*`
+- CORS allows only the PromptOptimizer extension origin by default
 - Provider API keys stay on the server only
 - No off-box backups are included in this MVP
 - Only ports `80` and `443` should be publicly reachable
@@ -51,6 +51,7 @@ Edit `infra/.env` and set:
 - `OPENROUTER_API_KEY` or `OPENAI_API_KEY` to match `LLM_BACKEND`
 - `INSTALLATION_ID_SALT`
 - `IP_SALT`
+- `ALLOWED_ORIGINS` if the deployed extension origin differs from the current Chrome Web Store ID
 
 Production example:
 
@@ -62,15 +63,26 @@ Production example:
 Keep these values as-is for the MVP deploy:
 
 - `REDIS_URL=redis://redis:6379/0`
-- `ALLOWED_ORIGINS=*`
+- `ALLOWED_ORIGINS=chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe`
 
 The password inside `DATABASE_URL` must match `POSTGRES_PASSWORD` or the API and migration containers will fail to connect to Postgres.
 
-Why `ALLOWED_ORIGINS=*` for now:
+Why `ALLOWED_ORIGINS` is explicit:
 
 - the browser extension will call the API directly
-- the final extension store IDs/origins are not known yet
-- this is temporary and should be tightened after the published extension IDs/origin rules are known
+- the Chrome Web Store extension ID is `fbageijibmjblopdbgpdcpkojhnjjbpe`
+- unrelated web pages must not receive browser permission to call the API
+
+To add another browser build or a site that genuinely calls the API, append its exact origin
+with a comma and no path, for example:
+
+```dotenv
+ALLOWED_ORIGINS=chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe,moz-extension://EXACT-FIREFOX-UUID,https://app.example.com
+```
+
+Do not add marketing or documentation origins unless their browser code directly calls this API.
+The backend refuses to start if any configured origin is `*`, including manual Compose flows.
+The guarded deploy additionally requires `CORS_SMOKE_ORIGIN` to appear in the list.
 
 ## 2. Validate the production compose config
 
@@ -128,6 +140,7 @@ Environment overrides:
 - `BASE_URL`
 - `MIN_FREE_MB`
 - `LIMITS_INSTALLATION_ID`
+- `CORS_SMOKE_ORIGIN` selects the configured extension origin used by CORS smoke checks
 
 ## 4. First deploy
 
@@ -256,23 +269,37 @@ Expected result:
 - both endpoints return `200 OK`
 - `readyz` only returns `200` after Postgres and Redis are reachable
 
-## 7. Verify CORS for MVP browser traffic
+## 7. Verify extension CORS
 
-The backend currently allows all origins so browser requests can work before the final extension IDs are known.
+The guarded deploy checks CORS automatically for `/v1/improve`, `/v1/limits`, `/v1/prompts`,
+and `/v1/events`. Each route must allow the PromptOptimizer extension origin and reject an
+unrelated web origin.
 
-Preflight check:
+Manual allowed-origin preflight check:
 
 ```bash
 curl -i -X OPTIONS https://api.anytoolai.store/v1/improve \
-  -H "Origin: https://example.com" \
+  -H "Origin: chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: content-type"
 ```
 
 Expected result:
 
-- the response contains `access-control-allow-origin`
+- the response is `200`
+- `access-control-allow-origin` exactly matches the extension origin
 - the response allows `POST`
+
+Manual rejected-origin preflight check:
+
+```bash
+curl -i -X OPTIONS https://api.anytoolai.store/v1/improve \
+  -H "Origin: https://unrelated.example" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: content-type"
+```
+
+Expected result: `400` with no `access-control-allow-origin` header.
 
 Application request smoke test:
 
@@ -377,10 +404,12 @@ If you want ACME notification emails, uncomment and set the `email` line in the 
 - do not publish `5432` or `6379` to the public internet
 - keep SSH locked down separately at the VPS level
 
-## Follow-up after extension publication
+## Adding future extension origins
 
-This backend deploy intentionally stops at temporary permissive CORS. The extension already defaults to `https://api.anytoolai.store` and derives the matching API host permission from `VITE_API_BASE_URL`.
+The extension defaults to `https://api.anytoolai.store` and derives the matching API host
+permission from `VITE_API_BASE_URL`. When another browser extension origin is introduced:
 
-After the browser extensions are published, the remaining follow-up is:
-
-- replace `ALLOWED_ORIGINS=*` with explicit extension/site origin handling
+1. Append the exact origin to the comma-separated `ALLOWED_ORIGINS` value.
+2. Set `CORS_SMOKE_ORIGIN` to the new origin for one guarded deploy and confirm all checks pass.
+3. Restore `CORS_SMOKE_ORIGIN` to the primary Chrome origin unless the deployment automation is
+   intentionally being changed to monitor the new origin permanently.

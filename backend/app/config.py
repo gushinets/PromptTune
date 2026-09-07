@@ -133,7 +133,11 @@ class BotConfig:
             llm_completion_tokens_retry_max=_get_int_env("LLM_COMPLETION_TOKENS_RETRY_MAX", 12288),
             llm_max_retries=_get_int_env("LLM_MAX_RETRIES", 2),
             llm_temperature=_get_optional_float_env("LLM_TEMPERATURE"),
-            allowed_origins=_get_env("ALLOWED_ORIGINS", "*") or "*",
+            allowed_origins=_get_env(
+                "ALLOWED_ORIGINS",
+                "chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe",
+            )
+            or "chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe",
             llm_request_timeout_seconds=_get_float_env("LLM_REQUEST_TIMEOUT_SECONDS", 60.0),
             openrouter_site_url=_get_env("OPENROUTER_SITE_URL"),
             openrouter_app_name=_get_env("OPENROUTER_APP_NAME"),
@@ -190,6 +194,8 @@ class BotConfig:
                 "LLM_REQUEST_TIMEOUT_SECONDS must be positive. "
                 f"Got: {self.llm_request_timeout_seconds}"
             )
+        if "*" in self.allowed_origins_list:
+            raise ValueError("ALLOWED_ORIGINS must not contain wildcard (*)")
         if not self.installation_id_salt:
             raise ValueError("INSTALLATION_ID_SALT must not be empty")
         if not self.ip_salt:
