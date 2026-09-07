@@ -11,6 +11,7 @@ COMPOSE_FILES=(-f docker-compose.base.yml -f docker-compose.prod.yml)
 MIN_FREE_MB="${MIN_FREE_MB:-1024}"
 BASE_URL="${BASE_URL:-https://api.anytoolai.store}"
 LIMITS_INSTALLATION_ID="${LIMITS_INSTALLATION_ID:-test-installation}"
+CORS_SMOKE_ORIGIN="${CORS_SMOKE_ORIGIN:-chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe}"
 PRECHECK_ONLY=false
 SKIP_SMOKE=false
 
@@ -44,6 +45,7 @@ Environment overrides:
   BASE_URL               Default: https://api.anytoolai.store
   MIN_FREE_MB            Default: 1024
   LIMITS_INSTALLATION_ID Default: test-installation
+  CORS_SMOKE_ORIGIN      Default: PromptOptimizer Chrome extension origin
 EOF
 }
 
@@ -68,6 +70,29 @@ require_env_key() {
   local value
   value="$(read_env_value "${key}")"
   [[ -n "${value}" ]] || die "${ENV_FILE} is missing required ${key}"
+}
+
+check_allowed_origins() {
+  local allowed_origins
+  local origin
+  local smoke_origin_found=false
+  local -a origins
+
+  allowed_origins="$(read_env_value "ALLOWED_ORIGINS")"
+  [[ -n "${allowed_origins}" ]] || die "${ENV_FILE} is missing required ALLOWED_ORIGINS"
+  [[ "${allowed_origins}" != "*" ]] || die "ALLOWED_ORIGINS must list explicit origins; wildcard (*) is not allowed"
+
+  IFS=',' read -r -a origins <<< "${allowed_origins}"
+  for origin in "${origins[@]}"; do
+    origin="${origin#"${origin%%[![:space:]]*}"}"
+    origin="${origin%"${origin##*[![:space:]]}"}"
+    [[ "${origin}" != "*" ]] || die "ALLOWED_ORIGINS must list explicit origins; wildcard (*) is not allowed"
+    if [[ "${origin}" == "${CORS_SMOKE_ORIGIN}" ]]; then
+      smoke_origin_found=true
+    fi
+  done
+
+  [[ "${smoke_origin_found}" == "true" ]] || die "ALLOWED_ORIGINS must include CORS_SMOKE_ORIGIN (${CORS_SMOKE_ORIGIN})"
 }
 
 check_free_space() {
@@ -138,6 +163,7 @@ check_env_file() {
   require_env_key "INSTALLATION_ID_SALT"
   require_env_key "IP_SALT"
   require_env_key "NTFY_TOPIC"
+  check_allowed_origins
 
   case "$(read_env_value "LLM_BACKEND")" in
     OPENAI)
@@ -150,6 +176,37 @@ check_env_file() {
       die "LLM_BACKEND must be OPENAI or OPENROUTER; found: $(read_env_value "LLM_BACKEND")"
       ;;
   esac
+}
+
+check_cors_preflight() {
+  local path="$1"
+  local method="$2"
+  local origin="$3"
+  local expected_status="$4"
+  local expected_allow_origin="$5"
+  local response_headers
+  local status
+  local allow_origin
+  local attempt
+
+  for attempt in 1 2 3; do
+    if response_headers="$(curl -sS --connect-timeout 5 --max-time 15 \
+      -D - -o /dev/null -X OPTIONS "${BASE_URL}${path}" \
+      -H "Origin: ${origin}" \
+      -H "Access-Control-Request-Method: ${method}" \
+      -H "Access-Control-Request-Headers: content-type")"; then
+      break
+    fi
+    if [[ "${attempt}" == "3" ]]; then
+      die "CORS preflight ${method} ${path} for ${origin} failed after 3 attempts"
+    fi
+    sleep 1
+  done
+  status="$(printf '%s\n' "${response_headers}" | awk 'NR == 1 {print $2}')"
+  allow_origin="$(printf '%s\n' "${response_headers}" | awk 'tolower($1) == "access-control-allow-origin:" {gsub(/\r/, "", $2); print $2; exit}')"
+
+  [[ "${status}" == "${expected_status}" ]] || die "CORS preflight ${method} ${path} for ${origin} returned ${status}; expected ${expected_status}"
+  [[ "${allow_origin}" == "${expected_allow_origin}" ]] || die "CORS preflight ${method} ${path} returned allow-origin '${allow_origin}'; expected '${expected_allow_origin}'"
 }
 
 print_git_context() {
@@ -227,6 +284,8 @@ run_deploy() {
 
 run_smoke_checks() {
   local limits_url
+  local path
+  local method
 
   require_cmd curl
   BASE_URL="${BASE_URL%/}"
@@ -236,6 +295,16 @@ run_smoke_checks() {
   wait_for_http_200 "${BASE_URL}/healthz" "healthz"
   wait_for_http_200 "${BASE_URL}/readyz" "readyz"
   wait_for_http_200 "${limits_url}" "limits endpoint"
+  while read -r path method; do
+    check_cors_preflight "${path}" "${method}" "${CORS_SMOKE_ORIGIN}" "200" "${CORS_SMOKE_ORIGIN}"
+    check_cors_preflight "${path}" "${method}" "https://unrelated.example" "400" ""
+  done <<'EOF'
+/v1/improve POST
+/v1/limits GET
+/v1/prompts POST
+/v1/events POST
+EOF
+  log "CORS preflight checks passed"
   log "Smoke checks passed"
 }
 

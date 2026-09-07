@@ -1,10 +1,49 @@
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from httpx import AsyncClient
 
 from app.security.redaction import redact_secrets
 from app.services.errors import UpstreamAuthError, UpstreamRateLimitError
 from app.services.prompt_service import PromptService
+
+EXTENSION_ORIGIN = "chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "method"),
+    [
+        ("/v1/improve", "POST"),
+        ("/v1/limits", "GET"),
+        ("/v1/prompts", "POST"),
+        ("/v1/events", "POST"),
+    ],
+)
+async def test_cors_preflight_allows_extension_and_rejects_web_origins(
+    client: AsyncClient,
+    path: str,
+    method: str,
+):
+    request_headers = {
+        "Access-Control-Request-Method": method,
+        "Access-Control-Request-Headers": "content-type",
+    }
+
+    allowed = await client.options(
+        path,
+        headers={"Origin": EXTENSION_ORIGIN, **request_headers},
+    )
+    rejected = await client.options(
+        path,
+        headers={"Origin": "https://unrelated.example", **request_headers},
+    )
+
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == EXTENSION_ORIGIN
+    assert method in allowed.headers["access-control-allow-methods"]
+    assert rejected.status_code == 400
+    assert "access-control-allow-origin" not in rejected.headers
 
 
 def test_redact_secrets_masks_api_keys_and_auth_headers():

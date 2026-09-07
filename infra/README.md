@@ -23,7 +23,9 @@ For production, edit at least:
 - `INSTALLATION_ID_SALT`
 - `IP_SALT`
 
-Keep `REDIS_URL=redis://redis:6379/0` and `ALLOWED_ORIGINS=*` for the MVP deploy.
+Keep `REDIS_URL=redis://redis:6379/0`. Production `ALLOWED_ORIGINS` must contain
+the exact PromptOptimizer origin, `chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe`.
+Add future browser extension or site origins as a comma-separated list; never use `*`.
 
 The compose files use `env_file: .env`, so `infra/.env` must exist before starting either stack.
 Use plain `KEY=value` lines only. Do not append inline comments to values.
@@ -88,7 +90,10 @@ make prod-down
 
 Both config targets use `docker compose ... config --quiet`, so success produces no output.
 
-`infra/.env.example` documents `ALLOWED_ORIGINS=*` for the MVP deploy until browser-extension IDs/origins are known.
+`infra/.env.example` contains the Chrome Web Store extension origin. The deploy preflight
+rejects wildcard CORS and verifies that `CORS_SMOKE_ORIGIN` is present in `ALLOWED_ORIGINS`.
+The backend also refuses to start if any configured origin is `*`, including manual Compose flows.
+The post-deploy smoke test checks allowed and rejected CORS preflights on all extension API endpoints.
 
 ## Optional outbound provider proxy
 

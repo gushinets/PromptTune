@@ -1,3 +1,5 @@
+import pytest
+
 from app.config import BotConfig, _clean_env_value
 
 
@@ -88,3 +90,13 @@ def test_from_env_rejects_invalid_analytics_enabled_value(monkeypatch):
         assert "ANALYTICS_ENABLED must be a boolean-like value" in str(exc)
     else:
         raise AssertionError("Expected ValueError")
+
+
+@pytest.mark.parametrize("allowed_origins", ["*", "https://app.example.com,*"])
+def test_validate_rejects_wildcard_cors_origin(monkeypatch, allowed_origins: str):
+    monkeypatch.setenv("ALLOWED_ORIGINS", allowed_origins)
+
+    config = BotConfig.from_env()
+
+    with pytest.raises(ValueError, match=r"ALLOWED_ORIGINS must not contain wildcard \(\*\)"):
+        config.validate()
