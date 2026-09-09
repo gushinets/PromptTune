@@ -5,6 +5,8 @@ export type BackendMode = "n8n" | "fastapi";
 const DEFAULT_WELCOME_PAGE_URL = "https://anytoolai-welcome.netlify.app/prompt-optimizer/";
 const DEFAULT_FEEDBACK_URL =
   "https://docs.google.com/forms/d/e/1FAIpQLSd7Q5SmtvSEuxBDvZRvtNMPojqH7k69olXajFSZGOO4-EZ7CQ/viewform?usp=dialog";
+const DEFAULT_CWS_REVIEW_URL =
+  "https://chromewebstore.google.com/detail/prompt-optimizer-%E2%80%93-improv/fbageijibmjblopdbgpdcpkojhnjjbpe/reviews";
 
 function getHttpsUrl(rawUrl: string | undefined, fallback: string): string {
   try {
@@ -15,20 +17,6 @@ function getHttpsUrl(rawUrl: string | undefined, fallback: string): string {
     return parsedUrl.toString();
   } catch {
     return fallback;
-  }
-}
-
-function getOptionalHttpsUrl(rawUrl: string | undefined): string | null {
-  if (!rawUrl) return null;
-
-  try {
-    const parsedUrl = new URL(rawUrl);
-    if (parsedUrl.protocol !== "https:") {
-      return null;
-    }
-    return parsedUrl.toString();
-  } catch {
-    return null;
   }
 }
 
@@ -43,7 +31,10 @@ export const WELCOME_PAGE_URL = getHttpsUrl(
   DEFAULT_WELCOME_PAGE_URL,
 );
 export const FEEDBACK_URL = getHttpsUrl(import.meta.env.VITE_FEEDBACK_URL, DEFAULT_FEEDBACK_URL);
-export const CWS_REVIEW_URL = getOptionalHttpsUrl(import.meta.env.VITE_CWS_REVIEW_URL);
+export const CWS_REVIEW_URL = getHttpsUrl(
+  import.meta.env.VITE_CWS_REVIEW_URL,
+  DEFAULT_CWS_REVIEW_URL,
+);
 
 export const STORAGE_KEYS = {
   INSTALLATION_ID: "installation_id",
