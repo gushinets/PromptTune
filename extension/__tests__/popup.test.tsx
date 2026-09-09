@@ -312,34 +312,38 @@ describe("App", () => {
     });
   });
 
-  it("does not route high ratings anywhere until the store review URL is configured", async () => {
+  it.each([4, 5])("routes a %i-star rating to the Chrome Web Store review page", async (star) => {
     await act(async () => {
       root.render(<App />);
     });
     await flushEffects();
 
-    const fiveStar = container.querySelector('[aria-label="Rate 5 stars"]');
-    expect(fiveStar).toBeInstanceOf(HTMLElement);
+    const highRatingStar = container.querySelector(`[aria-label="Rate ${star} stars"]`);
+    expect(highRatingStar).toBeInstanceOf(HTMLElement);
 
     await act(async () => {
-      (fiveStar as HTMLElement).click();
+      (highRatingStar as HTMLElement).click();
       await Promise.resolve();
     });
 
-    expect(browser.tabs.create).not.toHaveBeenCalled();
+    expect(browser.tabs.create).toHaveBeenCalledWith({
+      url: "https://chromewebstore.google.com/detail/prompt-optimizer-%E2%80%93-improv/fbageijibmjblopdbgpdcpkojhnjjbpe/reviews",
+    });
   });
 
-  it("routes low ratings to the product feedback form", async () => {
+  it.each([1, 2, 3])("routes a %i-star rating to the product feedback form", async (star) => {
     await act(async () => {
       root.render(<App />);
     });
     await flushEffects();
 
-    const threeStar = container.querySelector('[aria-label="Rate 3 stars"]');
-    expect(threeStar).toBeInstanceOf(HTMLElement);
+    const lowRatingStar = container.querySelector(
+      `[aria-label="Rate ${star} star${star > 1 ? "s" : ""}"]`,
+    );
+    expect(lowRatingStar).toBeInstanceOf(HTMLElement);
 
     await act(async () => {
-      (threeStar as HTMLElement).click();
+      (lowRatingStar as HTMLElement).click();
       await Promise.resolve();
     });
 
