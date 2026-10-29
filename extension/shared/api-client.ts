@@ -57,13 +57,17 @@ async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
   return res.json();
 }
 
-async function get<TRes>(path: string, query: Record<string, string>): Promise<TRes> {
+async function get<TRes>(
+  path: string,
+  query: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<TRes> {
   const url = new URL(`${API_BASE_URL}${path}`);
   for (const [k, v] of Object.entries(query)) {
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), { method: "GET" });
+  const res = await fetch(url.toString(), { method: "GET", ...(signal ? { signal } : {}) });
   if (!res.ok) {
     const rawDetail = await res.text().catch(() => res.statusText);
     throw new ApiError(res.status, extractErrorDetail(rawDetail, res.statusText));
@@ -93,6 +97,7 @@ async function improveViaN8n(req: ImproveRequest): Promise<ImproveResponse> {
 let promptInputMaxChars: number = DEFAULT_PROMPT_INPUT_MAX_CHARS;
 let promptLimitFetchedAt: number | null = null;
 const PROMPT_LIMIT_CACHE_MS = 60_000;
+const PROMPT_CONFIG_TIMEOUT_MS = 3_000;
 
 export const apiClient = {
   async promptInputLimit(refresh = false): Promise<number> {
@@ -104,14 +109,22 @@ export const apiClient = {
     ) {
       return promptInputMaxChars;
     }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PROMPT_CONFIG_TIMEOUT_MS);
     try {
-      const config = await get<{ prompt_input_max_chars?: number }>("/v1/config", {});
+      const config = await get<{ prompt_input_max_chars?: number }>(
+        "/v1/config",
+        {},
+        controller.signal,
+      );
       const limit = config.prompt_input_max_chars;
       if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
         promptInputMaxChars = limit;
       }
     } catch {
-      // Older or temporarily unavailable servers: retain the last known limit.
+      // Older, unavailable or stalled servers: retain the last known limit.
+    } finally {
+      clearTimeout(timeout);
     }
     promptLimitFetchedAt = Date.now();
     return promptInputMaxChars;

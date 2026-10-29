@@ -203,3 +203,58 @@ it("allows a fresh direct request when the configured limit exceeds the fallback
     client.improve({ text: "x".repeat(30001), installation_id: "i", client: "extension" }),
   ).resolves.toEqual({ request_id: "r", improved_text: "better" });
 });
+
+it.each([false, true])(
+  "times out a stalled config lookup and keeps improvement available (cached=%s)",
+  async (cached) => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    try {
+      const { apiClient: client } = await import("@shared/api-client");
+      if (cached) {
+        global.fetch = vi
+          .fn()
+          .mockResolvedValue({ ok: true, json: async () => ({ prompt_input_max_chars: 12 }) });
+        expect(await client.promptInputLimit()).toBe(12);
+        expect(vi.getTimerCount()).toBe(0);
+      }
+      let configSignal: AbortSignal | undefined;
+      global.fetch = vi.fn().mockImplementation((url, options?: RequestInit) => {
+        if (String(url).endsWith("/v1/config")) {
+          configSignal = options?.signal ?? undefined;
+          return new Promise((_resolve, reject) => {
+            configSignal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            );
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ request_id: "r", improved_text: "better" }),
+        });
+      });
+      let resolvedLimit: number | undefined;
+      const lookup = client.promptInputLimit(true).then((limit) => {
+        resolvedLimit = limit;
+      });
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(resolvedLimit).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(resolvedLimit).toBe(cached ? 12 : 30000);
+      await lookup;
+      expect(configSignal?.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+      await expect(
+        client.improve({ text: "short", installation_id: "i", client: "extension" }),
+      ).resolves.toEqual({ request_id: "r", improved_text: "better" });
+      expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual([
+        "https://api.anytoolai.store/v1/config",
+        "https://api.anytoolai.store/v1/improve",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
