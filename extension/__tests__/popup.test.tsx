@@ -153,6 +153,76 @@ describe("App", () => {
     vi.useRealTimers();
   });
 
+  it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(1000000));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe(
+      "1 000 000 / 30 000",
+    );
+    expect(getImproveButton(container).disabled).toBe(true);
+    await setOriginalPrompt(container, "x".repeat(30001));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("30 001 / 30 000");
+    expect(container.querySelector("textarea")?.getAttribute("aria-invalid")).toBe("true");
+    expect(container.textContent).toContain("Shorten it or split it into parts");
+    expect(getImproveButton(container).disabled).toBe(true);
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(
+      vi
+        .mocked(browser.runtime.sendMessage)
+        .mock.calls.filter(([msg]) => (msg as { type?: string }).type === "IMPROVE_REQUEST"),
+    ).toHaveLength(0);
+    await setOriginalPrompt(container, "😀".repeat(30000));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("30 000 / 30 000");
+    expect(getImproveButton(container).disabled).toBe(false);
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
+  });
+
+  it("uses the configured backend limit", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT" ? { max_chars: 12 } : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(13));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("13 / 12");
+    expect(getImproveButton(container).disabled).toBe(true);
+  });
+
+  it.each([
+    new ApiError(422, "Input text exceeds maximum length of 10 characters."),
+    new Error("API 422: Input text exceeds maximum length of 10 characters."),
+  ])("explains backend length rejection and updates the limit: %s", async (error) => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      if ((msg as { type?: string }).type === "IMPROVE_REQUEST") throw error;
+      return { ok: true };
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(11));
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(container.textContent).toContain("Shorten it or split it into parts");
+    expect(getImproveButton(container).disabled).toBe(true);
+    await setOriginalPrompt(container, "x".repeat(10));
+    expect(getImproveButton(container).disabled).toBe(false);
+    expect(container.textContent).not.toContain("Shorten it or split it into parts");
+  });
+
   it("allows improve requests after a limits lookup failure", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };

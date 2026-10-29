@@ -134,6 +134,18 @@ DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttun
 REDIS_URL=redis://localhost:6379/0
 ```
 
+#### Prompt input length
+
+`GET /v1/config` exposes `prompt_input_max_chars` from the backend's
+`PROMPT_INPUT_MAX_CHARS` setting. The extension uses it for the live counter and
+blocks oversized requests before submission and analytics. Characters are counted
+as Unicode code points, matching Python (an emoji counts as one character).
+
+If configuration is unavailable, the extension retains the last known limit or
+uses `DEFAULT_PROMPT_INPUT_MAX_CHARS` (30 000). Existing backend defaults remain
+8 000; set `PROMPT_INPUT_MAX_CHARS=30000` on the server to use a 30 000 limit.
+`GET /v1/limits` continues to return only request quotas.
+
 #### n8n override
 
 Requires an n8n instance with the "Prompt Improver API" workflow active.

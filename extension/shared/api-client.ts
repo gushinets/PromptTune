@@ -1,4 +1,10 @@
-import { API_BASE_URL, N8N_WEBHOOK_URL, BACKEND_MODE } from "./constants";
+import { countPromptCharacters } from "./prompt-length";
+import {
+  API_BASE_URL,
+  N8N_WEBHOOK_URL,
+  BACKEND_MODE,
+  DEFAULT_PROMPT_INPUT_MAX_CHARS,
+} from "./constants";
 import type {
   ImproveRequest,
   ImproveResponse,
@@ -84,8 +90,45 @@ async function improveViaN8n(req: ImproveRequest): Promise<ImproveResponse> {
   };
 }
 
+let promptInputMaxChars: number = DEFAULT_PROMPT_INPUT_MAX_CHARS;
+let promptLimitFetchedAt: number | null = null;
+const PROMPT_LIMIT_CACHE_MS = 60_000;
+
 export const apiClient = {
-  improve(req: ImproveRequest): Promise<ImproveResponse> {
+  async promptInputLimit(refresh = false): Promise<number> {
+    if (BACKEND_MODE !== "fastapi") return promptInputMaxChars;
+    if (
+      !refresh &&
+      promptLimitFetchedAt !== null &&
+      Date.now() - promptLimitFetchedAt < PROMPT_LIMIT_CACHE_MS
+    ) {
+      return promptInputMaxChars;
+    }
+    try {
+      const config = await get<{ prompt_input_max_chars?: number }>("/v1/config", {});
+      const limit = config.prompt_input_max_chars;
+      if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
+        promptInputMaxChars = limit;
+      }
+    } catch {
+      // Older or temporarily unavailable servers: retain the last known limit.
+    }
+    promptLimitFetchedAt = Date.now();
+    return promptInputMaxChars;
+  },
+
+  validateImproveInput(text: string): void {
+    if (countPromptCharacters(text) > promptInputMaxChars) {
+      throw new ApiError(
+        422,
+        `Input text exceeds maximum length of ${promptInputMaxChars} characters.`,
+      );
+    }
+  },
+
+  async improve(req: ImproveRequest): Promise<ImproveResponse> {
+    await apiClient.promptInputLimit();
+    apiClient.validateImproveInput(req.text);
     if (BACKEND_MODE === "n8n") {
       return improveViaN8n(req);
     }

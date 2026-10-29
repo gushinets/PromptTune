@@ -1,3 +1,4 @@
+import { formatCharacterCount } from "../prompt-length";
 export const en = {
   // Header
   appName: "PromptOptimizer",
@@ -127,6 +128,8 @@ export const en = {
       ? `You've used all ${total.toLocaleString()} requests today. Resets at midnight UTC.`
       : "You've used all requests today. Resets at midnight UTC.",
   errorGenericFallback: "Something went wrong. Please try again.",
+  errorInputTooLong: (max: number) =>
+    `Text is too long (maximum ${formatCharacterCount(max)} characters). Shorten it or split it into parts.`,
   errorEmptyResponse: "The backend returned an empty improved prompt.",
 } as const;
 

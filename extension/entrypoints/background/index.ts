@@ -404,7 +404,14 @@ export default defineBackground(() => {
         return { ok: true };
       }
 
+      case "GET_PROMPT_LIMIT": {
+        return { max_chars: await apiClient.promptInputLimit(true) };
+      }
+
       case "IMPROVE_REQUEST": {
+        await apiClient.promptInputLimit(true);
+        apiClient.validateImproveInput(msg.payload.text);
+
         const installationId = await getInstallationId();
         const trimmed = msg.payload.text.trim();
 

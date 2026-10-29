@@ -1,3 +1,4 @@
+import { countPromptCharacters, parseInputLengthError } from "@shared/prompt-length";
 import { useState, useEffect, useCallback, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
@@ -15,7 +16,7 @@ import {
   setAudienceMode,
   setPopupSessionDraft,
 } from "@shared/storage";
-import { FEATURES, BACKEND_MODE } from "@shared/constants";
+import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
   describeUnexpectedBackgroundResponse,
@@ -148,6 +149,26 @@ export function App({ viewMode = "popup" }: AppProps) {
   const t = useT();
   const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState("");
+  const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
+    DEFAULT_PROMPT_INPUT_MAX_CHARS,
+  );
+
+  useEffect(() => {
+    let active = true;
+    browser.runtime
+      .sendMessage({ type: "GET_PROMPT_LIMIT" })
+      .then((response) => {
+        const limit = (response as { max_chars?: unknown } | undefined)?.max_chars;
+        if (active && typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
+          setPromptInputMaxChars(limit);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [improved, setImproved] = useState("");
   const [changes, setChanges] = useState<string[]>([]);
   const [audienceMode, setAudienceModeState] = useState<AudienceMode | null>(null);
@@ -399,6 +420,15 @@ export function App({ viewMode = "popup" }: AppProps) {
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
     (err: unknown): ErrorInfo => {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const lengthLimit = parseInputLengthError(errorMessage);
+      if (
+        (err instanceof ApiError ? err.status === 422 : errorMessage.includes("422")) &&
+        lengthLimit
+      ) {
+        setPromptInputMaxChars(lengthLimit);
+        return { type: "generic", message: t.errorInputTooLong(lengthLimit) };
+      }
       if (err instanceof ApiError) {
         if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
           return { type: "auth", message: t.errorAuthMessage };
@@ -436,6 +466,7 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
+    if (countPromptCharacters(original) > promptInputMaxChars) return;
     const trimmed = original.trim();
     if (!trimmed) return;
     if (!audienceMode) return;
@@ -526,6 +557,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     lastRequestContextKey,
     mapErrorToToast,
     original,
+    promptInputMaxChars,
     rateLimit.total,
     siteHostname,
     t,
@@ -767,13 +799,19 @@ export function App({ viewMode = "popup" }: AppProps) {
             {!modeReady ? null : audienceMode ? (
               <PromptForm
                 original={original}
+                maxInputChars={promptInputMaxChars}
                 improved={improved}
                 improvements={changes}
                 mode={audienceMode}
                 goal={goal}
                 loading={loading}
                 onGoalChange={handleGoalChange}
-                onOriginalChange={setOriginal}
+                onOriginalChange={(text) => {
+                  setOriginal(text);
+                  if (error?.message === t.errorInputTooLong(promptInputMaxChars)) {
+                    setError(null);
+                  }
+                }}
                 onImprove={handleImprove}
               />
             ) : (

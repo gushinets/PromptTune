@@ -136,3 +136,70 @@ describe("apiClient", () => {
     );
   });
 });
+
+describe("input length protection", () => {
+  it("rejects oversized text before posting an improve request", async () => {
+    global.fetch = vi.fn();
+    await expect(
+      apiClient.improve({ text: "x".repeat(30001), installation_id: "i", client: "extension" }),
+    ).rejects.toThrow("maximum length of 30000");
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/v1/improve"))).toBe(
+      false,
+    );
+  });
+});
+
+describe("server prompt limits", () => {
+  it("retains the last valid limit when configuration is invalid or unavailable", async () => {
+    vi.resetModules();
+    const { apiClient: client } = await import("@shared/api-client");
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ prompt_input_max_chars: 12 }) });
+    expect(await client.promptInputLimit(true)).toBe(12);
+    await expect(
+      client.improve({ text: "x".repeat(13), installation_id: "i", client: "extension" }),
+    ).rejects.toThrow("maximum length of 12");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    for (const limit of [0, -1, 1.5, "20", null]) {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ prompt_input_max_chars: limit }),
+      } as Response);
+      expect(await client.promptInputLimit(true)).toBe(12);
+    }
+    vi.mocked(fetch).mockRejectedValue(new Error("offline"));
+    expect(await client.promptInputLimit(true)).toBe(12);
+  });
+});
+
+it("loads the configured limit before a fresh direct improve call", async () => {
+  vi.resetModules();
+  const { apiClient: client } = await import("@shared/api-client");
+  global.fetch = vi.fn().mockImplementation(async (url) => {
+    if (String(url).endsWith("/v1/config"))
+      return { ok: true, json: async () => ({ prompt_input_max_chars: 8000 }) };
+    return { ok: true, json: async () => ({ request_id: "r", improved_text: "better" }) };
+  });
+  await expect(
+    client.improve({ text: "x".repeat(8001), installation_id: "i", client: "extension" }),
+  ).rejects.toThrow("maximum length of 8000");
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual([
+    "https://api.anytoolai.store/v1/config",
+  ]);
+});
+
+it("allows a fresh direct request when the configured limit exceeds the fallback", async () => {
+  vi.resetModules();
+  const { apiClient: client } = await import("@shared/api-client");
+  global.fetch = vi.fn().mockImplementation(async (url) => ({
+    ok: true,
+    json: async () =>
+      String(url).endsWith("/v1/config")
+        ? { prompt_input_max_chars: 40000 }
+        : { request_id: "r", improved_text: "better" },
+  }));
+  await expect(
+    client.improve({ text: "x".repeat(30001), installation_id: "i", client: "extension" }),
+  ).resolves.toEqual({ request_id: "r", improved_text: "better" });
+});

@@ -57,3 +57,6 @@ export const LIMITS = {
 export const FEATURES = {
   OPEN_AND_PASTE: false, // V2 — flip to true when ready
 } as const;
+
+// Fallback for servers without public configuration.
+export const DEFAULT_PROMPT_INPUT_MAX_CHARS = 30_000;
