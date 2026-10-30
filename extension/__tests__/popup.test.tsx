@@ -223,6 +223,63 @@ describe("App", () => {
     expect(container.textContent).not.toContain("Shorten it or split it into parts");
   });
 
+  it("refreshes the limit in an existing side panel after activation", async () => {
+    let limit = 8000;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT" ? { max_chars: limit } : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App viewMode="sidepanel" />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(9000));
+    expect(getImproveButton(container).disabled).toBe(true);
+    limit = 30000;
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("9 000 / 30 000");
+    expect(getImproveButton(container).disabled).toBe(false);
+    limit = 8000;
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(getImproveButton(container).disabled).toBe(true);
+  });
+
+  it("blocks saving an oversized original after improving a short prompt", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "IMPROVE_REQUEST"
+        ? {
+            type: "IMPROVE_RESULT",
+            payload: { request_id: "r", improved_text: "Better prompt" },
+          }
+        : { ok: true },
+    );
+    const saveSpy = vi.spyOn(apiClient, "savePrompt").mockResolvedValue({ prompt_id: "p" });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Short prompt");
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    await setOriginalPrompt(container, "x".repeat(30001));
+    expect(findButton(container, "Save to Library").disabled).toBe(true);
+    expect(findButton(container, "Copy").disabled).toBe(false);
+    await act(async () => {
+      findButton(container, "Save to Library").click();
+    });
+    expect(saveSpy).not.toHaveBeenCalled();
+    await setOriginalPrompt(container, "x".repeat(30000));
+    expect(findButton(container, "Save to Library").disabled).toBe(false);
+    await act(async () => {
+      findButton(container, "Save to Library").click();
+    });
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("allows improve requests after a limits lookup failure", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };

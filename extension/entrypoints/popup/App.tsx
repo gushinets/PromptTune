@@ -1,5 +1,5 @@
 import { countPromptCharacters, parseInputLengthError } from "@shared/prompt-length";
-import { useState, useEffect, useCallback, useRef, type FocusEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
 import { ActionBar } from "./components/ActionBar";
@@ -155,19 +155,42 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   useEffect(() => {
     let active = true;
-    browser.runtime
-      .sendMessage({ type: "GET_PROMPT_LIMIT" })
-      .then((response) => {
+    let pending = false;
+    const refreshInputLimit = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const response = await browser.runtime.sendMessage({ type: "GET_PROMPT_LIMIT" });
         const limit = (response as { max_chars?: unknown } | undefined)?.max_chars;
         if (active && typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
           setPromptInputMaxChars(limit);
         }
-      })
-      .catch(() => undefined);
+      } catch {
+        // Keep the current limit until the next activation.
+      } finally {
+        pending = false;
+      }
+    };
+    const handleFocus = () => {
+      void refreshInputLimit();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshInputLimit();
+    };
+    void refreshInputLimit();
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       active = false;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
+
+  const isOriginalOverLimit = useMemo(
+    () => countPromptCharacters(original) > promptInputMaxChars,
+    [original, promptInputMaxChars],
+  );
 
   const [improved, setImproved] = useState("");
   const [changes, setChanges] = useState<string[]>([]);
@@ -565,6 +588,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   ]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
+    if (isOriginalOverLimit) return false;
     const originalTrimmed = original.trim();
     const improvedTrimmed = improved.trim();
     if (!originalTrimmed || !improvedTrimmed) return false;
@@ -597,7 +621,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     await save({ original: originalTrimmed, improved: improvedTrimmed });
     refreshLibraryCount();
     return true;
-  }, [original, improved, refreshLibraryCount, mapErrorToToast, viewMode]);
+  }, [original, improved, isOriginalOverLimit, refreshLibraryCount, mapErrorToToast, viewMode]);
 
   const handleDismissError = useCallback(() => setError(null), []);
 
@@ -841,6 +865,7 @@ export function App({ viewMode = "popup" }: AppProps) {
             <ActionBar
               improved={improved}
               disabled={!improved}
+              saveDisabled={isOriginalOverLimit}
               onSave={handleSave}
               requestId={lastRequestId}
               source={viewMode}

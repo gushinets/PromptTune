@@ -142,8 +142,11 @@ blocks oversized requests before submission and analytics. Characters are counte
 as Unicode code points, matching Python (an emoji counts as one character).
 
 If configuration is unavailable, the extension retains the last known limit or
-uses `DEFAULT_PROMPT_INPUT_MAX_CHARS` (30 000). Existing backend defaults remain
-8 000; set `PROMPT_INPUT_MAX_CHARS=30000` on the server to use a 30 000 limit.
+uses `DEFAULT_PROMPT_INPUT_MAX_CHARS` (30 000). The backend and deployment template
+also default to 30 000. Existing deployments must update any explicit
+`PROMPT_INPUT_MAX_CHARS=8000` override to `30000` before releasing the extension.
+Open panels refresh the displayed limit on focus and when becoming visible.
+Oversized originals also disable Save to Library while keeping Copy and Insert available.
 `GET /v1/limits` continues to return only request quotas.
 
 #### n8n override

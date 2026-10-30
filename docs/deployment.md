@@ -413,3 +413,19 @@ permission from `VITE_API_BASE_URL`. When another browser extension origin is in
 2. Set `CORS_SMOKE_ORIGIN` to the new origin for one guarded deploy and confirm all checks pass.
 3. Restore `CORS_SMOKE_ORIGIN` to the primary Chrome origin unless the deployment automation is
    intentionally being changed to monitor the new origin permanently.
+
+
+## ANY-661 input-limit rollout
+
+Before releasing the extension with the input counter, set
+`PROMPT_INPUT_MAX_CHARS=30000` in the server's existing environment file and
+redeploy the backend. An explicit old `8000` value overrides the new default.
+Verify the deployed endpoint before releasing the extension:
+
+```bash
+curl -fsS https://api.anytoolai.store/v1/config | python3 -c 'import json, sys; assert json.load(sys.stdin)["prompt_input_max_chars"] == 30000'
+```
+
+The command must exit successfully. The default backend accepts 30,000 input
+characters and rejects 30,001; custom limits remain configurable. Check the
+weekly production `api_error` metric after rollout.
