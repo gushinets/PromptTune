@@ -280,6 +280,57 @@ describe("App", () => {
     expect(saveSpy).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    { field: "original_text", counter: "11 / 10", disabled: true },
+    { field: "improved_text", counter: "11 / 30 000", disabled: false },
+  ])(
+    "handles a save-length rejection for $field without confusing input and output limits",
+    async ({ field, counter, disabled }) => {
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+        (msg as { type?: string }).type === "IMPROVE_REQUEST"
+          ? {
+              type: "IMPROVE_RESULT",
+              payload: { request_id: "r", improved_text: "Better prompt" },
+            }
+          : { ok: true },
+      );
+      const detail = `${field} exceeds maximum length of 10 characters.`;
+      const saveSpy = vi
+        .spyOn(apiClient, "savePrompt")
+        .mockRejectedValueOnce(new ApiError(422, detail));
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      await setOriginalPrompt(container, "x".repeat(11));
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      await act(async () => {
+        findButton(container, "Save to Library").click();
+      });
+      expect(container.querySelector(".prompt-length-counter")?.textContent).toBe(counter);
+      expect(findButton(container, "Save to Library").disabled).toBe(disabled);
+      expect(findButton(container, "Copy").disabled).toBe(false);
+      expect(container.textContent).not.toContain("Saved!");
+      if (field === "original_text") {
+        expect(container.textContent).toContain("Shorten it or split it into parts");
+        expect(getImproveButton(container).disabled).toBe(true);
+        await act(async () => {
+          findButton(container, "Save to Library").click();
+        });
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        await setOriginalPrompt(container, "x".repeat(10));
+        expect(findButton(container, "Save to Library").disabled).toBe(false);
+        expect(container.textContent).not.toContain("Shorten it or split it into parts");
+      } else {
+        expect(container.textContent).toContain(detail);
+        expect(container.textContent).not.toContain("Shorten it or split it into parts");
+        expect(getImproveButton(container).disabled).toBe(false);
+      }
+    },
+  );
+
   it("allows improve requests after a limits lookup failure", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };
