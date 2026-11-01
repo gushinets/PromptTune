@@ -154,6 +154,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   );
 
   useEffect(() => {
+    if (BACKEND_MODE !== "fastapi") return;
     let active = true;
     let pending = false;
     const refreshInputLimit = async () => {
@@ -188,7 +189,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, []);
 
   const isOriginalOverLimit = useMemo(
-    () => countPromptCharacters(original) > promptInputMaxChars,
+    () => BACKEND_MODE === "fastapi" && countPromptCharacters(original) > promptInputMaxChars,
     [original, promptInputMaxChars],
   );
 
@@ -446,6 +447,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const lengthLimit = parseInputLengthError(errorMessage);
       if (
+        BACKEND_MODE === "fastapi" &&
         (err instanceof ApiError ? err.status === 422 : errorMessage.includes("422")) &&
         lengthLimit
       ) {
@@ -489,7 +491,7 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
-    if (countPromptCharacters(original) > promptInputMaxChars) return;
+    if (isOriginalOverLimit) return;
     const trimmed = original.trim();
     if (!trimmed) return;
     if (!audienceMode) return;
@@ -576,11 +578,11 @@ export function App({ viewMode = "popup" }: AppProps) {
     attemptN,
     goal,
     isExhausted,
+    isOriginalOverLimit,
     lastRequestId,
     lastRequestContextKey,
     mapErrorToToast,
     original,
-    promptInputMaxChars,
     rateLimit.total,
     siteHostname,
     t,
@@ -823,7 +825,7 @@ export function App({ viewMode = "popup" }: AppProps) {
             {!modeReady ? null : audienceMode ? (
               <PromptForm
                 original={original}
-                maxInputChars={promptInputMaxChars}
+                maxInputChars={BACKEND_MODE === "fastapi" ? promptInputMaxChars : null}
                 improved={improved}
                 improvements={changes}
                 mode={audienceMode}

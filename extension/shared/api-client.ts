@@ -131,6 +131,7 @@ export const apiClient = {
   },
 
   validateImproveInput(text: string): void {
+    if (BACKEND_MODE !== "fastapi") return;
     if (countPromptCharacters(text) > promptInputMaxChars) {
       throw new ApiError(
         422,
@@ -140,11 +141,11 @@ export const apiClient = {
   },
 
   async improve(req: ImproveRequest): Promise<ImproveResponse> {
-    await apiClient.promptInputLimit();
-    apiClient.validateImproveInput(req.text);
     if (BACKEND_MODE === "n8n") {
       return improveViaN8n(req);
     }
+    await apiClient.promptInputLimit();
+    apiClient.validateImproveInput(req.text);
     return post("/v1/improve", req);
   },
 

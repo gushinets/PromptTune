@@ -136,7 +136,7 @@ REDIS_URL=redis://localhost:6379/0
 
 #### Prompt input length
 
-`GET /v1/config` exposes `prompt_input_max_chars` from the backend's
+In FastAPI mode, `GET /v1/config` exposes `prompt_input_max_chars` from the backend's
 `PROMPT_INPUT_MAX_CHARS` setting. The extension uses it for the live counter and
 blocks oversized requests before submission and analytics. Characters are counted
 as Unicode code points, matching Python (an emoji counts as one character).
@@ -148,6 +148,8 @@ also default to 30 000. Existing deployments must update any explicit
 Open panels refresh the displayed limit on focus and when becoming visible.
 Oversized originals also disable Save to Library while keeping Copy and Insert available.
 `GET /v1/limits` continues to return only request quotas.
+The n8n profile retains its existing behavior: it does not fetch FastAPI configuration
+or apply its input-length limit to improvement or local library saves.
 
 #### n8n override
 

@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { apiClient, ApiError } from "@shared/api-client";
-import { ANALYTICS_ENABLED, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
+import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
 import type {
@@ -409,8 +409,10 @@ export default defineBackground(() => {
       }
 
       case "IMPROVE_REQUEST": {
-        await apiClient.promptInputLimit(true);
-        apiClient.validateImproveInput(msg.payload.text);
+        if (BACKEND_MODE === "fastapi") {
+          await apiClient.promptInputLimit(true);
+          apiClient.validateImproveInput(msg.payload.text);
+        }
 
         const installationId = await getInstallationId();
         const trimmed = msg.payload.text.trim();
