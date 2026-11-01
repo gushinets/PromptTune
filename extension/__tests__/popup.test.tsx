@@ -153,6 +153,338 @@ describe("App", () => {
     vi.useRealTimers();
   });
 
+  it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(1000000));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe(
+      "1 000 000 / 30 000",
+    );
+    expect(getImproveButton(container).disabled).toBe(true);
+    await setOriginalPrompt(container, "x".repeat(30001));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("30 001 / 30 000");
+    expect(container.querySelector("textarea")?.getAttribute("aria-invalid")).toBe("true");
+    expect(container.textContent).toContain("Shorten it or split it into parts");
+    expect(getImproveButton(container).disabled).toBe(true);
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(
+      vi
+        .mocked(browser.runtime.sendMessage)
+        .mock.calls.filter(([msg]) => (msg as { type?: string }).type === "IMPROVE_REQUEST"),
+    ).toHaveLength(0);
+    await setOriginalPrompt(container, "😀".repeat(30000));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("30 000 / 30 000");
+    expect(getImproveButton(container).disabled).toBe(false);
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(vi.mocked(browser.runtime.sendMessage)).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
+  });
+
+  it("uses the configured backend limit", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT"
+        ? { max_chars: 12, fallback: false }
+        : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(13));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("13 / 12");
+    expect(getImproveButton(container).disabled).toBe(true);
+  });
+
+  it.each([
+    new ApiError(422, "Input text exceeds maximum length of 10 characters."),
+    new Error("API 422: Input text exceeds maximum length of 10 characters."),
+  ])("explains backend length rejection and updates the limit: %s", async (error) => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      if ((msg as { type?: string }).type === "IMPROVE_REQUEST") throw error;
+      return { ok: true };
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(11));
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(container.textContent).toContain("Shorten it or split it into parts");
+    expect(getImproveButton(container).disabled).toBe(true);
+    await setOriginalPrompt(container, "x".repeat(10));
+    expect(getImproveButton(container).disabled).toBe(false);
+    expect(container.textContent).not.toContain("Shorten it or split it into parts");
+  });
+
+  it("refreshes the limit in an existing side panel after activation", async () => {
+    let limit = 8000;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT"
+        ? { max_chars: limit, fallback: false }
+        : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App viewMode="sidepanel" />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(9000));
+    expect(getImproveButton(container).disabled).toBe(true);
+    limit = 30000;
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("9 000 / 30 000");
+    expect(getImproveButton(container).disabled).toBe(false);
+    limit = 8000;
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(getImproveButton(container).disabled).toBe(true);
+  });
+
+  it("blocks saving an oversized original after improving a short prompt", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "IMPROVE_REQUEST"
+        ? {
+            type: "IMPROVE_RESULT",
+            payload: { request_id: "r", improved_text: "Better prompt" },
+          }
+        : { ok: true },
+    );
+    const saveSpy = vi.spyOn(apiClient, "savePrompt").mockResolvedValue({ prompt_id: "p" });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Short prompt");
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    await setOriginalPrompt(container, "x".repeat(30001));
+    expect(findButton(container, "Save to Library").disabled).toBe(true);
+    expect(findButton(container, "Copy").disabled).toBe(false);
+    await act(async () => {
+      findButton(container, "Save to Library").click();
+    });
+    expect(saveSpy).not.toHaveBeenCalled();
+    await setOriginalPrompt(container, "x".repeat(30000));
+    expect(findButton(container, "Save to Library").disabled).toBe(false);
+    await act(async () => {
+      findButton(container, "Save to Library").click();
+    });
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { field: "original_text", counter: "11 / 10", disabled: true },
+    { field: "improved_text", counter: "11 / 30 000", disabled: false },
+  ])(
+    "handles a save-length rejection for $field without confusing input and output limits",
+    async ({ field, counter, disabled }) => {
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+        if ((msg as { type?: string }).type === "GET_PROMPT_LIMIT")
+          return { max_chars: 30000, fallback: true };
+        if ((msg as { type?: string }).type === "IMPROVE_REQUEST")
+          return {
+            type: "IMPROVE_RESULT",
+            payload: { request_id: "r", improved_text: "Better prompt" },
+          };
+        return { ok: true };
+      });
+      const detail = `${field} exceeds maximum length of 10 characters.`;
+      const saveSpy = vi
+        .spyOn(apiClient, "savePrompt")
+        .mockRejectedValueOnce(new ApiError(422, detail));
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      await setOriginalPrompt(container, "x".repeat(11));
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      await act(async () => {
+        findButton(container, "Save to Library").click();
+      });
+      expect(container.querySelector(".prompt-length-counter")?.textContent).toBe(counter);
+      expect(findButton(container, "Save to Library").disabled).toBe(disabled);
+      expect(findButton(container, "Copy").disabled).toBe(false);
+      expect(container.textContent).not.toContain("Saved!");
+      if (field === "original_text") {
+        expect(container.textContent).toContain("Shorten it or split it into parts");
+        expect(getImproveButton(container).disabled).toBe(true);
+        await act(async () => {
+          window.dispatchEvent(new Event("focus"));
+        });
+        expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("11 / 10");
+        expect(findButton(container, "Save to Library").disabled).toBe(true);
+        await act(async () => {
+          findButton(container, "Save to Library").click();
+        });
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        await setOriginalPrompt(container, "x".repeat(10));
+        expect(findButton(container, "Save to Library").disabled).toBe(false);
+        expect(container.textContent).not.toContain("Shorten it or split it into parts");
+      } else {
+        expect(container.textContent).toContain(detail);
+        expect(container.textContent).not.toContain("Shorten it or split it into parts");
+        expect(getImproveButton(container).disabled).toBe(false);
+      }
+    },
+  );
+
+  it("keeps an authoritative limit on fallback refresh but applies later successful configuration", async () => {
+    let limitResponse = { max_chars: 10, fallback: false };
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT" ? limitResponse : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(11));
+    expect(getImproveButton(container).disabled).toBe(true);
+    limitResponse = { max_chars: 30000, fallback: true };
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("11 / 10");
+    expect(getImproveButton(container).disabled).toBe(true);
+    limitResponse = { max_chars: 30000, fallback: false };
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("11 / 30 000");
+    expect(getImproveButton(container).disabled).toBe(false);
+  });
+
+  it("uses a fallback limit when a new popup has no authoritative value", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT"
+        ? { max_chars: 12, fallback: true }
+        : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(13));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("13 / 12");
+    expect(getImproveButton(container).disabled).toBe(true);
+  });
+
+  it("does not apply a successful config response that predates a 422", async () => {
+    let resolveOld!: (value: unknown) => void;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      if ((msg as { type?: string }).type === "GET_PROMPT_LIMIT")
+        return new Promise((resolve) => {
+          resolveOld = resolve;
+        });
+      if ((msg as { type?: string }).type === "IMPROVE_REQUEST")
+        throw new ApiError(422, "Input text exceeds maximum length of 8000 characters.");
+      return { ok: true };
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(9000));
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("9 000 / 8 000");
+    await act(async () => {
+      resolveOld({ max_chars: 30000, fallback: false });
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("9 000 / 8 000");
+    expect(getImproveButton(container).disabled).toBe(true);
+  });
+
+  it("revalidates a restored result before saving while the initial config is pending", async () => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      installation_id: "i",
+      audience_mode: "ai",
+      library: [],
+      popup_session_draft: {
+        activeTab: "improve",
+        original: "x".repeat(9000),
+        improved: "Better prompt",
+        changes: [],
+        goal: "general",
+        lastRequestId: "r",
+        lastRequestContextKey: null,
+        lastModel: null,
+        lastLatencyMs: null,
+        attemptN: 1,
+        updatedAt: Date.now(),
+      },
+    });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT" ? new Promise(() => {}) : { ok: true },
+    );
+    let resolveConfig!: (value: unknown) => void;
+    global.fetch = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await act(async () => {
+      findButton(container, "Save to Library").click();
+    });
+    const callsBefore = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    await act(async () => {
+      resolveConfig({ ok: true, json: async () => ({ prompt_input_max_chars: 8000 }) });
+    });
+    expect(callsBefore).toEqual(["https://api.anytoolai.store/v1/config"]);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/v1/prompts"))).toBe(
+      false,
+    );
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("9 000 / 8 000");
+    expect(findButton(container, "Save to Library").disabled).toBe(true);
+  });
+
+  it("handles a local quota failure without sending or duplicating a remote save", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "IMPROVE_REQUEST"
+        ? { type: "IMPROVE_RESULT", payload: { request_id: "r", improved_text: "Better prompt" } }
+        : { ok: true },
+    );
+    const remote = vi.spyOn(apiClient, "savePrompt").mockResolvedValue({ prompt_id: "p" });
+    vi.mocked(browser.storage.local.set).mockImplementation(async (data) => {
+      if ("library" in data) throw new Error("QUOTA_BYTES");
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "short");
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    await act(async () => {
+      findButton(container, "Save to Library").click();
+    });
+    expect(container.textContent).toContain("Could not save the prompt on this device");
+    expect(container.textContent).not.toContain("Saved!");
+    await act(async () => {
+      findButton(container, "Save to Library").click();
+    });
+    expect(remote).not.toHaveBeenCalled();
+  });
+
   it("allows improve requests after a limits lookup failure", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };
@@ -411,9 +743,10 @@ describe("App", () => {
     expect(container.textContent).toContain(
       "You've used all 10 requests today. Resets at midnight UTC.",
     );
-    expect(vi.mocked(browser.storage.local.set)).not.toHaveBeenCalledWith(
-      expect.objectContaining({ library: expect.anything() }),
-    );
+    const libraryWrites = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.filter(([data]) => "library" in data);
+    expect(libraryWrites.at(-1)?.[0]).toEqual({ library: [] });
   });
 
   it("sends selected mode and goal in improve requests", async () => {

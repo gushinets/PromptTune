@@ -127,7 +127,7 @@ class BotConfig:
             openrouter_api_key=_get_env("OPENROUTER_API_KEY"),
             free_req_per_day=_get_int_env("FREE_REQ_PER_DAY", 50),
             free_req_per_min=_get_int_env("FREE_REQ_PER_MIN", 10),
-            prompt_input_max_chars=_get_int_env("PROMPT_INPUT_MAX_CHARS", 8000),
+            prompt_input_max_chars=_get_int_env("PROMPT_INPUT_MAX_CHARS", 30000),
             prompt_output_max_chars=_get_int_env("PROMPT_OUTPUT_MAX_CHARS", 12000),
             llm_completion_tokens=_get_int_env("LLM_COMPLETION_TOKENS", 8192),
             llm_completion_tokens_retry_max=_get_int_env("LLM_COMPLETION_TOKENS_RETRY_MAX", 12288),

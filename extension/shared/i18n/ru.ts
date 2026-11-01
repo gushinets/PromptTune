@@ -1,3 +1,4 @@
+import { formatCharacterCount } from "../prompt-length";
 import type { TranslationKeys } from "./en";
 
 export const ru: TranslationKeys = {
@@ -130,5 +131,9 @@ export const ru: TranslationKeys = {
       ? `Вы использовали все ${total.toLocaleString()} запросов сегодня. Сброс в полночь UTC.`
       : "Вы использовали все запросы сегодня. Сброс в полночь UTC.",
   errorGenericFallback: "Что-то пошло не так. Попробуйте снова.",
+  errorInputTooLong: (max: number) =>
+    `Текст слишком длинный (максимум ${formatCharacterCount(max)} символов). Сократите его или разделите на части.`,
+  errorLibraryStorageMessage:
+    "Не удалось сохранить промпт на устройстве. Освободите место в хранилище расширения и попробуйте снова.",
   errorEmptyResponse: "Бэкенд вернул пустой улучшенный промпт.",
 };

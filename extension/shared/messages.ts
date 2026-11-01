@@ -17,6 +17,7 @@ export type Message =
       };
     }
   | { type: "IMPROVE_RESULT"; payload: ImproveResponse }
+  | { type: "GET_PROMPT_LIMIT" }
   | { type: "GET_LIMITS" }
   | {
       type: "LIMITS_RESULT";

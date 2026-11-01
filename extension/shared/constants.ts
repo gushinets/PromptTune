@@ -51,9 +51,13 @@ export const STORAGE_KEYS = {
 
 export const LIMITS = {
   MAX_LIBRARY_ENTRIES: 200,
+  MAX_LIBRARY_BYTES: 6 * 1024 * 1024, // Leave room for drafts, analytics and settings.
   POPUP_SESSION_TTL_MS: 3 * 60 * 60 * 1000,
 } as const;
 
 export const FEATURES = {
   OPEN_AND_PASTE: false, // V2 — flip to true when ready
 } as const;
+
+// Fallback for servers without public configuration.
+export const DEFAULT_PROMPT_INPUT_MAX_CHARS = 30_000;

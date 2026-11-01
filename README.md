@@ -134,6 +134,36 @@ DATABASE_URL=postgresql+asyncpg://prompttune:prompttune@localhost:5432/prompttun
 REDIS_URL=redis://localhost:6379/0
 ```
 
+#### Prompt input length
+
+In FastAPI mode, `GET /v1/config` exposes `prompt_input_max_chars` from the backend's
+`PROMPT_INPUT_MAX_CHARS` setting. The extension uses it for the live counter and
+blocks oversized requests before submission and analytics. Characters are counted
+as Unicode code points, matching Python (an emoji counts as one character).
+
+If configuration is unavailable, the extension retains the last known limit or
+uses `DEFAULT_PROMPT_INPUT_MAX_CHARS` (30 000). The backend and deployment template
+also default to 30 000. Existing deployments must update any explicit
+`PROMPT_INPUT_MAX_CHARS=8000` override to `30000` before releasing the extension.
+Open panels refresh the displayed limit on focus and when becoming visible.
+Oversized originals also disable Save to Library while keeping Copy and Insert available.
+`GET /v1/limits` continues to return only request quotas.
+The n8n profile retains its existing behavior: it does not fetch FastAPI configuration
+or apply its input-length limit to improvement or local library saves.
+
+#### Local library storage
+
+The library retains the newest entries up to 200 records or 6 MiB of serialized
+UTF-8 data, whichever is reached first. Older entries are pruned to leave room
+for drafts, settings, and analytics. This storage budget also applies in n8n mode.
+
+A save is written locally before synchronizing to FastAPI. A failed local write
+shows an error and does not send a remote save. A rejected remote save rolls back
+the provisional local entry; library mutations use a shared Web Lock so popup and
+side-panel writes cannot overwrite each other's rollback. FastAPI saves refresh
+and validate the input limit immediately before the POST. Older configuration
+responses cannot replace a newer configuration or a limit received in a 422.
+
 #### n8n override
 
 Requires an n8n instance with the "Prompt Improver API" workflow active.
