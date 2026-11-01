@@ -189,7 +189,9 @@ describe("App", () => {
 
   it("uses the configured backend limit", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
-      (msg as { type?: string }).type === "GET_PROMPT_LIMIT" ? { max_chars: 12 } : { ok: true },
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT"
+        ? { max_chars: 12, fallback: false }
+        : { ok: true },
     );
     await act(async () => {
       root.render(<App />);
@@ -226,7 +228,9 @@ describe("App", () => {
   it("refreshes the limit in an existing side panel after activation", async () => {
     let limit = 8000;
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
-      (msg as { type?: string }).type === "GET_PROMPT_LIMIT" ? { max_chars: limit } : { ok: true },
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT"
+        ? { max_chars: limit, fallback: false }
+        : { ok: true },
     );
     await act(async () => {
       root.render(<App viewMode="sidepanel" />);
@@ -286,14 +290,16 @@ describe("App", () => {
   ])(
     "handles a save-length rejection for $field without confusing input and output limits",
     async ({ field, counter, disabled }) => {
-      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
-        (msg as { type?: string }).type === "IMPROVE_REQUEST"
-          ? {
-              type: "IMPROVE_RESULT",
-              payload: { request_id: "r", improved_text: "Better prompt" },
-            }
-          : { ok: true },
-      );
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+        if ((msg as { type?: string }).type === "GET_PROMPT_LIMIT")
+          return { max_chars: 30000, fallback: true };
+        if ((msg as { type?: string }).type === "IMPROVE_REQUEST")
+          return {
+            type: "IMPROVE_RESULT",
+            payload: { request_id: "r", improved_text: "Better prompt" },
+          };
+        return { ok: true };
+      });
       const detail = `${field} exceeds maximum length of 10 characters.`;
       const saveSpy = vi
         .spyOn(apiClient, "savePrompt")
@@ -317,6 +323,11 @@ describe("App", () => {
         expect(container.textContent).toContain("Shorten it or split it into parts");
         expect(getImproveButton(container).disabled).toBe(true);
         await act(async () => {
+          window.dispatchEvent(new Event("focus"));
+        });
+        expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("11 / 10");
+        expect(findButton(container, "Save to Library").disabled).toBe(true);
+        await act(async () => {
           findButton(container, "Save to Library").click();
         });
         expect(saveSpy).toHaveBeenCalledTimes(1);
@@ -330,6 +341,46 @@ describe("App", () => {
       }
     },
   );
+
+  it("keeps an authoritative limit on fallback refresh but applies later successful configuration", async () => {
+    let limitResponse = { max_chars: 10, fallback: false };
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT" ? limitResponse : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(11));
+    expect(getImproveButton(container).disabled).toBe(true);
+    limitResponse = { max_chars: 30000, fallback: true };
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("11 / 10");
+    expect(getImproveButton(container).disabled).toBe(true);
+    limitResponse = { max_chars: 30000, fallback: false };
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("11 / 30 000");
+    expect(getImproveButton(container).disabled).toBe(false);
+  });
+
+  it("uses a fallback limit when a new popup has no authoritative value", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_PROMPT_LIMIT"
+        ? { max_chars: 12, fallback: true }
+        : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "x".repeat(13));
+    expect(container.querySelector(".prompt-length-counter")?.textContent).toBe("13 / 12");
+    expect(getImproveButton(container).disabled).toBe(true);
+  });
 
   it("allows improve requests after a limits lookup failure", async () => {
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {

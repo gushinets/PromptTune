@@ -26,3 +26,27 @@ it("blocks a direct background request before analytics or improve POST", async 
   ]);
   expect(browser.storage.local.set).not.toHaveBeenCalled();
 });
+
+it("forwards configuration authority and fallback status to the popup", async () => {
+  vi.stubGlobal("defineBackground", (main: () => void) => main);
+  Object.assign(browser, { permissions: { onRemoved: { addListener: vi.fn() } } });
+  Object.assign(browser.runtime, { onInstalled: { addListener: vi.fn() } });
+  vi.mocked(browser.storage.local.get).mockResolvedValue({});
+  global.fetch = vi
+    .fn()
+    .mockResolvedValue({ ok: true, json: async () => ({ prompt_input_max_chars: 12 }) });
+  const { default: main } = await import("../entrypoints/background/index");
+  (main as unknown as () => void)();
+  const handle = vi
+    .mocked(browser.runtime.onMessage.addListener)
+    .mock.calls.at(-1)?.[0] as unknown as (msg: unknown) => Promise<unknown>;
+  await expect(handle({ type: "GET_PROMPT_LIMIT" })).resolves.toEqual({
+    max_chars: 12,
+    fallback: false,
+  });
+  vi.mocked(fetch).mockRejectedValue(new Error("offline"));
+  await expect(handle({ type: "GET_PROMPT_LIMIT" })).resolves.toEqual({
+    max_chars: 12,
+    fallback: true,
+  });
+});

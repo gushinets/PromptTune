@@ -25,7 +25,7 @@ import {
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
 import { trackEvent } from "@shared/analytics";
-import type { AiImproveGoal, AudienceMode, ImproveGoal } from "@shared/types";
+import type { AiImproveGoal, AudienceMode, ImproveGoal, PromptInputLimit } from "@shared/types";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
@@ -153,6 +153,8 @@ export function App({ viewMode = "popup" }: AppProps) {
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
   );
 
+  const hasAuthoritativeInputLimitRef = useRef(false);
+
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
     let active = true;
@@ -162,8 +164,12 @@ export function App({ viewMode = "popup" }: AppProps) {
       pending = true;
       try {
         const response = await browser.runtime.sendMessage({ type: "GET_PROMPT_LIMIT" });
-        const limit = (response as { max_chars?: unknown } | undefined)?.max_chars;
+        const info = response as Partial<PromptInputLimit> | undefined;
+        const limit = info?.max_chars;
         if (active && typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
+          const fallback = info?.fallback !== false;
+          if (fallback && hasAuthoritativeInputLimitRef.current) return;
+          if (!fallback) hasAuthoritativeInputLimitRef.current = true;
           setPromptInputMaxChars(limit);
         }
       } catch {
@@ -451,6 +457,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         (err instanceof ApiError ? err.status === 422 : errorMessage.includes("422")) &&
         lengthLimit
       ) {
+        hasAuthoritativeInputLimitRef.current = true;
         setPromptInputMaxChars(lengthLimit);
         return { type: "generic", message: t.errorInputTooLong(lengthLimit) };
       }

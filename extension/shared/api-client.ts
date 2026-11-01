@@ -8,6 +8,7 @@ import {
 import type {
   ImproveRequest,
   ImproveResponse,
+  PromptInputLimit,
   SavePromptRequest,
   SavePromptResponse,
 } from "./types";
@@ -96,19 +97,21 @@ async function improveViaN8n(req: ImproveRequest): Promise<ImproveResponse> {
 
 let promptInputMaxChars: number = DEFAULT_PROMPT_INPUT_MAX_CHARS;
 let promptLimitFetchedAt: number | null = null;
+let promptLimitFallback = true;
 const PROMPT_LIMIT_CACHE_MS = 60_000;
 const PROMPT_CONFIG_TIMEOUT_MS = 3_000;
 
 export const apiClient = {
-  async promptInputLimit(refresh = false): Promise<number> {
-    if (BACKEND_MODE !== "fastapi") return promptInputMaxChars;
+  async promptInputLimit(refresh = false): Promise<PromptInputLimit> {
+    if (BACKEND_MODE !== "fastapi") return { max_chars: promptInputMaxChars, fallback: true };
     if (
       !refresh &&
       promptLimitFetchedAt !== null &&
       Date.now() - promptLimitFetchedAt < PROMPT_LIMIT_CACHE_MS
     ) {
-      return promptInputMaxChars;
+      return { max_chars: promptInputMaxChars, fallback: promptLimitFallback };
     }
+    let fallback = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), PROMPT_CONFIG_TIMEOUT_MS);
     try {
@@ -120,6 +123,7 @@ export const apiClient = {
       const limit = config.prompt_input_max_chars;
       if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
         promptInputMaxChars = limit;
+        fallback = false;
       }
     } catch {
       // Older, unavailable or stalled servers: retain the last known limit.
@@ -127,7 +131,8 @@ export const apiClient = {
       clearTimeout(timeout);
     }
     promptLimitFetchedAt = Date.now();
-    return promptInputMaxChars;
+    promptLimitFallback = fallback;
+    return { max_chars: promptInputMaxChars, fallback };
   },
 
   validateImproveInput(text: string): void {

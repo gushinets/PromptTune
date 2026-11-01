@@ -156,7 +156,8 @@ describe("server prompt limits", () => {
     global.fetch = vi
       .fn()
       .mockResolvedValue({ ok: true, json: async () => ({ prompt_input_max_chars: 12 }) });
-    expect(await client.promptInputLimit(true)).toBe(12);
+    expect(await client.promptInputLimit(true)).toEqual({ max_chars: 12, fallback: false });
+    expect(await client.promptInputLimit()).toEqual({ max_chars: 12, fallback: false });
     await expect(
       client.improve({ text: "x".repeat(13), installation_id: "i", client: "extension" }),
     ).rejects.toThrow("maximum length of 12");
@@ -166,10 +167,10 @@ describe("server prompt limits", () => {
         ok: true,
         json: async () => ({ prompt_input_max_chars: limit }),
       } as Response);
-      expect(await client.promptInputLimit(true)).toBe(12);
+      expect(await client.promptInputLimit(true)).toEqual({ max_chars: 12, fallback: true });
     }
     vi.mocked(fetch).mockRejectedValue(new Error("offline"));
-    expect(await client.promptInputLimit(true)).toBe(12);
+    expect(await client.promptInputLimit(true)).toEqual({ max_chars: 12, fallback: true });
   });
 });
 
@@ -215,7 +216,7 @@ it.each([false, true])(
         global.fetch = vi
           .fn()
           .mockResolvedValue({ ok: true, json: async () => ({ prompt_input_max_chars: 12 }) });
-        expect(await client.promptInputLimit()).toBe(12);
+        expect(await client.promptInputLimit()).toEqual({ max_chars: 12, fallback: false });
         expect(vi.getTimerCount()).toBe(0);
       }
       let configSignal: AbortSignal | undefined;
@@ -235,14 +236,18 @@ it.each([false, true])(
           json: async () => ({ request_id: "r", improved_text: "better" }),
         });
       });
-      let resolvedLimit: number | undefined;
+      let resolvedLimit: { max_chars: number; fallback: boolean } | undefined;
       const lookup = client.promptInputLimit(true).then((limit) => {
         resolvedLimit = limit;
       });
       await vi.advanceTimersByTimeAsync(2999);
       expect(resolvedLimit).toBeUndefined();
       await vi.advanceTimersByTimeAsync(1);
-      expect(resolvedLimit).toBe(cached ? 12 : 30000);
+      expect(resolvedLimit).toEqual({ max_chars: cached ? 12 : 30000, fallback: true });
+      expect(await client.promptInputLimit()).toEqual({
+        max_chars: cached ? 12 : 30000,
+        fallback: true,
+      });
       await lookup;
       expect(configSignal?.aborted).toBe(true);
       expect(vi.getTimerCount()).toBe(0);

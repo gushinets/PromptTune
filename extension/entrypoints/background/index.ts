@@ -405,7 +405,7 @@ export default defineBackground(() => {
       }
 
       case "GET_PROMPT_LIMIT": {
-        return { max_chars: await apiClient.promptInputLimit(true) };
+        return apiClient.promptInputLimit(true);
       }
 
       case "IMPROVE_REQUEST": {
