@@ -263,3 +263,117 @@ it.each([false, true])(
     }
   },
 );
+
+it("waits for a fresh lower limit before posting a saved prompt", async () => {
+  vi.resetModules();
+  const { apiClient: client } = await import("@shared/api-client");
+  let resolveConfig!: (value: unknown) => void;
+  global.fetch = vi.fn().mockReturnValue(
+    new Promise((resolve) => {
+      resolveConfig = resolve;
+    }),
+  );
+  const saving = client.savePrompt({
+    installation_id: "i",
+    client: "extension",
+    original_text: "x".repeat(9000),
+    improved_text: "better",
+  });
+  const rejected = expect(saving).rejects.toThrow("maximum length of 8000");
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual([
+    "https://api.anytoolai.store/v1/config",
+  ]);
+  resolveConfig({ ok: true, json: async () => ({ prompt_input_max_chars: 8000 }) });
+  await rejected;
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual([
+    "https://api.anytoolai.store/v1/config",
+  ]);
+});
+
+it("ignores an older config success after a newer config or backend 422", async () => {
+  vi.resetModules();
+  const { apiClient: client } = await import("@shared/api-client");
+  let resolveOld!: (value: unknown) => void;
+  global.fetch = vi
+    .fn()
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+    )
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ prompt_input_max_chars: 30000 }) })
+    .mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      text: async () =>
+        JSON.stringify({ detail: "Input text exceeds maximum length of 8000 characters." }),
+    });
+  const old = client.promptInputLimit(true);
+  await client.promptInputLimit(true);
+  await expect(
+    client.improve({ text: "x".repeat(9000), installation_id: "i", client: "extension" }),
+  ).rejects.toThrow("maximum length of 8000");
+  resolveOld({ ok: true, json: async () => ({ prompt_input_max_chars: 30000 }) });
+  expect(await old).toEqual({ max_chars: 8000, fallback: false });
+  expect(await client.promptInputLimit()).toEqual({ max_chars: 8000, fallback: false });
+});
+
+it("keeps the newest concurrent config result even when an older success arrives later", async () => {
+  vi.resetModules();
+  const { apiClient: client } = await import("@shared/api-client");
+  let resolveOld!: (value: unknown) => void;
+  global.fetch = vi
+    .fn()
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+    )
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ prompt_input_max_chars: 8000 }) });
+  const old = client.promptInputLimit(true);
+  expect(await client.promptInputLimit(true)).toEqual({ max_chars: 8000, fallback: false });
+  resolveOld({ ok: true, json: async () => ({ prompt_input_max_chars: 30000 }) });
+  expect(await old).toEqual({ max_chars: 8000, fallback: false });
+});
+
+it("waits for the newest pending lookup instead of validating a save against old cache", async () => {
+  vi.resetModules();
+  const { apiClient: client } = await import("@shared/api-client");
+  global.fetch = vi
+    .fn()
+    .mockResolvedValue({ ok: true, json: async () => ({ prompt_input_max_chars: 30000 }) });
+  await client.promptInputLimit(true);
+  let resolveA!: (value: unknown) => void;
+  let resolveB!: (value: unknown) => void;
+  global.fetch = vi
+    .fn()
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveA = resolve;
+      }),
+    )
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveB = resolve;
+      }),
+    );
+  const saving = client
+    .savePrompt({
+      installation_id: "i",
+      client: "extension",
+      original_text: "x".repeat(9000),
+      improved_text: "better",
+    })
+    .catch((error) => error);
+  const newer = client.promptInputLimit(true);
+  resolveA({ ok: true, json: async () => ({ prompt_input_max_chars: 8000 }) });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  resolveB({ ok: true, json: async () => ({ prompt_input_max_chars: 8000 }) });
+  await newer;
+  expect((await saving).message).toContain("maximum length of 8000");
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/v1/prompts"))).toBe(
+    false,
+  );
+});

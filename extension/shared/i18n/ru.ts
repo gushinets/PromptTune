@@ -133,5 +133,7 @@ export const ru: TranslationKeys = {
   errorGenericFallback: "Что-то пошло не так. Попробуйте снова.",
   errorInputTooLong: (max: number) =>
     `Текст слишком длинный (максимум ${formatCharacterCount(max)} символов). Сократите его или разделите на части.`,
+  errorLibraryStorageMessage:
+    "Не удалось сохранить промпт на устройстве. Освободите место в хранилище расширения и попробуйте снова.",
   errorEmptyResponse: "Бэкенд вернул пустой улучшенный промпт.",
 };

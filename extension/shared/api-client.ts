@@ -1,4 +1,4 @@
-import { countPromptCharacters } from "./prompt-length";
+import { countPromptCharacters, parseInputLengthError } from "./prompt-length";
 import {
   API_BASE_URL,
   N8N_WEBHOOK_URL,
@@ -98,12 +98,26 @@ async function improveViaN8n(req: ImproveRequest): Promise<ImproveResponse> {
 let promptInputMaxChars: number = DEFAULT_PROMPT_INPUT_MAX_CHARS;
 let promptLimitFetchedAt: number | null = null;
 let promptLimitFallback = true;
+let promptLimitRevision = 0;
+let pendingPromptLimit: { revision: number; promise: Promise<PromptInputLimit> } | null = null;
+
+function rememberInputLengthError(error: unknown): void {
+  if (!(error instanceof ApiError) || error.status !== 422) return;
+  const limit = parseInputLengthError(error.detail);
+  if (limit === null) return;
+  promptLimitRevision++;
+  promptInputMaxChars = limit;
+  promptLimitFallback = false;
+  promptLimitFetchedAt = Date.now();
+}
 const PROMPT_LIMIT_CACHE_MS = 60_000;
 const PROMPT_CONFIG_TIMEOUT_MS = 3_000;
 
 export const apiClient = {
   async promptInputLimit(refresh = false): Promise<PromptInputLimit> {
     if (BACKEND_MODE !== "fastapi") return { max_chars: promptInputMaxChars, fallback: true };
+    if (!refresh && pendingPromptLimit?.revision === promptLimitRevision)
+      return pendingPromptLimit.promise;
     if (
       !refresh &&
       promptLimitFetchedAt !== null &&
@@ -111,28 +125,43 @@ export const apiClient = {
     ) {
       return { max_chars: promptInputMaxChars, fallback: promptLimitFallback };
     }
-    let fallback = true;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), PROMPT_CONFIG_TIMEOUT_MS);
-    try {
-      const config = await get<{ prompt_input_max_chars?: number }>(
-        "/v1/config",
-        {},
-        controller.signal,
-      );
-      const limit = config.prompt_input_max_chars;
-      if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
-        promptInputMaxChars = limit;
-        fallback = false;
+    const revision = ++promptLimitRevision;
+    const lookup = (async (): Promise<PromptInputLimit> => {
+      let fallback = true;
+      let nextLimit = promptInputMaxChars;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), PROMPT_CONFIG_TIMEOUT_MS);
+      try {
+        const config = await get<{ prompt_input_max_chars?: number }>(
+          "/v1/config",
+          {},
+          controller.signal,
+        );
+        const limit = config.prompt_input_max_chars;
+        if (typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
+          nextLimit = limit;
+          fallback = false;
+        }
+      } catch {
+        // Older, unavailable or stalled servers: retain the last known limit.
+      } finally {
+        clearTimeout(timeout);
       }
-    } catch {
-      // Older, unavailable or stalled servers: retain the last known limit.
+      if (revision === promptLimitRevision) {
+        promptInputMaxChars = nextLimit;
+        promptLimitFetchedAt = Date.now();
+        promptLimitFallback = fallback;
+      } else if (pendingPromptLimit && pendingPromptLimit.revision > revision) {
+        return pendingPromptLimit.promise;
+      }
+      return { max_chars: promptInputMaxChars, fallback: promptLimitFallback };
+    })();
+    pendingPromptLimit = { revision, promise: lookup };
+    try {
+      return await lookup;
     } finally {
-      clearTimeout(timeout);
+      if (pendingPromptLimit?.promise === lookup) pendingPromptLimit = null;
     }
-    promptLimitFetchedAt = Date.now();
-    promptLimitFallback = fallback;
-    return { max_chars: promptInputMaxChars, fallback };
   },
 
   validateImproveInput(text: string): void {
@@ -151,11 +180,25 @@ export const apiClient = {
     }
     await apiClient.promptInputLimit();
     apiClient.validateImproveInput(req.text);
-    return post("/v1/improve", req);
+    try {
+      return await post<ImproveRequest, ImproveResponse>("/v1/improve", req);
+    } catch (error) {
+      rememberInputLengthError(error);
+      throw error;
+    }
   },
 
-  savePrompt(req: SavePromptRequest): Promise<SavePromptResponse> {
-    return post("/v1/prompts", req);
+  async savePrompt(req: SavePromptRequest): Promise<SavePromptResponse> {
+    if (BACKEND_MODE === "fastapi") {
+      await apiClient.promptInputLimit(true);
+      apiClient.validateImproveInput(req.original_text);
+    }
+    try {
+      return await post<SavePromptRequest, SavePromptResponse>("/v1/prompts", req);
+    } catch (error) {
+      if (BACKEND_MODE === "fastapi") rememberInputLengthError(error);
+      throw error;
+    }
   },
 
   limits(installation_id: string): Promise<{

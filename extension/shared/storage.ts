@@ -65,23 +65,80 @@ export async function getAll(): Promise<LibraryEntry[]> {
   return (data[STORAGE_KEYS.LIBRARY] as LibraryEntry[]) ?? [];
 }
 
-export async function save(entry: Omit<LibraryEntry, "id" | "createdAt">): Promise<LibraryEntry> {
-  const entries = await getAll();
-  const newEntry: LibraryEntry = {
-    ...entry,
-    id: crypto.randomUUID(),
-    createdAt: Date.now(),
-  };
+export class LibraryStorageError extends Error {
+  constructor() {
+    super("Unable to persist the local prompt library.");
+    this.name = "LibraryStorageError";
+  }
+}
 
-  const updated = [newEntry, ...entries].slice(0, LIMITS.MAX_LIBRARY_ENTRIES);
-  await browser.storage.local.set({ [STORAGE_KEYS.LIBRARY]: updated });
+let libraryQueue: Promise<unknown> = Promise.resolve();
+
+async function withLibraryLock<T>(operation: () => Promise<T>): Promise<T> {
+  if (navigator.locks) return navigator.locks.request("prompttune-library", operation);
+  // Serialize callers within a context on older browsers without Web Locks.
+  const result = libraryQueue.then(operation);
+  libraryQueue = result.catch(() => undefined);
+  return result;
+}
+
+export async function save(
+  entry: Omit<LibraryEntry, "id" | "createdAt">,
+  persistRemote?: () => Promise<unknown>,
+): Promise<LibraryEntry> {
+  const { entries, newEntry, updated } = await withLibraryLock(async () => {
+    const entries = await getAll();
+    const newEntry: LibraryEntry = { ...entry, id: crypto.randomUUID(), createdAt: Date.now() };
+    const updated: LibraryEntry[] = [];
+    const encoder = new TextEncoder();
+    let bytes = STORAGE_KEYS.LIBRARY.length + 2;
+    for (const candidate of [newEntry, ...entries].slice(0, LIMITS.MAX_LIBRARY_ENTRIES)) {
+      const entryBytes =
+        encoder.encode(JSON.stringify(candidate)).byteLength + (updated.length ? 1 : 0);
+      if (bytes + entryBytes > LIMITS.MAX_LIBRARY_BYTES) break;
+      updated.push(candidate);
+      bytes += entryBytes;
+    }
+    if (!updated.length) throw new LibraryStorageError();
+    try {
+      // Commit locally first: quota failures must not create remote-only records.
+      await browser.storage.local.set({ [STORAGE_KEYS.LIBRARY]: updated });
+    } catch {
+      throw new LibraryStorageError();
+    }
+    return { entries, newEntry, updated };
+  });
+  if (persistRemote) {
+    try {
+      await persistRemote();
+    } catch (remoteError) {
+      try {
+        await withLibraryLock(async () => {
+          const current = await getAll();
+          const unchanged =
+            current.length === updated.length &&
+            current.every((item, index) => item.id === updated[index].id);
+          // The lock keeps this comparison and compensation atomic across panels.
+          await browser.storage.local.set({
+            [STORAGE_KEYS.LIBRARY]: unchanged
+              ? entries
+              : current.filter((item) => item.id !== newEntry.id),
+          });
+        });
+      } catch {
+        throw new LibraryStorageError();
+      }
+      throw remoteError;
+    }
+  }
   return newEntry;
 }
 
 export async function remove(id: string): Promise<void> {
-  const entries = await getAll();
-  const updated = entries.filter((e) => e.id !== id);
-  await browser.storage.local.set({ [STORAGE_KEYS.LIBRARY]: updated });
+  await withLibraryLock(async () => {
+    const entries = await getAll();
+    await browser.storage.local.set({ [STORAGE_KEYS.LIBRARY]: entries.filter((e) => e.id !== id) });
+  });
 }
 
 export async function getAudienceMode(): Promise<AudienceMode | null> {

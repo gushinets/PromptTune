@@ -151,6 +151,19 @@ Oversized originals also disable Save to Library while keeping Copy and Insert a
 The n8n profile retains its existing behavior: it does not fetch FastAPI configuration
 or apply its input-length limit to improvement or local library saves.
 
+#### Local library storage
+
+The library retains the newest entries up to 200 records or 6 MiB of serialized
+UTF-8 data, whichever is reached first. Older entries are pruned to leave room
+for drafts, settings, and analytics. This storage budget also applies in n8n mode.
+
+A save is written locally before synchronizing to FastAPI. A failed local write
+shows an error and does not send a remote save. A rejected remote save rolls back
+the provisional local entry; library mutations use a shared Web Lock so popup and
+side-panel writes cannot overwrite each other's rollback. FastAPI saves refresh
+and validate the input limit immediately before the POST. Older configuration
+responses cannot replace a newer configuration or a limit received in a 422.
+
 #### n8n override
 
 Requires an n8n instance with the "Prompt Improver API" workflow active.

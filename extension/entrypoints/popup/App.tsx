@@ -9,6 +9,7 @@ import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
 import {
   getAll,
+  LibraryStorageError,
   save,
   getInstallationId,
   getAudienceMode,
@@ -154,6 +155,8 @@ export function App({ viewMode = "popup" }: AppProps) {
   );
 
   const hasAuthoritativeInputLimitRef = useRef(false);
+  const inputLimitRevisionRef = useRef(0);
+  const saveInFlightRef = useRef(false);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -162,11 +165,18 @@ export function App({ viewMode = "popup" }: AppProps) {
     const refreshInputLimit = async () => {
       if (pending) return;
       pending = true;
+      const revision = ++inputLimitRevisionRef.current;
       try {
         const response = await browser.runtime.sendMessage({ type: "GET_PROMPT_LIMIT" });
         const info = response as Partial<PromptInputLimit> | undefined;
         const limit = info?.max_chars;
-        if (active && typeof limit === "number" && Number.isSafeInteger(limit) && limit > 0) {
+        if (
+          active &&
+          revision === inputLimitRevisionRef.current &&
+          typeof limit === "number" &&
+          Number.isSafeInteger(limit) &&
+          limit > 0
+        ) {
           const fallback = info?.fallback !== false;
           if (fallback && hasAuthoritativeInputLimitRef.current) return;
           if (!fallback) hasAuthoritativeInputLimitRef.current = true;
@@ -327,7 +337,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       lastModel,
       lastLatencyMs,
       attemptN,
-    });
+    }).catch(() => undefined);
   }, [
     activeTab,
     attemptN,
@@ -457,6 +467,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         (err instanceof ApiError ? err.status === 422 : errorMessage.includes("422")) &&
         lengthLimit
       ) {
+        inputLimitRevisionRef.current++;
         hasAuthoritativeInputLimitRef.current = true;
         setPromptInputMaxChars(lengthLimit);
         return { type: "generic", message: t.errorInputTooLong(lengthLimit) };
@@ -597,40 +608,46 @@ export function App({ viewMode = "popup" }: AppProps) {
   ]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
-    if (isOriginalOverLimit) return false;
+    if (isOriginalOverLimit || saveInFlightRef.current) return false;
     const originalTrimmed = original.trim();
     const improvedTrimmed = improved.trim();
     if (!originalTrimmed || !improvedTrimmed) return false;
-
-    if (BACKEND_MODE === "fastapi") {
-      try {
-        const installationId = await getInstallationId();
-        await apiClient.savePrompt({
-          installation_id: installationId,
-          client: "extension",
-          client_version: browser.runtime.getManifest().version,
-          original_text: originalTrimmed,
-          improved_text: improvedTrimmed,
-          site: undefined,
-          page_url: undefined,
-          meta: { source: viewMode },
-        });
-      } catch (err: unknown) {
-        const info = mapErrorToToast(err);
-        setError(info);
-        if (info.type === "rate-limit") {
-          setRateLimit((prev) => ({ ...prev, remaining: 0 }));
-          setLimitsUnavailable(false);
-          setLimitsLoaded(true);
-        }
-        return false;
+    saveInFlightRef.current = true;
+    try {
+      await save(
+        { original: originalTrimmed, improved: improvedTrimmed },
+        BACKEND_MODE === "fastapi"
+          ? async () => {
+              const installationId = await getInstallationId();
+              await apiClient.savePrompt({
+                installation_id: installationId,
+                client: "extension",
+                client_version: browser.runtime.getManifest().version,
+                original_text: originalTrimmed,
+                improved_text: improvedTrimmed,
+                meta: { source: viewMode },
+              });
+            }
+          : undefined,
+      );
+      refreshLibraryCount();
+      return true;
+    } catch (err: unknown) {
+      const info: ErrorInfo =
+        err instanceof LibraryStorageError
+          ? { type: "generic", message: t.errorLibraryStorageMessage }
+          : mapErrorToToast(err);
+      setError(info);
+      if (info.type === "rate-limit") {
+        setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+        setLimitsUnavailable(false);
+        setLimitsLoaded(true);
       }
+      return false;
+    } finally {
+      saveInFlightRef.current = false;
     }
-
-    await save({ original: originalTrimmed, improved: improvedTrimmed });
-    refreshLibraryCount();
-    return true;
-  }, [original, improved, isOriginalOverLimit, refreshLibraryCount, mapErrorToToast, viewMode]);
+  }, [original, improved, isOriginalOverLimit, refreshLibraryCount, mapErrorToToast, viewMode, t]);
 
   const handleDismissError = useCallback(() => setError(null), []);
 

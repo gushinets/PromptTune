@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import browser from "webextension-polyfill";
 import {
+  type LibraryEntry,
   getInstallationId,
   getAll,
   save,
@@ -50,6 +51,99 @@ describe("storage", () => {
       expect(entry.id).toBeTruthy();
       expect(entry.original).toBe("test");
       expect(browser.storage.local.set).toHaveBeenCalled();
+    });
+
+    it("prunes a library of large Unicode prompts to a safe byte budget", async () => {
+      const original = "😀".repeat(30000);
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        library: Array.from({ length: 88 }, (_, i) => ({
+          id: String(i),
+          original,
+          improved: "ok",
+          createdAt: 0,
+        })),
+      });
+      const entry = await save({ original, improved: "ok" });
+      const written = vi.mocked(browser.storage.local.set).mock.calls.at(-1)?.[0]
+        .library as LibraryEntry[];
+      expect(new TextEncoder().encode(JSON.stringify(written)).byteLength + 7).toBeLessThanOrEqual(
+        6 * 1024 * 1024,
+      );
+      expect(written).toHaveLength(52);
+      expect(written[0].id).toBe(entry.id);
+      expect(written.at(-1)?.id).toBe("50");
+    });
+
+    it("does not save remotely when local persistence fails", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({ library: [] });
+      vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error("QUOTA_BYTES"));
+      const remote = vi.fn();
+      await expect(save({ original: "a", improved: "b" }, remote)).rejects.toThrow();
+      expect(remote).not.toHaveBeenCalled();
+    });
+
+    it("restores the library when the remote save fails", async () => {
+      const previous = [{ id: "old", original: "old", improved: "old result", createdAt: 0 }];
+      let library = previous;
+      vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ library }));
+      vi.mocked(browser.storage.local.set).mockImplementation(async (data) => {
+        library = data.library as LibraryEntry[];
+      });
+      await expect(
+        save({ original: "a", improved: "b" }, async () => {
+          throw new Error("remote failed");
+        }),
+      ).rejects.toThrow("remote failed");
+      expect(library).toEqual(previous);
+    });
+
+    it("serializes rollback with a concurrent successful save", async () => {
+      let queue: Promise<unknown> = Promise.resolve();
+      vi.stubGlobal("navigator", {
+        locks: {
+          request: (_name: string, callback: () => Promise<unknown>) => {
+            const next = queue.then(callback);
+            queue = next.catch(() => {});
+            return next;
+          },
+        },
+      });
+      try {
+        let library: LibraryEntry[] = [];
+        let reads = 0;
+        let resolveRollbackRead!: (value: unknown) => void;
+        let notifyRollbackRead!: () => void;
+        const rollbackRead = new Promise<void>((resolve) => {
+          notifyRollbackRead = resolve;
+        });
+        vi.mocked(browser.storage.local.get).mockImplementation(async () => {
+          reads++;
+          if (reads === 2) {
+            const snapshot = library;
+            notifyRollbackRead();
+            return new Promise((resolve) => {
+              resolveRollbackRead = () => resolve({ library: snapshot });
+            });
+          }
+          return { library };
+        });
+        vi.mocked(browser.storage.local.set).mockImplementation(async (data) => {
+          library = data.library as LibraryEntry[];
+        });
+        const a = save({ original: "A", improved: "a" }, async () => {
+          throw new Error("A failed");
+        }).catch((error) => error);
+        await rollbackRead;
+        const b = save({ original: "B", improved: "b" }, async () => {});
+        await Promise.resolve();
+        await Promise.resolve();
+        resolveRollbackRead(undefined);
+        await a;
+        await b;
+        expect(library.map((entry) => entry.original)).toEqual(["B"]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
 
     it("removes an entry", async () => {
