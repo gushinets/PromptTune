@@ -157,10 +157,14 @@ The library retains the newest entries up to 200 records or 6 MiB of serialized
 UTF-8 data, whichever is reached first. Older entries are pruned to leave room
 for drafts, settings, and analytics. This storage budget also applies in n8n mode.
 
-A save is written locally before synchronizing to FastAPI. A failed local write
-shows an error and does not send a remote save. A rejected remote save rolls back
-the provisional local entry; library mutations use a shared Web Lock so popup and
-side-panel writes cannot overwrite each other's rollback. FastAPI saves refresh
+Before synchronizing to FastAPI, the complete payload is reserved locally in a
+separate staging area (up to 1 MiB across in-flight saves). A failed reservation
+shows an error and does not send a remote save. Only a successful server response
+moves the reserved entry into the library and prunes older records. A failure
+removes its own reservation without restoring snapshots or losing concurrent
+saves/deletions. Shared Web Locks protect mutations; per-save leases keep live
+reservations and reclaim those left by closed contexts on the next save. Older
+browsers without Web Locks reclaim abandoned staging entries after 30 minutes. FastAPI saves refresh
 and validate the input limit immediately before the POST. Older configuration
 responses cannot replace a newer configuration or a limit received in a 422.
 

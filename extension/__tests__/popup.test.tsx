@@ -464,7 +464,7 @@ describe("App", () => {
     );
     const remote = vi.spyOn(apiClient, "savePrompt").mockResolvedValue({ prompt_id: "p" });
     vi.mocked(browser.storage.local.set).mockImplementation(async (data) => {
-      if ("library" in data) throw new Error("QUOTA_BYTES");
+      if ("library" in data || "pending_library_saves" in data) throw new Error("QUOTA_BYTES");
     });
     await act(async () => {
       root.render(<App />);
@@ -746,7 +746,8 @@ describe("App", () => {
     const libraryWrites = vi
       .mocked(browser.storage.local.set)
       .mock.calls.filter(([data]) => "library" in data);
-    expect(libraryWrites.at(-1)?.[0]).toEqual({ library: [] });
+    expect(libraryWrites).toHaveLength(0);
+    expect(browser.storage.local.set).toHaveBeenCalledWith({ pending_library_saves: [] });
   });
 
   it("sends selected mode and goal in improve requests", async () => {

@@ -39,6 +39,7 @@ export const CWS_REVIEW_URL = getHttpsUrl(
 export const STORAGE_KEYS = {
   INSTALLATION_ID: "installation_id",
   LIBRARY: "library",
+  PENDING_LIBRARY_SAVES: "pending_library_saves",
   AUDIENCE_MODE: "audience_mode",
   POPUP_SESSION_DRAFT: "popup_session_draft",
   INSTALL_AT: "install_at",
@@ -51,6 +52,7 @@ export const STORAGE_KEYS = {
 
 export const LIMITS = {
   MAX_LIBRARY_ENTRIES: 200,
+  MAX_PENDING_LIBRARY_BYTES: 1024 * 1024,
   MAX_LIBRARY_BYTES: 6 * 1024 * 1024, // Leave room for drafts, analytics and settings.
   POPUP_SESSION_TTL_MS: 3 * 60 * 60 * 1000,
 } as const;

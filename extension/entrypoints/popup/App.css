@@ -1729,7 +1729,7 @@ button:disabled {
 }
 
 .prompt-length.is-over-limit {
-  color: var(--error);
+  color: var(--red);
 }
 
 .prompt-length-error {
