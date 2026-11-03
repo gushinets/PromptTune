@@ -38,7 +38,7 @@ def test_prompt_and_completion_limits_defaults(monkeypatch):
 
     config = BotConfig.from_env()
 
-    assert config.prompt_input_max_chars == 8000
+    assert config.prompt_input_max_chars == 30000
     assert config.prompt_output_max_chars == 12000
     assert config.llm_completion_tokens == 8192
     assert config.llm_completion_tokens_retry_max == 12288

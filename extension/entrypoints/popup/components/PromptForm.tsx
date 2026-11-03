@@ -1,3 +1,4 @@
+import { countPromptCharacters, formatCharacterCount } from "@shared/prompt-length";
 import {
   useEffect,
   useId,
@@ -80,6 +81,7 @@ const CHANGE_LINE_TRANSLATIONS_RU: Record<string, string> = {
 
 interface PromptFormProps {
   original: string;
+  maxInputChars: number | null;
   improved: string;
   improvements: string[];
   mode: AudienceMode;
@@ -166,6 +168,7 @@ function getResizeMaxHeight(
 
 export function PromptForm({
   original,
+  maxInputChars,
   improved,
   improvements,
   mode,
@@ -177,6 +180,12 @@ export function PromptForm({
 }: PromptFormProps) {
   const t = useT();
   const goalGroupName = useId();
+  const lengthDescriptionId = useId();
+  const characterCount = useMemo(
+    () => (maxInputChars === null ? 0 : countPromptCharacters(original)),
+    [original, maxInputChars],
+  );
+  const isOverLimit = maxInputChars !== null && characterCount > maxInputChars;
   const [isImprovementsOpen, setIsImprovementsOpen] = useState(false);
   const [originalHeight, setOriginalHeight] = useState<number | null>(null);
   const [improvedHeight, setImprovedHeight] = useState<number | null>(null);
@@ -389,6 +398,8 @@ export function PromptForm({
           ref={originalTextareaRef}
           className="prompt-textarea original-textarea"
           value={original}
+          aria-invalid={isOverLimit}
+          aria-describedby={maxInputChars !== null ? lengthDescriptionId : undefined}
           onChange={(e) => onOriginalChange(e.target.value)}
           placeholder={t.placeholderOriginal}
           rows={isCompactLayout ? 2 : 4}
@@ -408,6 +419,21 @@ export function PromptForm({
           <span className="prompt-textarea-resize-grip" />
         </div>
       </div>
+      {maxInputChars !== null && (
+        <div
+          id={lengthDescriptionId}
+          className={`prompt-length${isOverLimit ? " is-over-limit" : ""}`}
+        >
+          <span className="prompt-length-counter">
+            {formatCharacterCount(characterCount)} / {formatCharacterCount(maxInputChars)}
+          </span>
+          {isOverLimit && (
+            <p className="prompt-length-error" role="alert">
+              {t.errorInputTooLong(maxInputChars)}
+            </p>
+          )}
+        </div>
+      )}
       <fieldset className="goal-pills">
         <legend className="sr-only">{t.goalLabel}</legend>
         {goalOrder.map((option) => {
@@ -428,7 +454,11 @@ export function PromptForm({
           );
         })}
       </fieldset>
-      <button className="btn-improve" onClick={onImprove} disabled={!original.trim() || loading}>
+      <button
+        className="btn-improve"
+        onClick={onImprove}
+        disabled={isOverLimit || !original.trim() || loading}
+      >
         {loading ? (
           <>
             <span className="spinner" />

@@ -7,6 +7,7 @@ import type { AnalyticsSource } from "@shared/analytics-types";
 interface ActionBarProps {
   improved: string;
   disabled: boolean;
+  saveDisabled?: boolean;
   onSave: () => Promise<boolean>;
   requestId: string | null;
   source: AnalyticsSource;
@@ -84,6 +85,7 @@ function InsertIcon({ className }: { className?: string }) {
 export function ActionBar({
   improved,
   disabled,
+  saveDisabled = false,
   onSave,
   requestId,
   source,
@@ -176,7 +178,11 @@ export function ActionBar({
           </>
         )}
       </button>
-      <button className="btn-secondary" onClick={handleSave} disabled={disabled || saved}>
+      <button
+        className="btn-secondary"
+        onClick={handleSave}
+        disabled={disabled || saveDisabled || saved}
+      >
         {saved ? (
           <>
             <CheckIcon className="btn-icon" />

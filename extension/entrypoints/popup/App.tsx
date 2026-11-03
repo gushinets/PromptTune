@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef, type FocusEvent } from "react";
+import { countPromptCharacters, parseInputLengthError } from "@shared/prompt-length";
+import { useState, useEffect, useCallback, useMemo, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
 import { ActionBar } from "./components/ActionBar";
@@ -8,6 +9,7 @@ import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
 import {
   getAll,
+  LibraryStorageError,
   save,
   getInstallationId,
   getAudienceMode,
@@ -15,7 +17,7 @@ import {
   setAudienceMode,
   setPopupSessionDraft,
 } from "@shared/storage";
-import { FEATURES, BACKEND_MODE } from "@shared/constants";
+import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
   describeUnexpectedBackgroundResponse,
@@ -24,7 +26,7 @@ import {
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
 import { trackEvent } from "@shared/analytics";
-import type { AiImproveGoal, AudienceMode, ImproveGoal } from "@shared/types";
+import type { AiImproveGoal, AudienceMode, ImproveGoal, PromptInputLimit } from "@shared/types";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
@@ -148,6 +150,65 @@ export function App({ viewMode = "popup" }: AppProps) {
   const t = useT();
   const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState("");
+  const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
+    DEFAULT_PROMPT_INPUT_MAX_CHARS,
+  );
+
+  const hasAuthoritativeInputLimitRef = useRef(false);
+  const inputLimitRevisionRef = useRef(0);
+  const saveInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (BACKEND_MODE !== "fastapi") return;
+    let active = true;
+    let pending = false;
+    const refreshInputLimit = async () => {
+      if (pending) return;
+      pending = true;
+      const revision = ++inputLimitRevisionRef.current;
+      try {
+        const response = await browser.runtime.sendMessage({ type: "GET_PROMPT_LIMIT" });
+        const info = response as Partial<PromptInputLimit> | undefined;
+        const limit = info?.max_chars;
+        if (
+          active &&
+          revision === inputLimitRevisionRef.current &&
+          typeof limit === "number" &&
+          Number.isSafeInteger(limit) &&
+          limit > 0
+        ) {
+          const fallback = info?.fallback !== false;
+          if (fallback && hasAuthoritativeInputLimitRef.current) return;
+          if (!fallback) hasAuthoritativeInputLimitRef.current = true;
+          setPromptInputMaxChars(limit);
+        }
+      } catch {
+        // Keep the current limit until the next activation.
+      } finally {
+        pending = false;
+      }
+    };
+    const handleFocus = () => {
+      void refreshInputLimit();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshInputLimit();
+    };
+    void refreshInputLimit();
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  const isOriginalOverLimit = useMemo(
+    () => BACKEND_MODE === "fastapi" && countPromptCharacters(original) > promptInputMaxChars,
+    [original, promptInputMaxChars],
+  );
+
   const [improved, setImproved] = useState("");
   const [changes, setChanges] = useState<string[]>([]);
   const [audienceMode, setAudienceModeState] = useState<AudienceMode | null>(null);
@@ -276,7 +337,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       lastModel,
       lastLatencyMs,
       attemptN,
-    });
+    }).catch(() => undefined);
   }, [
     activeTab,
     attemptN,
@@ -399,6 +460,18 @@ export function App({ viewMode = "popup" }: AppProps) {
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
     (err: unknown): ErrorInfo => {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const lengthLimit = parseInputLengthError(errorMessage);
+      if (
+        BACKEND_MODE === "fastapi" &&
+        (err instanceof ApiError ? err.status === 422 : errorMessage.includes("422")) &&
+        lengthLimit
+      ) {
+        inputLimitRevisionRef.current++;
+        hasAuthoritativeInputLimitRef.current = true;
+        setPromptInputMaxChars(lengthLimit);
+        return { type: "generic", message: t.errorInputTooLong(lengthLimit) };
+      }
       if (err instanceof ApiError) {
         if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
           return { type: "auth", message: t.errorAuthMessage };
@@ -436,6 +509,7 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
+    if (isOriginalOverLimit) return;
     const trimmed = original.trim();
     if (!trimmed) return;
     if (!audienceMode) return;
@@ -522,6 +596,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     attemptN,
     goal,
     isExhausted,
+    isOriginalOverLimit,
     lastRequestId,
     lastRequestContextKey,
     mapErrorToToast,
@@ -533,39 +608,46 @@ export function App({ viewMode = "popup" }: AppProps) {
   ]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
+    if (isOriginalOverLimit || saveInFlightRef.current) return false;
     const originalTrimmed = original.trim();
     const improvedTrimmed = improved.trim();
     if (!originalTrimmed || !improvedTrimmed) return false;
-
-    if (BACKEND_MODE === "fastapi") {
-      try {
-        const installationId = await getInstallationId();
-        await apiClient.savePrompt({
-          installation_id: installationId,
-          client: "extension",
-          client_version: browser.runtime.getManifest().version,
-          original_text: originalTrimmed,
-          improved_text: improvedTrimmed,
-          site: undefined,
-          page_url: undefined,
-          meta: { source: viewMode },
-        });
-      } catch (err: unknown) {
-        const info = mapErrorToToast(err);
-        setError(info);
-        if (info.type === "rate-limit") {
-          setRateLimit((prev) => ({ ...prev, remaining: 0 }));
-          setLimitsUnavailable(false);
-          setLimitsLoaded(true);
-        }
-        return false;
+    saveInFlightRef.current = true;
+    try {
+      await save(
+        { original: originalTrimmed, improved: improvedTrimmed },
+        BACKEND_MODE === "fastapi"
+          ? async () => {
+              const installationId = await getInstallationId();
+              await apiClient.savePrompt({
+                installation_id: installationId,
+                client: "extension",
+                client_version: browser.runtime.getManifest().version,
+                original_text: originalTrimmed,
+                improved_text: improvedTrimmed,
+                meta: { source: viewMode },
+              });
+            }
+          : undefined,
+      );
+      refreshLibraryCount();
+      return true;
+    } catch (err: unknown) {
+      const info: ErrorInfo =
+        err instanceof LibraryStorageError
+          ? { type: "generic", message: t.errorLibraryStorageMessage }
+          : mapErrorToToast(err);
+      setError(info);
+      if (info.type === "rate-limit") {
+        setRateLimit((prev) => ({ ...prev, remaining: 0 }));
+        setLimitsUnavailable(false);
+        setLimitsLoaded(true);
       }
+      return false;
+    } finally {
+      saveInFlightRef.current = false;
     }
-
-    await save({ original: originalTrimmed, improved: improvedTrimmed });
-    refreshLibraryCount();
-    return true;
-  }, [original, improved, refreshLibraryCount, mapErrorToToast, viewMode]);
+  }, [original, improved, isOriginalOverLimit, refreshLibraryCount, mapErrorToToast, viewMode, t]);
 
   const handleDismissError = useCallback(() => setError(null), []);
 
@@ -767,13 +849,19 @@ export function App({ viewMode = "popup" }: AppProps) {
             {!modeReady ? null : audienceMode ? (
               <PromptForm
                 original={original}
+                maxInputChars={BACKEND_MODE === "fastapi" ? promptInputMaxChars : null}
                 improved={improved}
                 improvements={changes}
                 mode={audienceMode}
                 goal={goal}
                 loading={loading}
                 onGoalChange={handleGoalChange}
-                onOriginalChange={setOriginal}
+                onOriginalChange={(text) => {
+                  setOriginal(text);
+                  if (error?.message === t.errorInputTooLong(promptInputMaxChars)) {
+                    setError(null);
+                  }
+                }}
                 onImprove={handleImprove}
               />
             ) : (
@@ -803,6 +891,7 @@ export function App({ viewMode = "popup" }: AppProps) {
             <ActionBar
               improved={improved}
               disabled={!improved}
+              saveDisabled={isOriginalOverLimit}
               onSave={handleSave}
               requestId={lastRequestId}
               source={viewMode}

@@ -58,3 +58,9 @@ export interface SavePromptRequest {
 export interface SavePromptResponse {
   prompt_id: string;
 }
+
+export interface PromptInputLimit {
+  max_chars: number;
+  // True when the latest lookup failed or returned invalid configuration.
+  fallback: boolean;
+}
