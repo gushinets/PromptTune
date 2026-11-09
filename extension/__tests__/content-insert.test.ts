@@ -1,3 +1,5 @@
+import { act, createElement, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import type { Message } from "@shared/messages";
@@ -90,4 +92,85 @@ it("acknowledges insertion into a live editable composer", async () => {
     success: true,
   });
   expect(field.value).toBe("New prompt");
+});
+
+it.each(["textarea", "input"])(
+  "updates a React-controlled %s and survives re-render",
+  async (tag) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const changed = vi.fn();
+    function Composer({ revision }: { revision: number }) {
+      const [value, setValue] = useState("Before insertion");
+      return createElement(tag, {
+        value,
+        "data-revision": revision,
+        onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+          changed(event.target.value);
+          setValue(event.target.value);
+        },
+      });
+    }
+    try {
+      await act(async () => {
+        root.render(createElement(Composer, { revision: 0 }));
+      });
+      const field = host.querySelector<HTMLInputElement | HTMLTextAreaElement>(tag)!;
+      field.focus();
+      let response;
+      await act(async () => {
+        response = await handle({ type: "PASTE_TEXT", payload: { text: "New prompt" } });
+      });
+      expect(response).toEqual({ success: true });
+      expect(changed).toHaveBeenCalledWith("New prompt");
+      await act(async () => {
+        root.render(createElement(Composer, { revision: 1 }));
+      });
+      expect(field.value).toBe("New prompt");
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+    }
+  },
+);
+
+it("rejects insertion when the editor restores its previous text", async () => {
+  const field = document.createElement("textarea");
+  field.value = "Previous";
+  field.addEventListener("input", () => {
+    field.value = "Previous";
+  });
+  document.body.append(field);
+  field.focus();
+  expect(await handle({ type: "PASTE_TEXT", payload: { text: "New prompt" } })).toEqual({
+    success: false,
+  });
+});
+
+it("does not acknowledge a React-controlled composer that rejects the change", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  function Composer() {
+    return createElement("textarea", { value: "Previous", onChange: () => {} });
+  }
+  try {
+    await act(async () => {
+      root.render(createElement(Composer));
+    });
+    const field = host.querySelector("textarea")!;
+    field.focus();
+    let response;
+    await act(async () => {
+      response = await handle({ type: "PASTE_TEXT", payload: { text: "New prompt" } });
+    });
+    expect(response).toEqual({ success: false });
+    expect(field.value).toBe("Previous");
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+  }
 });

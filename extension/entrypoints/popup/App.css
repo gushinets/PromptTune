@@ -854,6 +854,26 @@ textarea.improved-textarea {
   gap: 4px;
   margin-top: 8px;
 }
+.library-item-expanded .library-item-preview {
+  max-height: 240px;
+  overflow-y: auto;
+}
+.library-item-expanded .library-item-text,
+.library-item-expanded .library-item-improved {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  white-space: pre-wrap;
+  -webkit-line-clamp: unset;
+}
+.library-detail-toggle {
+  margin-right: auto;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--txt2);
+  font-size: 11px;
+}
 .icon-btn {
   display: flex;
   align-items: center;

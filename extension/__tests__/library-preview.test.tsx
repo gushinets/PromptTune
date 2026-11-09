@@ -50,7 +50,7 @@ it("bounds long saved previews while copying full text and keeping delete availa
       expect(computed.overflow).toBe("hidden");
       expect(Number.parseFloat(computed.maxHeight)).toBeGreaterThan(0);
     }
-    const buttons = host.querySelectorAll<HTMLButtonElement>(".library-item-actions button");
+    const buttons = host.querySelectorAll<HTMLButtonElement>(".library-item-actions .icon-btn");
     expect(buttons).toHaveLength(2);
     await act(async () => {
       buttons[0].click();
@@ -80,4 +80,34 @@ it.each([
   expect(Number.parseFloat(marker.width)).toBeGreaterThan(0);
   expect(Number.parseFloat(marker.height)).toBeGreaterThan(0);
   expect(marker.backgroundColor).toBe(color);
+});
+
+it("lets a user read both complete saved texts without unbounded cards", async () => {
+  await act(async () => {
+    root.render(<LibraryItem entry={entry} onDelete={() => {}} />);
+  });
+  const toggle = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
+  expect(toggle).not.toBeNull();
+  expect(toggle!.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => {
+    toggle!.click();
+  });
+  expect(toggle!.getAttribute("aria-expanded")).toBe("true");
+  const content = document.getElementById(toggle!.getAttribute("aria-controls")!)!;
+  expect(content.textContent).toContain(entry.original);
+  expect(content.textContent).toContain(entry.improved);
+  expect(getComputedStyle(content).overflowY).toBe("auto");
+  expect(Number.parseFloat(getComputedStyle(content).maxHeight)).toBeGreaterThan(0);
+  for (const selector of [".library-item-text", ".library-item-improved"]) {
+    const computed = getComputedStyle(host.querySelector(selector)!);
+    expect(computed.maxHeight).toBe("none");
+    expect(computed.whiteSpace).toBe("pre-wrap");
+    expect(computed.display).toBe("block");
+  }
+  expect(host.querySelector(".library-item-actions .icon-btn")).not.toBeNull();
+  await act(async () => {
+    toggle!.click();
+  });
+  expect(toggle!.getAttribute("aria-expanded")).toBe("false");
+  expect(getComputedStyle(host.querySelector(".library-item-text")!).whiteSpace).toBe("nowrap");
 });

@@ -115,6 +115,8 @@ export const en = {
 
   // LibraryItem
   siteGeneral: "General",
+  libraryExpand: "Read full entry",
+  libraryCollapse: "Collapse",
   labelOriginal: "Original:",
   labelImproved: "Improved:",
   timeJustNow: "Just now",

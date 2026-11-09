@@ -116,6 +116,8 @@ export const ru: TranslationKeys = {
 
   // LibraryItem
   siteGeneral: "Общее",
+  libraryExpand: "Читать полностью",
+  libraryCollapse: "Свернуть",
   labelOriginal: "Исходный:",
   labelImproved: "Улучшенный:",
   timeJustNow: "Только что",

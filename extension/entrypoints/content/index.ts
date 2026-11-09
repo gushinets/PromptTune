@@ -65,8 +65,16 @@ export default defineContentScript({
         case "PASTE_TEXT": {
           const field = adapter.findEditableField() ?? lastFocusedField;
           if (!canInsertIntoField(field)) return { success: false };
-          adapter.setText(field, msg.payload.text);
-          return { success: true };
+          try {
+            adapter.setText(field, msg.payload.text);
+            // Allow controlled editors to reconcile before acknowledging the visible value.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            return {
+              success: canInsertIntoField(field) && adapter.getText(field) === msg.payload.text,
+            };
+          } catch {
+            return { success: false };
+          }
         }
 
         case "IMPROVE_ACTIVE_FIELD": {
