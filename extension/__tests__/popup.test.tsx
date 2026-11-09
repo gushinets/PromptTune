@@ -349,6 +349,98 @@ describe("App", () => {
     },
   );
 
+  it("keeps the submitted goal during processing and after sidepanel tab switches", async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 1, url: "https://claude.ai/new" },
+    ] as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "IMPROVE_REQUEST"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App viewMode="sidepanel" />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Optimize for Claude");
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    const activation = vi.mocked(browser.tabs.onActivated.addListener).mock.calls[0][0];
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 2, url: "https://chatgpt.com" },
+    ] as never);
+    await act(async () => {
+      activation({ tabId: 2, windowId: 1 });
+    });
+    expect(container.querySelector(".processing-context")?.textContent).toContain("Claude");
+    expect(container.querySelector(".processing-context")?.textContent).not.toContain("ChatGPT");
+    await act(async () => {
+      finish({
+        type: "IMPROVE_RESULT",
+        payload: { request_id: "claude-result", improved_text: "Claude-optimized prompt" },
+      });
+    });
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 3, url: "https://www.perplexity.ai" },
+    ] as never);
+    await act(async () => {
+      activation({ tabId: 3, windowId: 1 });
+    });
+    expect(container.querySelector(".goal-badge")?.textContent).toBe("Claude");
+    const draft = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.filter(([data]) => "popup_session_draft" in data)
+      .at(-1)?.[0].popup_session_draft;
+    expect(draft).toMatchObject({
+      goal: "perplexity",
+      result_context: { mode: "ai", goal: "claude" },
+    });
+    await act(async () => {
+      findButton(container, "Edit original").click();
+    });
+    expect((container.querySelector('input[value="perplexity"]') as HTMLInputElement).checked).toBe(
+      true,
+    );
+  });
+
+  it.each([true, false])(
+    "restores the completed request's goal separately from the next-input goal (saved context: %s)",
+    async (hasSavedContext) => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        installation_id: "i",
+        audience_mode: "ai",
+        library: [],
+        popup_session_draft: {
+          activeTab: "improve",
+          optimizer_screen: "result",
+          original: "Original",
+          improved: "Claude result",
+          changes: [],
+          goal: "chatgpt",
+          result_context: hasSavedContext ? { mode: "ai", goal: "claude" } : undefined,
+          lastRequestId: "r",
+          lastRequestContextKey: "ai|claude|Original",
+          lastModel: null,
+          lastLatencyMs: null,
+          attemptN: 1,
+          updatedAt: Date.now(),
+        },
+      });
+      await act(async () => {
+        root.render(<App viewMode="sidepanel" />);
+      });
+      await flushEffects();
+      expect(container.querySelector(".goal-badge")?.textContent).toBe("Claude");
+      expect((container.querySelector('input[value="chatgpt"]') as HTMLInputElement).checked).toBe(
+        true,
+      );
+    },
+  );
+
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {
       root.render(<App />);

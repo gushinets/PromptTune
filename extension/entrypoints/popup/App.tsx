@@ -27,8 +27,15 @@ import {
   extractRateLimitResponse,
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
+import { isOptimizerRequestContext } from "@shared/goal-options";
 import { trackEvent } from "@shared/analytics";
-import type { AiImproveGoal, AudienceMode, ImproveGoal, PromptInputLimit } from "@shared/types";
+import type {
+  AiImproveGoal,
+  AudienceMode,
+  ImproveGoal,
+  PromptInputLimit,
+  OptimizerRequestContext,
+} from "@shared/types";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
@@ -180,6 +187,8 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [modeReady, setModeReady] = useState(false);
   const [detectedAiGoal, setDetectedAiGoal] = useState<AiImproveGoal>("general");
   const [goal, setGoal] = useState<ImproveGoal>("general");
+  const [processingContext, setProcessingContext] = useState<OptimizerRequestContext | null>(null);
+  const [resultContext, setResultContext] = useState<OptimizerRequestContext | null>(null);
   const [loading, setLoading] = useState(false);
   const [editingOriginal, setEditingOriginal] = useState(false);
   const activeRequestRef = useRef<string | null>(null);
@@ -235,6 +244,18 @@ export function App({ viewMode = "popup" }: AppProps) {
         setActiveTab(draft.activeTab);
         setOriginal(draft.original);
         setImproved(draft.improved);
+        const [requestMode, requestGoal] = draft.lastRequestContextKey?.split("|") ?? [];
+        const legacyContext = { mode: requestMode, goal: requestGoal };
+        const fallbackContext = isOptimizerRequestContext(legacyContext)
+          ? legacyContext
+          : { mode, goal: draft.goal };
+        setResultContext(
+          isOptimizerRequestContext(draft.result_context)
+            ? draft.result_context
+            : isOptimizerRequestContext(fallbackContext)
+              ? fallbackContext
+              : null,
+        );
         setEditingOriginal(draft.optimizer_screen === "input");
         setChanges(draft.changes);
         setLastRequestId(draft.lastRequestId);
@@ -294,6 +315,7 @@ export function App({ viewMode = "popup" }: AppProps) {
 
     void setPopupSessionDraft({
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
+      result_context: resultContext,
       activeTab,
       original,
       improved,
@@ -312,6 +334,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     goal,
     improved,
     editingOriginal,
+    resultContext,
     lastLatencyMs,
     lastModel,
     lastRequestContextKey,
@@ -480,6 +503,7 @@ export function App({ viewMode = "popup" }: AppProps) {
 
     const requestKey = crypto.randomUUID();
     activeRequestRef.current = requestKey;
+    setProcessingContext({ mode: audienceMode, goal });
     setLoading(true);
     setError(null);
 
@@ -506,6 +530,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       setEditingOriginal(false);
       setImproved("");
       setChanges([]);
+      setResultContext(null);
       const nextAttempt = isRegeneration ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
@@ -524,6 +549,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       if (result) {
         if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
         setImproved(result.improved_text);
+        setResultContext({ mode: audienceMode, goal });
         setChanges(result.changes ?? []);
         setLastRequestId(result.request_id);
         setLastRequestContextKey(currentRequestContextKey);
@@ -570,6 +596,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       if (activeRequestRef.current === requestKey) {
         activeRequestRef.current = null;
         setLoading(false);
+        setProcessingContext(null);
       }
     }
   }, [
@@ -591,6 +618,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     const requestKey = activeRequestRef.current;
     activeRequestRef.current = null;
     setLoading(false);
+    setProcessingContext(null);
     setEditingOriginal(true);
     setError(null);
     if (requestKey)
@@ -633,6 +661,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const handleNew = useCallback(() => {
     setOriginal("");
     setImproved("");
+    setResultContext(null);
     setChanges([]);
     setError(null);
     setEditingOriginal(false);
@@ -700,6 +729,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
       setEditingOriginal(true);
       setImproved("");
+      setResultContext(null);
       setChanges([]);
       try {
         await setAudienceMode(mode);
@@ -885,13 +915,17 @@ export function App({ viewMode = "popup" }: AppProps) {
                   onImprove={handleImprove}
                 />
                 {loading && (
-                  <ProcessingScreen mode={audienceMode} goal={goal} onCancel={handleCancel} />
+                  <ProcessingScreen
+                    mode={processingContext?.mode ?? audienceMode}
+                    goal={processingContext?.goal ?? goal}
+                    onCancel={handleCancel}
+                  />
                 )}
                 {improved && (
                   <OptimizerResult
                     improved={improved}
                     changes={changes}
-                    goal={goal}
+                    goal={resultContext?.goal ?? goal}
                     hidden={loading || editingOriginal}
                     onEdit={() => {
                       setEditingOriginal(true);

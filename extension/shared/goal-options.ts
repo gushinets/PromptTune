@@ -1,4 +1,4 @@
-import type { ImproveGoal } from "./types";
+import type { ImproveGoal, OptimizerRequestContext } from "./types";
 import type { TranslationKeys } from "./i18n/en";
 
 export const AI_GOALS: ImproveGoal[] = [
@@ -17,6 +17,12 @@ export const CONTENT_GOALS: ImproveGoal[] = [
   "email",
   "landing_page",
 ];
+export function isOptimizerRequestContext(value: unknown): value is OptimizerRequestContext {
+  if (!value || typeof value !== "object") return false;
+  const { mode, goal } = value as Record<string, unknown>;
+  const goals = mode === "ai" ? AI_GOALS : mode === "content" ? CONTENT_GOALS : [];
+  return goals.some((option) => option === goal);
+}
 export function goalLabel(t: TranslationKeys, goal: ImproveGoal): string {
   return {
     general: t.goalGeneral,

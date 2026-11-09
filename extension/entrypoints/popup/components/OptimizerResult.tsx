@@ -39,7 +39,7 @@ export function OptimizerResult({
     const field = output.current;
     const resize = () => {
       field.style.height = "auto";
-      field.style.height = `${Math.max(120, field.scrollHeight)}px`;
+      field.style.height = `${Math.min(200, Math.max(120, field.scrollHeight))}px`;
     };
     resize();
     if (typeof ResizeObserver === "undefined") return;

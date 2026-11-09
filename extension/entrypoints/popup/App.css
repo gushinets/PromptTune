@@ -570,8 +570,9 @@ textarea.improved-textarea {
   border-color: rgba(127, 128, 255, 0.4);
   border-left: 3px solid var(--acc);
   font: 400 12.5px/1.6 var(--font-sans);
-  overflow: hidden;
+  overflow-y: auto;
   min-height: 120px;
+  max-height: 200px;
 }
 .action-bar {
   display: grid;
