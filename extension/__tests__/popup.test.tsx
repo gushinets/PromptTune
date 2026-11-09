@@ -158,6 +158,123 @@ describe("App", () => {
     },
   );
 
+  it("recovers from a temporary 429 after cancel when the refunded quota becomes available", async () => {
+    let remaining = 1;
+    let improvements = 0;
+    let finishCanceled!: (value: unknown) => void;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const type = (msg as { type?: string }).type;
+      if (type === "GET_LIMITS")
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_day_remaining: remaining,
+              per_day_total: 1,
+              per_minute_remaining: remaining,
+              per_minute_total: 5,
+            },
+          },
+        };
+      if (type === "IMPROVE_REQUEST") {
+        improvements++;
+        if (improvements === 1) {
+          remaining = 0;
+          return new Promise((resolve) => {
+            finishCanceled = resolve;
+          });
+        }
+        if (remaining === 0) throw new ApiError(429, "Rate limit exceeded");
+        return {
+          type: "IMPROVE_RESULT",
+          payload: { request_id: "after-refund", improved_text: "Recovered result" },
+        };
+      }
+      return { ok: true };
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Keep my original");
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    await act(async () => {
+      findButton(container, "Cancel").click();
+      finishCanceled(undefined);
+    });
+    // The backend has observed abort but has not refunded its last reservation yet.
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(improvements).toBe(2);
+    expect(container.querySelector(".upgrade-banner")).not.toBeNull();
+    // While quota is still zero, retry checks the server rather than POSTing again.
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(improvements).toBe(2);
+    remaining = 1;
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(improvements).toBe(3);
+    expect((container.querySelector(".improved-textarea") as HTMLTextAreaElement)?.value).toBe(
+      "Recovered result",
+    );
+    expect(container.querySelector(".upgrade-banner")).toBeNull();
+    expect(container.querySelector(".error-toast")).toBeNull();
+  });
+
+  it("does not submit after canceling a pending quota refresh or on duplicate clicks", async () => {
+    let queries = 0;
+    let finishRefresh!: (value: unknown) => void;
+    const limits = (remaining: number) => ({
+      type: "LIMITS_RESULT",
+      payload: {
+        rate_limit: {
+          per_day_remaining: remaining,
+          per_day_total: 1,
+          per_minute_remaining: remaining,
+          per_minute_total: 5,
+        },
+      },
+    });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      if ((msg as { type?: string }).type === "GET_LIMITS") {
+        queries++;
+        return queries === 1
+          ? limits(0)
+          : new Promise((resolve) => {
+              finishRefresh = resolve;
+            });
+      }
+      return { ok: true };
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Keep my prompt");
+    await act(async () => {
+      getImproveButton(container).click();
+      getImproveButton(container).click();
+    });
+    expect(queries).toBe(2);
+    await act(async () => {
+      findButton(container, "Cancel").click();
+      finishRefresh(limits(1));
+    });
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
+    expect(container.querySelector(".processing-screen")).toBeNull();
+    expect((container.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
+      "Keep my prompt",
+    );
+  });
+
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {
       root.render(<App />);
@@ -814,6 +931,7 @@ describe("App", () => {
   });
 
   it("inserts improved text into the active tab", async () => {
+    vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };
       if (typed.type === "GET_LIMITS") {
@@ -870,6 +988,13 @@ describe("App", () => {
       type: "PASTE_TEXT",
       payload: { text: "Improved prompt" },
     });
+    expect(container.textContent).toContain("Inserted!");
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "TRACK_EVENT",
+        payload: expect.objectContaining({ name: "result_copied" }),
+      }),
+    );
   });
 
   it("auto-detects AI goal from active tab hostname", async () => {

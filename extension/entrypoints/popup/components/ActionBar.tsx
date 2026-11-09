@@ -157,8 +157,8 @@ export function ActionBar({
         type: "PASTE_TEXT",
         payload: { text: improved },
       });
-      if ((response as { success?: boolean } | undefined)?.success === false)
-        throw new Error("No input field");
+      if ((response as { success?: boolean } | undefined)?.success !== true)
+        throw new Error("Insertion was not acknowledged");
       if (requestId) {
         void trackEvent(
           "result_copied",

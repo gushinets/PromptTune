@@ -185,19 +185,32 @@ it("keeps a new request active when a canceled request finishes late", async () 
   expect(host.querySelector(".improved-textarea")?.textContent).toBe("New result");
 });
 
-it("explains insertion failure instead of reporting success", async () => {
-  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
-    (message as { type?: string }).type === "IMPROVE_REQUEST"
-      ? { type: "IMPROVE_RESULT", payload: { request_id: "r", improved_text: "Result" } }
-      : { ok: true },
-  );
-  vi.mocked(browser.tabs.query).mockResolvedValue([
-    { id: 1, index: 0, highlighted: true, active: true, pinned: false, incognito: false },
-  ]);
-  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: false });
-  await typeOriginal("Prompt");
-  await click("Improve");
-  await click("Insert");
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("No supported input field");
-  expect(button("Insert").textContent).not.toContain("Inserted");
-});
+it.each([false, undefined, {}])(
+  "requires positive insertion acknowledgement: %j",
+  async (acknowledgement) => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+      (message as { type?: string }).type === "IMPROVE_REQUEST"
+        ? { type: "IMPROVE_RESULT", payload: { request_id: "r", improved_text: "Result" } }
+        : { ok: true },
+    );
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 1, index: 0, highlighted: true, active: true, pinned: false, incognito: false },
+    ]);
+    vi.mocked(browser.tabs.sendMessage).mockResolvedValue(
+      acknowledgement === false ? { success: false } : acknowledgement,
+    );
+    await typeOriginal("Prompt");
+    await click("Improve");
+    await click("Insert");
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("No supported input field");
+    expect(button("Insert").textContent).not.toContain("Inserted");
+    expect(
+      vi
+        .mocked(browser.runtime.sendMessage)
+        .mock.calls.some(
+          ([message]) =>
+            (message as { payload?: { name?: string } }).payload?.name === "result_copied",
+        ),
+    ).toBe(false);
+  },
+);

@@ -472,11 +472,6 @@ export function App({ viewMode = "popup" }: AppProps) {
     if (!trimmed) return;
     if (!audienceMode) return;
 
-    if (isExhausted) {
-      setError({ type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) });
-      return;
-    }
-
     const currentRequestContextKey = `${audienceMode}|${goal}|${trimmed}`;
     const isRegeneration =
       !!lastRequestId &&
@@ -492,6 +487,25 @@ export function App({ viewMode = "popup" }: AppProps) {
     setChanges([]);
 
     try {
+      if (isExhausted) {
+        // A canceled request may refund quota after a quick retry received 429.
+        // Revalidate the cached zero so an open panel can recover without reopening.
+        const limits = extractRateLimitResponse(
+          await browser.runtime.sendMessage({ type: "GET_LIMITS" }),
+        );
+        if (activeRequestRef.current !== requestKey) return;
+        if (!limits) throw new Error(t.tooltipUnavailable);
+        setRateLimit({
+          remaining: limits.per_day_remaining,
+          total: limits.per_day_total,
+        });
+        setLimitsUnavailable(false);
+        setLimitsLoaded(true);
+        if (limits.per_day_remaining <= 0) {
+          setError({ type: "rate-limit", message: t.errorRateLimitMessage(limits.per_day_total) });
+          return;
+        }
+      }
       const nextAttempt = isRegeneration ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
@@ -568,7 +582,6 @@ export function App({ viewMode = "popup" }: AppProps) {
     lastRequestContextKey,
     mapErrorToToast,
     original,
-    rateLimit.total,
     siteHostname,
     t,
     viewMode,
