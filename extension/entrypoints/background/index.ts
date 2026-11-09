@@ -3,6 +3,7 @@ import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
+import { IMPROVE_OWNER_PORT } from "@shared/messages";
 import type {
   AnalyticsEventName,
   AnalyticsEventOut,
@@ -38,6 +39,32 @@ export default defineBackground(() => {
   const client = "extension";
   const clientVersion = browser.runtime.getManifest().version;
   const pendingRequests = new Map<string, AbortController>();
+  const requestOwners = new Map<string, { controller: AbortController; started: boolean }>();
+
+  browser.runtime.onConnect.addListener((port) => {
+    if (port.name !== IMPROVE_OWNER_PORT) return;
+    let requestId: string | null = null;
+    let disconnected = false;
+    port.onDisconnect.addListener(() => {
+      if (disconnected) return;
+      disconnected = true;
+      if (!requestId) return;
+      requestOwners.get(requestId)?.controller.abort();
+      requestOwners.delete(requestId);
+    });
+    port.onMessage.addListener((raw: unknown) => {
+      if (disconnected || requestId) return;
+      const id = (raw as { client_request_id?: unknown } | null)?.client_request_id;
+      if (typeof id !== "string" || !id || requestOwners.has(id) || pendingRequests.has(id)) {
+        disconnected = true;
+        port.disconnect();
+        return;
+      }
+      requestId = id;
+      requestOwners.set(id, { controller: new AbortController(), started: false });
+      port.postMessage({ ready: true, client_request_id: id });
+    });
+  });
 
   let sessionOpChain: Promise<void> = Promise.resolve();
   let queueOpChain: Promise<void> = Promise.resolve();
@@ -417,7 +444,14 @@ export default defineBackground(() => {
       case "IMPROVE_REQUEST": {
         const requestKey = msg.payload.client_request_id ?? crypto.randomUUID();
         if (pendingRequests.has(requestKey)) throw new Error("Duplicate improve request");
-        const controller = new AbortController();
+        const owner = msg.payload.owner_required ? requestOwners.get(requestKey) : undefined;
+        if (
+          msg.payload.owner_required &&
+          (!owner || owner.started || owner.controller.signal.aborted)
+        )
+          throw new Error("Improve request owner unavailable");
+        if (owner) owner.started = true;
+        const controller = owner?.controller ?? new AbortController();
         pendingRequests.set(requestKey, controller);
         try {
           if (BACKEND_MODE === "fastapi") {

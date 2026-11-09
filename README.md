@@ -55,6 +55,13 @@ provider progress. FastAPI refunds unfinished canceled requests in their origina
 quota windows. Deploy the backend changes together with the extension to enable
 this refund behavior. An already completed improvement remains charged.
 
+Each popup/sidebar request establishes a background-owned connection before submission.
+The background aborts unfinished HTTP work when that connection disconnects, including
+when its document closes ([Port lifetime](https://developer.chrome.com/docs/extensions/develop/concepts/messaging#port-lifetime)).
+The surface toggle is disabled during processing. If quota revalidation blocks a retry
+or fails, the previous result and its actions are restored, including after reopening.
+Saving that result retains its submitted original; edits remain in the input draft.
+
 To check locally with `npm run dev:local-api`, exercise both modes, Cancel during
 generation, Edit original, New, Copy/Insert/Save, and library search/deletion. Check
 that `GET /v1/limits` returns the previous quota after cancellation. Resize the

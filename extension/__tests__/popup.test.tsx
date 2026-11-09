@@ -310,7 +310,7 @@ describe("App", () => {
         root.render(<App />);
       });
       await flushEffects();
-      await setOriginalPrompt(container, "Original prompt");
+      await setOriginalPrompt(container, "Original | prompt");
       await act(async () => {
         getImproveButton(container).click();
       });
@@ -330,6 +330,11 @@ describe("App", () => {
         "Keep this successful result",
       );
       expect(container.textContent).toContain("Keep this explanation");
+      expect((container.querySelector(".result-screen") as HTMLElement).hidden).toBe(false);
+      expect(findButton(container, "Copy").closest("[hidden]")).toBeNull();
+      expect(findButton(container, "Save to Library").closest("[hidden]")).toBeNull();
+      expect(findButton(container, "Copy").disabled).toBe(false);
+      expect(findButton(container, "Save to Library").disabled).toBe(false);
       expect((container.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
         "Edited original prompt",
       );
@@ -344,8 +349,46 @@ describe("App", () => {
       expect(draft).toMatchObject({
         improved: "Keep this successful result",
         changes: ["Keep this explanation"],
-        optimizer_screen: "input",
+        optimizer_screen: "result",
       });
+      await act(async () => {
+        root.unmount();
+      });
+      const restoredData: Record<string, unknown> = {
+        installation_id: "i",
+        audience_mode: "ai",
+        library: [],
+        popup_session_draft: { ...draft, updatedAt: Date.now() },
+      };
+      vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...restoredData }));
+      vi.mocked(browser.storage.local.set).mockImplementation(async (value) => {
+        Object.assign(restoredData, value);
+      });
+      root = createRoot(container);
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      expect((container.querySelector(".result-screen") as HTMLElement).hidden).toBe(false);
+      expect(findButton(container, "Copy").closest("[hidden]")).toBeNull();
+      expect(findButton(container, "Save to Library").closest("[hidden]")).toBeNull();
+      const saveSpy = vi.spyOn(apiClient, "savePrompt").mockResolvedValue({ prompt_id: "saved" });
+      await act(async () => {
+        findButton(container, "Save to Library").click();
+      });
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          original_text: "Original | prompt",
+          improved_text: "Keep this successful result",
+        }),
+      );
+      expect(restoredData.library).toEqual([
+        expect.objectContaining({
+          original: "Original | prompt",
+          improved: "Keep this successful result",
+        }),
+      ]);
+      expect(container.textContent).toContain("Saved!");
     },
   );
 
@@ -440,6 +483,71 @@ describe("App", () => {
       );
     },
   );
+
+  it.each(["popup", "sidepanel"] as const)(
+    "prevents a mid-flight switch from %s without relying on unmount",
+    async (viewMode) => {
+      const close = vi.spyOn(window, "close").mockImplementation(() => {});
+      const open = vi.fn().mockResolvedValue(undefined);
+      Object.assign(browser, { sidePanel: { open } });
+      vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 1 }] as never);
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+        (msg as { type?: string }).type === "IMPROVE_REQUEST"
+          ? new Promise(() => {})
+          : { ok: true },
+      );
+      await act(async () => {
+        root.render(<App viewMode={viewMode} />);
+      });
+      await flushEffects();
+      await setOriginalPrompt(container, "Pending prompt");
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      const toggle = container.querySelector(".layout-toggle-btn") as HTMLButtonElement;
+      expect(toggle.disabled).toBe(true);
+      await act(async () => {
+        toggle.click();
+      });
+      expect(close).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not close a popup when processing starts during an asynchronous panel open", async () => {
+    let finishOpen!: () => void;
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    Object.assign(browser, {
+      sidePanel: {
+        open: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              finishOpen = resolve;
+            }),
+        ),
+      },
+    });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 1 }] as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "IMPROVE_REQUEST" ? new Promise(() => {}) : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Pending prompt");
+    await act(async () => {
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
+    });
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    await act(async () => {
+      finishOpen();
+    });
+    expect(close).not.toHaveBeenCalled();
+    expect(container.querySelector(".processing-screen")).not.toBeNull();
+  });
 
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {

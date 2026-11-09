@@ -28,6 +28,7 @@ import {
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
 import { isOptimizerRequestContext } from "@shared/goal-options";
+import { createImproveOwner, type ImproveOwner } from "@shared/improve-owner";
 import { trackEvent } from "@shared/analytics";
 import type {
   AiImproveGoal,
@@ -192,6 +193,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [loading, setLoading] = useState(false);
   const [editingOriginal, setEditingOriginal] = useState(false);
   const activeRequestRef = useRef<string | null>(null);
+  const activeOwnerRef = useRef<ImproveOwner | null>(null);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
@@ -375,9 +377,11 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
+    if (activeRequestRef.current) return;
     try {
       if (viewMode === "popup") {
         const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        if (activeRequestRef.current) return;
         const sidePanel = (
           browser as typeof browser & {
             sidePanel?: { open: (options: { windowId: number }) => Promise<void> };
@@ -385,6 +389,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         ).sidePanel;
         if (tab?.windowId != null && sidePanel) {
           await sidePanel.open({ windowId: tab.windowId });
+          if (activeRequestRef.current) return;
           window.close();
         }
       } else {
@@ -507,6 +512,8 @@ export function App({ viewMode = "popup" }: AppProps) {
     setLoading(true);
     setError(null);
 
+    let owner: ImproveOwner | null = null;
+    let submitted = false;
     try {
       if (isExhausted) {
         // A canceled request may refund quota after a quick retry received 429.
@@ -527,6 +534,11 @@ export function App({ viewMode = "popup" }: AppProps) {
           return;
         }
       }
+      owner = createImproveOwner(requestKey);
+      activeOwnerRef.current = owner;
+      await owner.ready;
+      if (activeRequestRef.current !== requestKey) return;
+      submitted = true;
       setEditingOriginal(false);
       setImproved("");
       setChanges([]);
@@ -537,6 +549,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         payload: {
           text: trimmed,
           client_request_id: requestKey,
+          owner_required: true,
           audience_mode: audienceMode,
           goal,
           site: siteHostname,
@@ -593,7 +606,10 @@ export function App({ viewMode = "popup" }: AppProps) {
         setLimitsLoaded(true);
       }
     } finally {
+      owner?.close();
+      if (activeOwnerRef.current === owner) activeOwnerRef.current = null;
       if (activeRequestRef.current === requestKey) {
+        if (!submitted && improved) setEditingOriginal(false);
         activeRequestRef.current = null;
         setLoading(false);
         setProcessingContext(null);
@@ -609,6 +625,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     lastRequestContextKey,
     mapErrorToToast,
     original,
+    improved,
     siteHostname,
     t,
     viewMode,
@@ -617,6 +634,8 @@ export function App({ viewMode = "popup" }: AppProps) {
   const handleCancel = useCallback(() => {
     const requestKey = activeRequestRef.current;
     activeRequestRef.current = null;
+    activeOwnerRef.current?.close();
+    activeOwnerRef.current = null;
     setLoading(false);
     setProcessingContext(null);
     setEditingOriginal(true);
@@ -631,6 +650,8 @@ export function App({ viewMode = "popup" }: AppProps) {
     () => () => {
       const requestKey = activeRequestRef.current;
       activeRequestRef.current = null;
+      activeOwnerRef.current?.close();
+      activeOwnerRef.current = null;
       if (requestKey)
         void browser.runtime
           .sendMessage({ type: "CANCEL_IMPROVE", payload: { client_request_id: requestKey } })
@@ -674,7 +695,12 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (isOriginalOverLimit || saveInFlightRef.current) return false;
-    const originalTrimmed = original.trim();
+    const requestParts = lastRequestContextKey?.split("|");
+    const submittedOriginal =
+      requestParts && isOptimizerRequestContext({ mode: requestParts[0], goal: requestParts[1] })
+        ? requestParts.slice(2).join("|").trim()
+        : "";
+    const originalTrimmed = submittedOriginal || original.trim();
     const improvedTrimmed = improved.trim();
     if (!originalTrimmed || !improvedTrimmed) return false;
     saveInFlightRef.current = true;
@@ -712,7 +738,16 @@ export function App({ viewMode = "popup" }: AppProps) {
     } finally {
       saveInFlightRef.current = false;
     }
-  }, [original, improved, isOriginalOverLimit, refreshLibraryCount, mapErrorToToast, viewMode, t]);
+  }, [
+    original,
+    improved,
+    lastRequestContextKey,
+    isOriginalOverLimit,
+    refreshLibraryCount,
+    mapErrorToToast,
+    viewMode,
+    t,
+  ]);
 
   const handleDismissError = useCallback(() => setError(null), []);
 
@@ -988,6 +1023,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         <button
           type="button"
           className="layout-toggle-btn"
+          disabled={loading}
           title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           onClick={handleLayoutToggle}
