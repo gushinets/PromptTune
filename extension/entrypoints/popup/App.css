@@ -52,7 +52,7 @@
   --red-bg: rgba(248, 113, 113, 0.1);
   --green: #86efac;
   --popup-width: 360px;
-  --popup-height: 620px;
+  --popup-height: 600px;
 }
 * {
   box-sizing: border-box;

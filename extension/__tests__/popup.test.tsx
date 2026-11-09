@@ -275,6 +275,80 @@ describe("App", () => {
     );
   });
 
+  it.each(["exhausted", "failed"])(
+    "preserves a successful result when exhausted-quota revalidation is %s",
+    async (outcome) => {
+      let queries = 0;
+      const quota = {
+        per_day_remaining: 0,
+        per_day_total: 1,
+        per_minute_remaining: 4,
+        per_minute_total: 5,
+      };
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+        const type = (msg as { type?: string }).type;
+        if (type === "GET_LIMITS") {
+          if (++queries > 1 && outcome === "failed") throw new Error("Failed to fetch");
+          return {
+            type: "LIMITS_RESULT",
+            payload: { rate_limit: { ...quota, per_day_remaining: queries === 1 ? 1 : 0 } },
+          };
+        }
+        if (type === "IMPROVE_REQUEST")
+          return {
+            type: "IMPROVE_RESULT",
+            payload: {
+              request_id: "last-success",
+              improved_text: "Keep this successful result",
+              changes: ["Keep this explanation"],
+              rate_limit: quota,
+            },
+          };
+        return { ok: true };
+      });
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      await setOriginalPrompt(container, "Original prompt");
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      await act(async () => {
+        findButton(container, "Edit original").click();
+      });
+      await setOriginalPrompt(container, "Edited original prompt");
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      expect(
+        vi
+          .mocked(browser.runtime.sendMessage)
+          .mock.calls.filter(([msg]) => (msg as { type?: string }).type === "IMPROVE_REQUEST"),
+      ).toHaveLength(1);
+      expect((container.querySelector(".improved-textarea") as HTMLTextAreaElement)?.value).toBe(
+        "Keep this successful result",
+      );
+      expect(container.textContent).toContain("Keep this explanation");
+      expect((container.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
+        "Edited original prompt",
+      );
+      const draft = vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.filter(([data]) => "popup_session_draft" in data)
+        .at(-1)?.[0].popup_session_draft as {
+        improved: string;
+        changes: string[];
+        optimizer_screen: string;
+      };
+      expect(draft).toMatchObject({
+        improved: "Keep this successful result",
+        changes: ["Keep this explanation"],
+        optimizer_screen: "input",
+      });
+    },
+  );
+
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {
       root.render(<App />);

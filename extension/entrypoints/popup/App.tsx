@@ -480,11 +480,8 @@ export function App({ viewMode = "popup" }: AppProps) {
 
     const requestKey = crypto.randomUUID();
     activeRequestRef.current = requestKey;
-    setEditingOriginal(false);
     setLoading(true);
     setError(null);
-    setImproved("");
-    setChanges([]);
 
     try {
       if (isExhausted) {
@@ -506,6 +503,9 @@ export function App({ viewMode = "popup" }: AppProps) {
           return;
         }
       }
+      setEditingOriginal(false);
+      setImproved("");
+      setChanges([]);
       const nextAttempt = isRegeneration ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",

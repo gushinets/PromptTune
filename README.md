@@ -46,7 +46,9 @@ This does not overwrite production values in code or CI.
 
 #### Optimizer flow
 
-The 360 × 620 popup and resizable sidebar share input, processing and result screens.
+The 360 × 600 popup and resizable sidebar share input, processing and result screens.
+The popup adapts the 620px mockup to Chrome's 600px action-popup height limit;
+the sidebar uses the available viewport height.
 Ctrl/Cmd+Enter submits from the input screen. Cancel restores the original text and
 aborts the pending request; processing steps illustrate waiting rather than report
 provider progress. FastAPI refunds unfinished canceled requests in their original
