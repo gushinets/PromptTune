@@ -45,10 +45,9 @@ export default defineContentScript({
       switch (msg.type) {
         case "PASTE_TEXT": {
           const field = adapter.findEditableField() ?? lastFocusedField;
-          if (field) {
-            adapter.setText(field, msg.payload.text);
-          }
-          break;
+          if (!field) return { success: false };
+          adapter.setText(field, msg.payload.text);
+          return { success: true };
         }
 
         case "IMPROVE_ACTIVE_FIELD": {

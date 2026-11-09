@@ -1,7 +1,38 @@
+import type { ImproveGoal } from "../types";
 import { formatCharacterCount } from "../prompt-length";
 import type { TranslationKeys } from "./en";
 
 export const ru: TranslationKeys = {
+  modeShortAi: "AI",
+  modeShortContent: "Контент",
+  btnCancel: "Отменить",
+  btnEditOriginal: "Изменить оригинал",
+  btnNew: "Новый",
+  processingTitle: "Улучшаем промпт…",
+  processingWaiting: "Ожидаем улучшенный промпт. Этапы иллюстрируют процесс оптимизации.",
+  processingStepIntent: "Анализ намерения",
+  processingStepContext: "Уточнение роли и контекста",
+  processingStepStructure: "Структурирование вывода",
+  processingStepConstraints: "Проверка ограничений",
+  insertHint: "Вставить напрямую в поле ввода нейросети",
+  errorCopyMessage: "Не удалось скопировать промпт. Выделите результат и скопируйте его вручную.",
+  errorNoEditableField:
+    "Не найдено подходящее поле. Откройте чат с нейросетью и выберите поле ввода промпта.",
+  goalHint: (goal: ImproveGoal) =>
+    ({
+      general: "Универсальная структура: роль, задача, контекст, формат.",
+      chatgpt: "Чёткие инструкции и пошаговый формат ответа.",
+      claude: "Разделение контекста, задачи и требований к ответу Claude.",
+      perplexity: "Требования к источникам и актуальности данных.",
+      structured: "Markdown-секции и предсказуемая структура ответа.",
+      deep_research: "План исследования, источники и уровень уверенности.",
+      seo_article: "Промпт для SEO-статьи со структурой и ключевыми словами.",
+      product_description: "Промпт с акцентом на ценность, преимущества и детали товара.",
+      ad_copy: "Промпт для рекламного текста с понятным призывом к действию.",
+      email: "Промпт для письма с аудиторией, целью и следующим шагом.",
+      landing_page: "Промпт для лендинга с оффером и доказательствами.",
+    })[goal] ?? "",
+
   // Header
   appName: "PromptOptimizer",
   modeBadgeAi: "AI режим",
@@ -80,6 +111,7 @@ export const ru: TranslationKeys = {
   btnInsert: "Вставить",
   btnInserted: "Вставлено!",
   btnSaveToLibrary: "Сохранить в библиотеку",
+  btnSaveShort: "Сохранить",
   btnSaved: "Сохранено!",
 
   // LibraryItem

@@ -43,11 +43,12 @@ function extractErrorDetail(raw: string, fallback: string): string {
   return text;
 }
 
-async function post<TReq, TRes>(path: string, body: TReq): Promise<TRes> {
+async function post<TReq, TRes>(path: string, body: TReq, signal?: AbortSignal): Promise<TRes> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   });
 
   if (!res.ok) {
@@ -76,11 +77,12 @@ async function get<TRes>(
   return res.json();
 }
 
-async function improveViaN8n(req: ImproveRequest): Promise<ImproveResponse> {
+async function improveViaN8n(req: ImproveRequest, signal?: AbortSignal): Promise<ImproveResponse> {
   const res = await fetch(N8N_WEBHOOK_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ prompt: req.text, goal: req.goal }),
+    ...(signal ? { signal } : {}),
   });
 
   if (!res.ok) {
@@ -174,14 +176,16 @@ export const apiClient = {
     }
   },
 
-  async improve(req: ImproveRequest): Promise<ImproveResponse> {
+  async improve(req: ImproveRequest, signal?: AbortSignal): Promise<ImproveResponse> {
+    signal?.throwIfAborted();
     if (BACKEND_MODE === "n8n") {
-      return improveViaN8n(req);
+      return improveViaN8n(req, signal);
     }
     await apiClient.promptInputLimit();
+    signal?.throwIfAborted();
     apiClient.validateImproveInput(req.text);
     try {
-      return await post<ImproveRequest, ImproveResponse>("/v1/improve", req);
+      return await post<ImproveRequest, ImproveResponse>("/v1/improve", req, signal);
     } catch (error) {
       rememberInputLengthError(error);
       throw error;

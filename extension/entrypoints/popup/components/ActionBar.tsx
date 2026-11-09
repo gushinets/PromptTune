@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
 import { trackEvent } from "@shared/analytics";
@@ -96,41 +96,69 @@ export function ActionBar({
   const [copied, setCopied] = useState(false);
   const [inserted, setInserted] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(
+    () => () => {
+      timers.current.forEach(clearTimeout);
+    },
+    [],
+  );
+  const later = (callback: () => void) => {
+    timers.current.push(setTimeout(callback, 1500));
+  };
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(improved);
-    if (requestId) {
-      void trackEvent(
-        "result_copied",
-        {
-          request_id: requestId,
-          copy_method: "copy_button",
-          model,
-          latency_ms: latencyMs,
-        },
-        source,
-      );
+    setActionError(null);
+    try {
+      await navigator.clipboard.writeText(improved);
+      if (requestId) {
+        void trackEvent(
+          "result_copied",
+          {
+            request_id: requestId,
+            copy_method: "copy_button",
+            model,
+            latency_ms: latencyMs,
+          },
+          source,
+        );
+      }
+      setCopied(true);
+      later(() => setCopied(false));
+    } catch {
+      setActionError(t.errorCopyMessage);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
   };
 
   const handleSave = async () => {
-    const didSave = await onSave();
-    if (!didSave) return;
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    if (saving) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      const didSave = await onSave();
+      if (!didSave) return;
+      setSaved(true);
+      later(() => setSaved(false));
+    } catch {
+      setActionError(t.errorLibraryStorageMessage);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleInsert = async () => {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (typeof tab?.id !== "number") return;
-
+    setActionError(null);
     try {
-      await browser.tabs.sendMessage(tab.id, {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      if (typeof tab?.id !== "number") throw new Error("No active tab");
+      const response = await browser.tabs.sendMessage(tab.id, {
         type: "PASTE_TEXT",
         payload: { text: improved },
       });
+      if ((response as { success?: boolean } | undefined)?.success === false)
+        throw new Error("No input field");
       if (requestId) {
         void trackEvent(
           "result_copied",
@@ -144,9 +172,9 @@ export function ActionBar({
         );
       }
       setInserted(true);
-      setTimeout(() => setInserted(false), 1500);
+      later(() => setInserted(false));
     } catch {
-      // Ignore errors when the active tab doesn't support content scripts.
+      setActionError(t.errorNoEditableField);
     }
   };
 
@@ -165,7 +193,12 @@ export function ActionBar({
           </>
         )}
       </button>
-      <button className="btn-secondary" onClick={handleInsert} disabled={disabled || inserted}>
+      <button
+        className="btn-secondary"
+        onClick={handleInsert}
+        title={t.insertHint}
+        disabled={disabled || inserted}
+      >
         {inserted ? (
           <>
             <CheckIcon className="btn-icon" />
@@ -181,7 +214,8 @@ export function ActionBar({
       <button
         className="btn-secondary"
         onClick={handleSave}
-        disabled={disabled || saveDisabled || saved}
+        title={t.btnSaveToLibrary}
+        disabled={disabled || saveDisabled || saved || saving}
       >
         {saved ? (
           <>
@@ -191,10 +225,16 @@ export function ActionBar({
         ) : (
           <>
             <BookmarkIcon className="btn-icon" />
-            {t.btnSaveToLibrary}
+            <span aria-hidden="true">{t.btnSaveShort}</span>
+            <span className="sr-only">{t.btnSaveToLibrary}</span>
           </>
         )}
       </button>
+      {actionError && (
+        <p className="action-feedback" role="alert">
+          {actionError}
+        </p>
+      )}
     </div>
   );
 }

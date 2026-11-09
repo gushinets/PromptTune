@@ -37,6 +37,7 @@ function mapPlatformOs(os: string): string {
 export default defineBackground(() => {
   const client = "extension";
   const clientVersion = browser.runtime.getManifest().version;
+  const pendingRequests = new Map<string, AbortController>();
 
   let sessionOpChain: Promise<void> = Promise.resolve();
   let queueOpChain: Promise<void> = Promise.resolve();
@@ -408,103 +409,121 @@ export default defineBackground(() => {
         return apiClient.promptInputLimit(true);
       }
 
+      case "CANCEL_IMPROVE": {
+        pendingRequests.get(msg.payload.client_request_id)?.abort();
+        return { canceled: true };
+      }
+
       case "IMPROVE_REQUEST": {
-        if (BACKEND_MODE === "fastapi") {
-          await apiClient.promptInputLimit(true);
-          apiClient.validateImproveInput(msg.payload.text);
-        }
-
-        const installationId = await getInstallationId();
-        const trimmed = msg.payload.text.trim();
-
-        if (!trimmed) {
-          throw new Error("Prompt text is required");
-        }
-
-        if (await canTrackAnalytics()) {
-          try {
-            const promptEvent = await buildEvent(
-              "prompt_submitted",
-              {
-                prompt_length: trimmed.length,
-                site: msg.payload.site,
-                view_mode: msg.payload.analytics_context?.view_mode,
-              },
-              msg.payload.analytics_context?.source ?? "background",
-              { promptSubmitted: true },
-            );
-            await enqueueEvent(promptEvent);
-
-            const firstPrompt = await markFirstEvent(STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT);
-            if (firstPrompt.isFirst) {
-              const firstPromptEvent = await buildEvent(
-                "first_prompt_submitted",
-                firstPrompt.timeSinceInstallMin !== undefined
-                  ? {
-                      time_since_install_min: firstPrompt.timeSinceInstallMin,
-                      site: msg.payload.site,
-                    }
-                  : { site: msg.payload.site },
-                msg.payload.analytics_context?.source ?? "background",
-              );
-              await enqueueEvent(firstPromptEvent);
-            }
-
-            await incrementTotalUses();
-            void flushAnalytics();
-          } catch (analyticsError) {
-            console.warn("Analytics failed during prompt_submitted tracking", analyticsError);
-          }
-        }
-
-        const startedAt = Date.now();
+        const requestKey = msg.payload.client_request_id ?? crypto.randomUUID();
+        if (pendingRequests.has(requestKey)) throw new Error("Duplicate improve request");
+        const controller = new AbortController();
+        pendingRequests.set(requestKey, controller);
         try {
-          const result = await apiClient.improve({
-            text: trimmed,
-            audience_mode: msg.payload.audience_mode,
-            goal: msg.payload.goal,
-            installation_id: installationId,
-            client,
-            client_version: clientVersion,
-            site: msg.payload.site,
-            page_url: msg.payload.page_url,
-            client_ts: Date.now() / 1000,
-          });
+          if (BACKEND_MODE === "fastapi") {
+            await apiClient.promptInputLimit(true);
+            apiClient.validateImproveInput(msg.payload.text);
+          }
+          controller.signal.throwIfAborted();
 
-          if (typeof result.latency_ms !== "number") {
-            result.latency_ms = Date.now() - startedAt;
+          const installationId = await getInstallationId();
+          const trimmed = msg.payload.text.trim();
+
+          if (!trimmed) {
+            throw new Error("Prompt text is required");
           }
 
-          return { type: "IMPROVE_RESULT", payload: result };
-        } catch (error: unknown) {
-          if ((await canTrackAnalytics()) && error instanceof ApiError) {
+          if (await canTrackAnalytics()) {
             try {
-              const apiErrorEvent = await buildEvent(
-                "api_error",
+              const promptEvent = await buildEvent(
+                "prompt_submitted",
                 {
-                  endpoint: "/v1/improve",
-                  status: error.status,
-                  error_code: error.detail,
-                  error_type:
-                    error.status === 429
-                      ? "rate_limit"
-                      : error.status === 401 || error.status === 403
-                        ? "auth"
-                        : error.status >= 500
-                          ? "upstream"
-                          : error.status === 422
-                            ? "validation"
-                            : "unknown",
+                  prompt_length: trimmed.length,
+                  site: msg.payload.site,
+                  view_mode: msg.payload.analytics_context?.view_mode,
                 },
                 msg.payload.analytics_context?.source ?? "background",
+                { promptSubmitted: true },
               );
-              await enqueueEvent(apiErrorEvent);
-              await flushAnalytics();
+              await enqueueEvent(promptEvent);
+
+              const firstPrompt = await markFirstEvent(STORAGE_KEYS.FIRST_PROMPT_SUBMITTED_AT);
+              if (firstPrompt.isFirst) {
+                const firstPromptEvent = await buildEvent(
+                  "first_prompt_submitted",
+                  firstPrompt.timeSinceInstallMin !== undefined
+                    ? {
+                        time_since_install_min: firstPrompt.timeSinceInstallMin,
+                        site: msg.payload.site,
+                      }
+                    : { site: msg.payload.site },
+                  msg.payload.analytics_context?.source ?? "background",
+                );
+                await enqueueEvent(firstPromptEvent);
+              }
+
+              await incrementTotalUses();
+              void flushAnalytics();
             } catch (analyticsError) {
-              console.warn("Analytics failed during api_error tracking", analyticsError);
+              console.warn("Analytics failed during prompt_submitted tracking", analyticsError);
             }
           }
-          throw error;
+
+          controller.signal.throwIfAborted();
+          const startedAt = Date.now();
+          try {
+            const result = await apiClient.improve(
+              {
+                text: trimmed,
+                audience_mode: msg.payload.audience_mode,
+                goal: msg.payload.goal,
+                installation_id: installationId,
+                client,
+                client_version: clientVersion,
+                site: msg.payload.site,
+                page_url: msg.payload.page_url,
+                client_ts: Date.now() / 1000,
+              },
+              controller.signal,
+            );
+
+            if (typeof result.latency_ms !== "number") {
+              result.latency_ms = Date.now() - startedAt;
+            }
+
+            return { type: "IMPROVE_RESULT", payload: result };
+          } catch (error: unknown) {
+            if ((await canTrackAnalytics()) && error instanceof ApiError) {
+              try {
+                const apiErrorEvent = await buildEvent(
+                  "api_error",
+                  {
+                    endpoint: "/v1/improve",
+                    status: error.status,
+                    error_code: error.detail,
+                    error_type:
+                      error.status === 429
+                        ? "rate_limit"
+                        : error.status === 401 || error.status === 403
+                          ? "auth"
+                          : error.status >= 500
+                            ? "upstream"
+                            : error.status === 422
+                              ? "validation"
+                              : "unknown",
+                  },
+                  msg.payload.analytics_context?.source ?? "background",
+                );
+                await enqueueEvent(apiErrorEvent);
+                await flushAnalytics();
+              } catch (analyticsError) {
+                console.warn("Analytics failed during api_error tracking", analyticsError);
+              }
+            }
+            throw error;
+          }
+        } finally {
+          pendingRequests.delete(requestKey);
         }
       }
 

@@ -2,7 +2,12 @@
 import { vi } from "vitest";
 import type { Browser } from "webextension-polyfill";
 
-globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+const testGlobals = globalThis as typeof globalThis & {
+  IS_REACT_ACT_ENVIRONMENT: boolean;
+  browser: Browser;
+  chrome: Browser;
+};
+testGlobals.IS_REACT_ACT_ENVIRONMENT = true;
 
 const browserMock = {
   storage: {
@@ -32,8 +37,8 @@ const browserMock = {
   },
 } as any;
 
-globalThis.browser = browserMock as Browser;
-globalThis.chrome = globalThis.browser;
+testGlobals.browser = browserMock as Browser;
+testGlobals.chrome = testGlobals.browser;
 
 vi.mock("webextension-polyfill", () => ({
   default: {

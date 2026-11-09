@@ -13,6 +13,7 @@ export interface LibraryEntry {
 }
 
 export interface PopupSessionDraft {
+  optimizer_screen?: "input" | "result";
   activeTab: "improve" | "library";
   original: string;
   improved: string;
@@ -34,6 +35,9 @@ function isPopupSessionDraft(value: unknown): value is PopupSessionDraft {
 
   const draft = value as Record<string, unknown>;
   return (
+    (draft.optimizer_screen === undefined ||
+      draft.optimizer_screen === "input" ||
+      draft.optimizer_screen === "result") &&
     (draft.activeTab === "improve" || draft.activeTab === "library") &&
     typeof draft.original === "string" &&
     typeof draft.improved === "string" &&

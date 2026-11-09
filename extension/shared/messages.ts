@@ -6,6 +6,7 @@ export type Message =
       type: "IMPROVE_REQUEST";
       payload: {
         text: string;
+        client_request_id?: string;
         audience_mode?: AudienceMode;
         goal?: ImproveGoal;
         site?: string;
@@ -16,6 +17,7 @@ export type Message =
         };
       };
     }
+  | { type: "CANCEL_IMPROVE"; payload: { client_request_id: string } }
   | { type: "IMPROVE_RESULT"; payload: ImproveResponse }
   | { type: "GET_PROMPT_LIMIT" }
   | { type: "GET_LIMITS" }

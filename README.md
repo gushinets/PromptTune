@@ -44,6 +44,20 @@ cp .env.local.example .env.local
 
 This does not overwrite production values in code or CI.
 
+#### Optimizer flow
+
+The 360 × 620 popup and resizable sidebar share input, processing and result screens.
+Ctrl/Cmd+Enter submits from the input screen. Cancel restores the original text and
+aborts the pending request; processing steps illustrate waiting rather than report
+provider progress. FastAPI refunds unfinished canceled requests in their original
+quota windows. Deploy the backend changes together with the extension to enable
+this refund behavior. An already completed improvement remains charged.
+
+To check locally with `npm run dev:local-api`, exercise both modes, Cancel during
+generation, Edit original, New, Copy/Insert/Save, and library search/deletion. Check
+that `GET /v1/limits` returns the previous quota after cancellation. Resize the
+sidebar with a long result and expand the changes list to check scrolling.
+
 #### Run extension tests
 
 ```bash

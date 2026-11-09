@@ -43,37 +43,10 @@ function selectGoal(container: HTMLElement, goal: string) {
 }
 
 async function selectMode(container: HTMLElement, mode: "ai" | "content") {
-  const settingsTrigger = container.querySelector('[data-testid="mode-switch-trigger"]');
-
-  if (!settingsTrigger) {
-    const onboardingTarget = container.querySelector(`.mode-onboarding-card[data-mode="${mode}"]`);
-    if (!(onboardingTarget instanceof HTMLButtonElement)) {
-      throw new Error(`Onboarding mode card not found: ${mode}`);
-    }
-
-    await act(async () => {
-      onboardingTarget.click();
-      await Promise.resolve();
-    });
-    return;
-  }
-
-  if (!(settingsTrigger instanceof HTMLButtonElement)) {
-    throw new Error("Settings trigger found but is not a button element");
-  }
-
-  await act(async () => {
-    settingsTrigger.click();
-    await Promise.resolve();
-  });
-
-  const target = container.querySelector(
-    `.settings-popover .settings-mode-card[data-mode="${mode}"]`,
-  );
-  if (!(target instanceof HTMLButtonElement)) {
-    throw new Error(`Mode card not found: ${mode}`);
-  }
-
+  const target =
+    container.querySelector(`.mode-toggle button[data-mode="${mode}"]`) ??
+    container.querySelector(`.mode-onboarding-card[data-mode="${mode}"]`);
+  if (!(target instanceof HTMLButtonElement)) throw new Error(`Mode action not found: ${mode}`);
   await act(async () => {
     target.click();
     await Promise.resolve();
