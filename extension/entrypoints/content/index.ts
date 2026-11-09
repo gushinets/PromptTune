@@ -15,8 +15,15 @@ function detectAiGoalFromHostname(hostname: string): ImproveGoal {
 
 function canInsertIntoField(field: HTMLElement | null): field is HTMLElement {
   if (!field?.isConnected) return false;
-  if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
+  if (field instanceof HTMLTextAreaElement) {
     return !field.disabled && !field.readOnly;
+  }
+  if (field instanceof HTMLInputElement) {
+    return (
+      ["text", "search", "tel", "url", "email", "password"].includes(field.type) &&
+      !field.disabled &&
+      !field.readOnly
+    );
   }
   return (
     field.isContentEditable ||

@@ -53,6 +53,35 @@ it.each(["readOnly", "disabled"] as const)(
   },
 );
 
+it.each(["checkbox", "radio", "range", "number", "date", "file", "button"])(
+  "rejects a focused non-text input of type %s",
+  async (type) => {
+    const field = document.createElement("input");
+    field.type = type;
+    document.body.append(field);
+    field.focus();
+    const original = field.value;
+    expect(await handle({ type: "PASTE_TEXT", payload: { text: "New prompt" } })).toEqual({
+      success: false,
+    });
+    expect(field.value).toBe(original);
+  },
+);
+
+it.each(["text", "search", "tel", "url", "email", "password"])(
+  "acknowledges insertion into a live text input of type %s",
+  async (type) => {
+    const field = document.createElement("input");
+    field.type = type;
+    document.body.append(field);
+    field.focus();
+    expect(await handle({ type: "PASTE_TEXT", payload: { text: "New prompt" } })).toEqual({
+      success: true,
+    });
+    expect(field.value).toBe("New prompt");
+  },
+);
+
 it("acknowledges insertion into a live editable composer", async () => {
   const field = document.createElement("textarea");
   document.body.append(field);
