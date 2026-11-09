@@ -757,7 +757,9 @@ export function App({ viewMode = "popup" }: AppProps) {
               <span className="sr-only">{rateLimitBadgeText}</span>
               <span aria-hidden="true">
                 {BACKEND_MODE === "fastapi" && limitsLoaded
-                  ? `${rateLimit.remaining}/${rateLimit.total}`
+                  ? rateLimit.total > 0
+                    ? `${rateLimit.remaining}/${rateLimit.total}`
+                    : String(rateLimit.remaining)
                   : BACKEND_MODE !== "fastapi"
                     ? "∞"
                     : limitsUnavailable

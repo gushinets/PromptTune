@@ -126,6 +126,38 @@ describe("App", () => {
     vi.useRealTimers();
   });
 
+  it.each([
+    { total: 0, visible: "5", description: "5 today" },
+    { total: 50, visible: "5/50", description: "5/50 today" },
+  ])(
+    "renders the quota badge consistently for total=$total",
+    async ({ total, visible, description }) => {
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+        (msg as { type?: string }).type === "GET_LIMITS"
+          ? {
+              type: "LIMITS_RESULT",
+              payload: {
+                rate_limit: {
+                  per_minute_remaining: 5,
+                  per_minute_total: 5,
+                  per_day_remaining: 5,
+                  per_day_total: total,
+                },
+              },
+            }
+          : { ok: true },
+      );
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      const badge = container.querySelector(".rate-limit-badge");
+      expect(badge?.querySelector('[aria-hidden="true"]')?.textContent).toBe(visible);
+      expect(badge?.querySelector(".sr-only")?.textContent).toBe(description);
+      expect(badge?.getAttribute("title")).toBe(description);
+    },
+  );
+
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {
       root.render(<App />);
