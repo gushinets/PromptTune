@@ -14,7 +14,6 @@ from app.dependencies import (
     get_redis,
 )
 from app.goals import normalize_goal_selection
-from app.services.errors import UpstreamServiceError
 from app.services.prompt_service import PromptService
 
 router = APIRouter()
@@ -91,7 +90,15 @@ async def improve(
             disconnected.result()
             refund = True
             return Response(status_code=499)
-    except UpstreamServiceError:
+        return ImproveResponse(
+            request_id=result.id,
+            improved_text=result.improved_text,
+            changes=_extract_changes(result.llm_meta),
+            model=result.model,
+            latency_ms=result.latency_ms,
+            rate_limit=remaining,
+        )
+    except Exception:
         refund = True
         raise
     except asyncio.CancelledError:
@@ -107,12 +114,3 @@ async def improve(
             await asyncio.gather(work, disconnected, return_exceptions=True)
             if refund:
                 await service.refund_rate_limit(installation_id=req.installation_id, ip=client_ip)
-
-    return ImproveResponse(
-        request_id=result.id,
-        improved_text=result.improved_text,
-        changes=_extract_changes(result.llm_meta),
-        model=result.model,
-        latency_ms=result.latency_ms,
-        rate_limit=remaining,
-    )

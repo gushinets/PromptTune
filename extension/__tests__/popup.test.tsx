@@ -514,7 +514,7 @@ describe("App", () => {
     },
   );
 
-  it("does not close a popup when processing starts during an asynchronous panel open", async () => {
+  it("blocks submission while a popup-to-panel transition is pending", async () => {
     let finishOpen!: () => void;
     const close = vi.spyOn(window, "close").mockImplementation(() => {});
     Object.assign(browser, {
@@ -541,12 +541,39 @@ describe("App", () => {
     });
     await act(async () => {
       getImproveButton(container).click();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true }));
     });
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
+    expect(getImproveButton(container).disabled).toBe(true);
     await act(async () => {
       finishOpen();
     });
-    expect(close).not.toHaveBeenCalled();
-    expect(container.querySelector(".processing-screen")).not.toBeNull();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".processing-screen")).toBeNull();
+  });
+
+  it("allows submission again if opening the sidepanel fails", async () => {
+    Object.assign(browser, {
+      sidePanel: { open: vi.fn().mockRejectedValue(new Error("Open failed")) },
+    });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 1 }] as never);
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Retry prompt");
+    await act(async () => {
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
+    });
+    expect(getImproveButton(container).disabled).toBe(false);
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
   });
 
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {

@@ -191,6 +191,8 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [processingContext, setProcessingContext] = useState<OptimizerRequestContext | null>(null);
   const [resultContext, setResultContext] = useState<OptimizerRequestContext | null>(null);
   const [loading, setLoading] = useState(false);
+  const [layoutTransition, setLayoutTransition] = useState(false);
+  const layoutTransitionRef = useRef(false);
   const [editingOriginal, setEditingOriginal] = useState(false);
   const activeRequestRef = useRef<string | null>(null);
   const activeOwnerRef = useRef<ImproveOwner | null>(null);
@@ -377,7 +379,10 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
-    if (activeRequestRef.current) return;
+    if (activeRequestRef.current || layoutTransitionRef.current) return;
+    layoutTransitionRef.current = true;
+    setLayoutTransition(true);
+    let closing = false;
     try {
       if (viewMode === "popup") {
         const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -391,14 +396,21 @@ export function App({ viewMode = "popup" }: AppProps) {
           await sidePanel.open({ windowId: tab.windowId });
           if (activeRequestRef.current) return;
           window.close();
+          closing = true;
         }
       } else {
         // Cannot open popup programmatically — just close sidebar
         // User needs to click the extension icon to open popup
         window.close();
+        closing = true;
       }
     } catch {
       // fail silently
+    } finally {
+      if (!closing) {
+        layoutTransitionRef.current = false;
+        setLayoutTransition(false);
+      }
     }
   }, [viewMode]);
 
@@ -495,7 +507,7 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
-    if (isOriginalOverLimit || activeRequestRef.current) return;
+    if (isOriginalOverLimit || activeRequestRef.current || layoutTransitionRef.current) return;
     const trimmed = original.trim();
     if (!trimmed) return;
     if (!audienceMode) return;
@@ -793,7 +805,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                 className={audienceMode === "ai" ? "selected" : ""}
                 aria-pressed={audienceMode === "ai"}
                 data-mode="ai"
-                disabled={loading}
+                disabled={loading || layoutTransition}
                 onClick={() => handleModeSelection("ai")}
               >
                 <span aria-hidden="true">{t.modeShortAi}</span>
@@ -803,7 +815,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                 className={audienceMode === "content" ? "selected" : ""}
                 aria-pressed={audienceMode === "content"}
                 data-mode="content"
-                disabled={loading}
+                disabled={loading || layoutTransition}
                 onClick={() => handleModeSelection("content")}
               >
                 <span aria-hidden="true">{t.modeShortContent}</span>
@@ -939,7 +951,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                   maxInputChars={BACKEND_MODE === "fastapi" ? promptInputMaxChars : null}
                   mode={audienceMode}
                   goal={goal}
-                  loading={loading}
+                  loading={loading || layoutTransition}
                   hidden={loading || Boolean(improved && !editingOriginal)}
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {
@@ -1023,7 +1035,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         <button
           type="button"
           className="layout-toggle-btn"
-          disabled={loading}
+          disabled={loading || layoutTransition}
           title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           onClick={handleLayoutToggle}

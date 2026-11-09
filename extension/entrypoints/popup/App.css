@@ -803,17 +803,50 @@ textarea.improved-textarea {
   margin-bottom: 6px;
 }
 .library-item-site {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: #b9baff;
+}
+.site-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--txt3);
+}
+.site-dot.chatgpt {
+  background: #10a37f;
+}
+.site-dot.claude,
+.site-dot.groq {
+  background: #f97316;
+}
+.site-dot.perplexity {
+  background: #22d3ee;
+}
+.site-dot.deepseek {
+  background: #3b82f6;
 }
 .library-item-text,
 .library-item-improved {
   font-size: 12px;
-  white-space: pre-wrap;
   line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .library-item-text {
   color: var(--txt2);
   margin-bottom: 6px;
+  white-space: nowrap;
+  max-height: 1.5em;
+}
+.library-item-improved {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  max-height: 3em;
 }
 .library-item-actions {
   display: flex;

@@ -1,13 +1,61 @@
 import asyncio
 import json
+from contextlib import ExitStack
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
 from app.dependencies import get_redis
 from app.main import app
 from app.services.rate_limiter import RateLimiter
 from tests.test_rate_limiter import InMemoryRedisMock
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["upsert", "model_processing", "commit", "response"])
+async def test_any_unsuccessful_improvement_refunds_its_reservation(mock_db, mock_litellm, failure):
+    redis = InMemoryRedisMock()
+    await RateLimiter(redis).check("inst-1", "1.2.3.4")
+    app.dependency_overrides[get_redis] = lambda: redis
+    try:
+        with ExitStack() as stack:
+            if failure == "upsert":
+                mock_db.get.side_effect = RuntimeError("Database lookup failed")
+            elif failure == "commit":
+                mock_db.commit.side_effect = RuntimeError("Database commit failed")
+            elif failure == "model_processing":
+                stack.enter_context(
+                    patch(
+                        "app.services.prompt_service.improve_text",
+                        side_effect=RuntimeError("Invalid model result"),
+                    )
+                )
+            else:
+                stack.enter_context(
+                    patch(
+                        "app.services.prompt_service.PromptService.improve_prompt",
+                        return_value=SimpleNamespace(
+                            id="invalid-response",
+                            improved_text=None,
+                            llm_meta={},
+                            model="test",
+                            latency_ms=1,
+                        ),
+                    )
+                )
+            transport = ASGITransport(app=app, raise_app_exceptions=False, client=("1.2.3.4", 1234))
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.post(
+                    "/v1/improve", json={"text": "write a poem", "installation_id": "inst-1"}
+                )
+            assert response.status_code == 500
+            counters = {key: value for key, value in redis.store.items() if key.startswith("rl:")}
+            assert len(counters) == 2
+            assert set(counters.values()) == {"1"}
+    finally:
+        app.dependency_overrides.pop(get_redis, None)
 
 
 async def run_request(receive, send):
