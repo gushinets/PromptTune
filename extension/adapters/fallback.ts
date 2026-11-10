@@ -38,7 +38,12 @@ export const fallbackAdapter: SiteAdapter = {
 
   setText(el: HTMLElement, text: string): void {
     if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
-      el.value = text;
+      // Bypass framework value trackers so the input event updates controlled state.
+      const prototype =
+        el instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(el, text);
     } else {
       el.innerText = text;
     }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useT } from "@shared/i18n";
 import type { LibraryEntry } from "@shared/storage";
 
@@ -74,6 +74,8 @@ function TrashIcon() {
 export function LibraryItem({ entry, onDelete }: LibraryItemProps) {
   const t = useT();
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const previewId = useId();
 
   const siteKey = entry.site?.toLowerCase() ?? "";
   const siteLabel = SITE_LABELS[siteKey] ?? entry.site ?? t.siteGeneral;
@@ -98,7 +100,7 @@ export function LibraryItem({ entry, onDelete }: LibraryItemProps) {
   };
 
   return (
-    <div className="library-item">
+    <div className={`library-item${expanded ? " library-item-expanded" : ""}`}>
       <div className="library-item-header">
         <span className="library-item-site">
           <span className={`site-dot ${siteKey}`} />
@@ -106,13 +108,24 @@ export function LibraryItem({ entry, onDelete }: LibraryItemProps) {
         </span>
         <span className="library-item-time">{relativeTime(entry.createdAt)}</span>
       </div>
-      <div className="library-item-text">
-        <strong>{t.labelOriginal}</strong> {entry.original}
-      </div>
-      <div className="library-item-improved">
-        <strong>{t.labelImproved}</strong> {entry.improved}
+      <div id={previewId} className="library-item-preview" tabIndex={expanded ? 0 : undefined}>
+        <div className="library-item-text">
+          <strong>{t.labelOriginal}</strong> {entry.original}
+        </div>
+        <div className="library-item-improved">
+          <strong>{t.labelImproved}</strong> {entry.improved}
+        </div>
       </div>
       <div className="library-item-actions">
+        <button
+          type="button"
+          className="library-detail-toggle"
+          aria-expanded={expanded}
+          aria-controls={previewId}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? t.libraryCollapse : t.libraryExpand}
+        </button>
         <button
           className="icon-btn"
           title={copied ? t.titleCopied : t.titleCopy}

@@ -1,6 +1,7 @@
 import browser from "webextension-polyfill";
 import { STORAGE_KEYS, LIMITS } from "./constants";
-import type { AudienceMode, ImproveGoal } from "./types";
+import type { AudienceMode, ImproveGoal, OptimizerRequestContext } from "./types";
+import { isOptimizerRequestContext } from "./goal-options";
 
 export interface LibraryEntry {
   id: string;
@@ -13,6 +14,8 @@ export interface LibraryEntry {
 }
 
 export interface PopupSessionDraft {
+  optimizer_screen?: "input" | "result";
+  result_context?: OptimizerRequestContext | null;
   activeTab: "improve" | "library";
   original: string;
   improved: string;
@@ -34,6 +37,12 @@ function isPopupSessionDraft(value: unknown): value is PopupSessionDraft {
 
   const draft = value as Record<string, unknown>;
   return (
+    (draft.result_context === undefined ||
+      draft.result_context === null ||
+      isOptimizerRequestContext(draft.result_context)) &&
+    (draft.optimizer_screen === undefined ||
+      draft.optimizer_screen === "input" ||
+      draft.optimizer_screen === "result") &&
     (draft.activeTab === "improve" || draft.activeTab === "library") &&
     typeof draft.original === "string" &&
     typeof draft.improved === "string" &&

@@ -13,6 +13,21 @@ function detectAiGoalFromHostname(hostname: string): ImproveGoal {
   return "general";
 }
 
+function canInsertIntoField(field: HTMLElement | null): field is HTMLElement {
+  if (!field?.isConnected) return false;
+  if (field instanceof HTMLTextAreaElement) {
+    return !field.disabled && !field.readOnly;
+  }
+  if (field instanceof HTMLInputElement) {
+    return ["text", "search"].includes(field.type) && !field.disabled && !field.readOnly;
+  }
+  return (
+    field.isContentEditable ||
+    field.getAttribute("contenteditable") === "true" ||
+    field.getAttribute("contenteditable") === "plaintext-only"
+  );
+}
+
 export default defineContentScript({
   matches: [
     "https://chatgpt.com/*",
@@ -45,10 +60,17 @@ export default defineContentScript({
       switch (msg.type) {
         case "PASTE_TEXT": {
           const field = adapter.findEditableField() ?? lastFocusedField;
-          if (field) {
+          if (!canInsertIntoField(field)) return { success: false };
+          try {
             adapter.setText(field, msg.payload.text);
+            // Allow controlled editors to reconcile before acknowledging the visible value.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            return {
+              success: canInsertIntoField(field) && adapter.getText(field) === msg.payload.text,
+            };
+          } catch {
+            return { success: false };
           }
-          break;
         }
 
         case "IMPROVE_ACTIVE_FIELD": {

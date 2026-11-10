@@ -213,9 +213,7 @@ async def test_improve_refunds_quota_when_provider_returns_empty_completion(
 
 
 @pytest.mark.asyncio
-async def test_improve_does_not_refund_on_non_upstream_error(
-    client: AsyncClient, mock_db, mock_redis
-):
+async def test_improve_refunds_on_non_upstream_error(client: AsyncClient, mock_db, mock_redis):
     with (
         patch(
             "app.services.prompt_service.improve_text",
@@ -237,7 +235,7 @@ async def test_improve_does_not_refund_on_non_upstream_error(
             },
         )
 
-    refund_mock.assert_not_awaited()
+    refund_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio

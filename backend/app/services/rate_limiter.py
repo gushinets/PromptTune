@@ -13,6 +13,7 @@ class RateLimiter:
     def __init__(self, redis: aioredis.Redis, now: NowProvider = None):
         self.redis = redis
         self.now = now if now is not None else lambda: datetime.now(UTC)
+        self._reservation: tuple[str, str] | None = None
 
     @staticmethod
     def _hash_installation(installation_id: str) -> str:
@@ -131,6 +132,8 @@ class RateLimiter:
         pipe.incr(min_key)
         pipe.expire(min_key, min_ttl)
         await pipe.execute()
+        # This limiter belongs to one request; retain its actual charged windows.
+        self._reservation = (day_key, min_key)
 
         return True, {
             "per_day_remaining": max(0, remaining["per_day_remaining"] - 1),
@@ -140,12 +143,14 @@ class RateLimiter:
         }
 
     async def refund(self, installation_id: str, ip: str) -> dict[str, int]:
-        """Refund one request from both day and minute buckets when generation fails."""
-        bucket_key = await self.resolve_bucket(installation_id, ip)
-        now = self.now()
-
-        day_key = f"rl:{bucket_key}:d:{now.strftime('%Y%m%d')}"
-        min_key = f"rl:{bucket_key}:m:{now.strftime('%Y%m%d%H%M')}"
+        """Refund this instance's last reservation once, in its original windows."""
+        reservation = self._reservation
+        if reservation is None:
+            _, remaining = await self.get_remaining(installation_id, ip)
+            return remaining
+        # Claim the refund before awaiting so concurrent cleanup cannot refund twice.
+        self._reservation = None
+        day_key, min_key = reservation
 
         day_val, min_val = await self.redis.mget(day_key, min_key)
         day_count = int(day_val or 0)

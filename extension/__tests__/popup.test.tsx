@@ -43,37 +43,10 @@ function selectGoal(container: HTMLElement, goal: string) {
 }
 
 async function selectMode(container: HTMLElement, mode: "ai" | "content") {
-  const settingsTrigger = container.querySelector('[data-testid="mode-switch-trigger"]');
-
-  if (!settingsTrigger) {
-    const onboardingTarget = container.querySelector(`.mode-onboarding-card[data-mode="${mode}"]`);
-    if (!(onboardingTarget instanceof HTMLButtonElement)) {
-      throw new Error(`Onboarding mode card not found: ${mode}`);
-    }
-
-    await act(async () => {
-      onboardingTarget.click();
-      await Promise.resolve();
-    });
-    return;
-  }
-
-  if (!(settingsTrigger instanceof HTMLButtonElement)) {
-    throw new Error("Settings trigger found but is not a button element");
-  }
-
-  await act(async () => {
-    settingsTrigger.click();
-    await Promise.resolve();
-  });
-
-  const target = container.querySelector(
-    `.settings-popover .settings-mode-card[data-mode="${mode}"]`,
-  );
-  if (!(target instanceof HTMLButtonElement)) {
-    throw new Error(`Mode card not found: ${mode}`);
-  }
-
+  const target =
+    container.querySelector(`.mode-toggle button[data-mode="${mode}"]`) ??
+    container.querySelector(`.mode-onboarding-card[data-mode="${mode}"]`);
+  if (!(target instanceof HTMLButtonElement)) throw new Error(`Mode action not found: ${mode}`);
   await act(async () => {
     target.click();
     await Promise.resolve();
@@ -151,6 +124,456 @@ describe("App", () => {
     container.remove();
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it.each([
+    { total: 0, visible: "5", description: "5 today" },
+    { total: 50, visible: "5/50", description: "5/50 today" },
+  ])(
+    "renders the quota badge consistently for total=$total",
+    async ({ total, visible, description }) => {
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+        (msg as { type?: string }).type === "GET_LIMITS"
+          ? {
+              type: "LIMITS_RESULT",
+              payload: {
+                rate_limit: {
+                  per_minute_remaining: 5,
+                  per_minute_total: 5,
+                  per_day_remaining: 5,
+                  per_day_total: total,
+                },
+              },
+            }
+          : { ok: true },
+      );
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      const badge = container.querySelector(".rate-limit-badge");
+      expect(badge?.querySelector('[aria-hidden="true"]')?.textContent).toBe(visible);
+      expect(badge?.querySelector(".sr-only")?.textContent).toBe(description);
+      expect(badge?.getAttribute("title")).toBe(description);
+    },
+  );
+
+  it("recovers from a temporary 429 after cancel when the refunded quota becomes available", async () => {
+    let remaining = 1;
+    let improvements = 0;
+    let finishCanceled!: (value: unknown) => void;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      const type = (msg as { type?: string }).type;
+      if (type === "GET_LIMITS")
+        return {
+          type: "LIMITS_RESULT",
+          payload: {
+            rate_limit: {
+              per_day_remaining: remaining,
+              per_day_total: 1,
+              per_minute_remaining: remaining,
+              per_minute_total: 5,
+            },
+          },
+        };
+      if (type === "IMPROVE_REQUEST") {
+        improvements++;
+        if (improvements === 1) {
+          remaining = 0;
+          return new Promise((resolve) => {
+            finishCanceled = resolve;
+          });
+        }
+        if (remaining === 0) throw new ApiError(429, "Rate limit exceeded");
+        return {
+          type: "IMPROVE_RESULT",
+          payload: { request_id: "after-refund", improved_text: "Recovered result" },
+        };
+      }
+      return { ok: true };
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Keep my original");
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    await act(async () => {
+      findButton(container, "Cancel").click();
+      finishCanceled(undefined);
+    });
+    // The backend has observed abort but has not refunded its last reservation yet.
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(improvements).toBe(2);
+    expect(container.querySelector(".upgrade-banner")).not.toBeNull();
+    // While quota is still zero, retry checks the server rather than POSTing again.
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(improvements).toBe(2);
+    remaining = 1;
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(improvements).toBe(3);
+    expect((container.querySelector(".improved-textarea") as HTMLTextAreaElement)?.value).toBe(
+      "Recovered result",
+    );
+    expect(container.querySelector(".upgrade-banner")).toBeNull();
+    expect(container.querySelector(".error-toast")).toBeNull();
+  });
+
+  it("does not submit after canceling a pending quota refresh or on duplicate clicks", async () => {
+    let queries = 0;
+    let finishRefresh!: (value: unknown) => void;
+    const limits = (remaining: number) => ({
+      type: "LIMITS_RESULT",
+      payload: {
+        rate_limit: {
+          per_day_remaining: remaining,
+          per_day_total: 1,
+          per_minute_remaining: remaining,
+          per_minute_total: 5,
+        },
+      },
+    });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+      if ((msg as { type?: string }).type === "GET_LIMITS") {
+        queries++;
+        return queries === 1
+          ? limits(0)
+          : new Promise((resolve) => {
+              finishRefresh = resolve;
+            });
+      }
+      return { ok: true };
+    });
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Keep my prompt");
+    await act(async () => {
+      getImproveButton(container).click();
+      getImproveButton(container).click();
+    });
+    expect(queries).toBe(2);
+    await act(async () => {
+      findButton(container, "Cancel").click();
+      finishRefresh(limits(1));
+    });
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
+    expect(container.querySelector(".processing-screen")).toBeNull();
+    expect((container.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
+      "Keep my prompt",
+    );
+  });
+
+  it.each(["exhausted", "failed"])(
+    "preserves a successful result when exhausted-quota revalidation is %s",
+    async (outcome) => {
+      let queries = 0;
+      const quota = {
+        per_day_remaining: 0,
+        per_day_total: 1,
+        per_minute_remaining: 4,
+        per_minute_total: 5,
+      };
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
+        const type = (msg as { type?: string }).type;
+        if (type === "GET_LIMITS") {
+          if (++queries > 1 && outcome === "failed") throw new Error("Failed to fetch");
+          return {
+            type: "LIMITS_RESULT",
+            payload: { rate_limit: { ...quota, per_day_remaining: queries === 1 ? 1 : 0 } },
+          };
+        }
+        if (type === "IMPROVE_REQUEST")
+          return {
+            type: "IMPROVE_RESULT",
+            payload: {
+              request_id: "last-success",
+              improved_text: "Keep this successful result",
+              changes: ["Keep this explanation"],
+              rate_limit: quota,
+            },
+          };
+        return { ok: true };
+      });
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      await setOriginalPrompt(container, "Original | prompt");
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      await act(async () => {
+        findButton(container, "Edit original").click();
+      });
+      await setOriginalPrompt(container, "Edited original prompt");
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      expect(
+        vi
+          .mocked(browser.runtime.sendMessage)
+          .mock.calls.filter(([msg]) => (msg as { type?: string }).type === "IMPROVE_REQUEST"),
+      ).toHaveLength(1);
+      expect((container.querySelector(".improved-textarea") as HTMLTextAreaElement)?.value).toBe(
+        "Keep this successful result",
+      );
+      expect(container.textContent).toContain("Keep this explanation");
+      expect((container.querySelector(".result-screen") as HTMLElement).hidden).toBe(false);
+      expect(findButton(container, "Copy").closest("[hidden]")).toBeNull();
+      expect(findButton(container, "Save to Library").closest("[hidden]")).toBeNull();
+      expect(findButton(container, "Copy").disabled).toBe(false);
+      expect(findButton(container, "Save to Library").disabled).toBe(false);
+      expect((container.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
+        "Edited original prompt",
+      );
+      const draft = vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.filter(([data]) => "popup_session_draft" in data)
+        .at(-1)?.[0].popup_session_draft as {
+        improved: string;
+        changes: string[];
+        optimizer_screen: string;
+      };
+      expect(draft).toMatchObject({
+        improved: "Keep this successful result",
+        changes: ["Keep this explanation"],
+        optimizer_screen: "result",
+      });
+      await act(async () => {
+        root.unmount();
+      });
+      const restoredData: Record<string, unknown> = {
+        installation_id: "i",
+        audience_mode: "ai",
+        library: [],
+        popup_session_draft: { ...draft, updatedAt: Date.now() },
+      };
+      vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...restoredData }));
+      vi.mocked(browser.storage.local.set).mockImplementation(async (value) => {
+        Object.assign(restoredData, value);
+      });
+      root = createRoot(container);
+      await act(async () => {
+        root.render(<App />);
+      });
+      await flushEffects();
+      expect((container.querySelector(".result-screen") as HTMLElement).hidden).toBe(false);
+      expect(findButton(container, "Copy").closest("[hidden]")).toBeNull();
+      expect(findButton(container, "Save to Library").closest("[hidden]")).toBeNull();
+      const saveSpy = vi.spyOn(apiClient, "savePrompt").mockResolvedValue({ prompt_id: "saved" });
+      await act(async () => {
+        findButton(container, "Save to Library").click();
+      });
+      expect(saveSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          original_text: "Original | prompt",
+          improved_text: "Keep this successful result",
+        }),
+      );
+      expect(restoredData.library).toEqual([
+        expect.objectContaining({
+          original: "Original | prompt",
+          improved: "Keep this successful result",
+        }),
+      ]);
+      expect(container.textContent).toContain("Saved!");
+    },
+  );
+
+  it("keeps the submitted goal during processing and after sidepanel tab switches", async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 1, url: "https://claude.ai/new" },
+    ] as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "IMPROVE_REQUEST"
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App viewMode="sidepanel" />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Optimize for Claude");
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    const activation = vi.mocked(browser.tabs.onActivated.addListener).mock.calls[0][0];
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 2, url: "https://chatgpt.com" },
+    ] as never);
+    await act(async () => {
+      activation({ tabId: 2, windowId: 1 });
+    });
+    expect(container.querySelector(".processing-context")?.textContent).toContain("Claude");
+    expect(container.querySelector(".processing-context")?.textContent).not.toContain("ChatGPT");
+    await act(async () => {
+      finish({
+        type: "IMPROVE_RESULT",
+        payload: { request_id: "claude-result", improved_text: "Claude-optimized prompt" },
+      });
+    });
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 3, url: "https://www.perplexity.ai" },
+    ] as never);
+    await act(async () => {
+      activation({ tabId: 3, windowId: 1 });
+    });
+    expect(container.querySelector(".goal-badge")?.textContent).toBe("Claude");
+    const draft = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.filter(([data]) => "popup_session_draft" in data)
+      .at(-1)?.[0].popup_session_draft;
+    expect(draft).toMatchObject({
+      goal: "perplexity",
+      result_context: { mode: "ai", goal: "claude" },
+    });
+    await act(async () => {
+      findButton(container, "Edit original").click();
+    });
+    expect((container.querySelector('input[value="perplexity"]') as HTMLInputElement).checked).toBe(
+      true,
+    );
+  });
+
+  it.each([true, false])(
+    "restores the completed request's goal separately from the next-input goal (saved context: %s)",
+    async (hasSavedContext) => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({
+        installation_id: "i",
+        audience_mode: "ai",
+        library: [],
+        popup_session_draft: {
+          activeTab: "improve",
+          optimizer_screen: "result",
+          original: "Original",
+          improved: "Claude result",
+          changes: [],
+          goal: "chatgpt",
+          result_context: hasSavedContext ? { mode: "ai", goal: "claude" } : undefined,
+          lastRequestId: "r",
+          lastRequestContextKey: "ai|claude|Original",
+          lastModel: null,
+          lastLatencyMs: null,
+          attemptN: 1,
+          updatedAt: Date.now(),
+        },
+      });
+      await act(async () => {
+        root.render(<App viewMode="sidepanel" />);
+      });
+      await flushEffects();
+      expect(container.querySelector(".goal-badge")?.textContent).toBe("Claude");
+      expect((container.querySelector('input[value="chatgpt"]') as HTMLInputElement).checked).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each(["popup", "sidepanel"] as const)(
+    "prevents a mid-flight switch from %s without relying on unmount",
+    async (viewMode) => {
+      const close = vi.spyOn(window, "close").mockImplementation(() => {});
+      const open = vi.fn().mockResolvedValue(undefined);
+      Object.assign(browser, { sidePanel: { open } });
+      vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 1 }] as never);
+      vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+        (msg as { type?: string }).type === "IMPROVE_REQUEST"
+          ? new Promise(() => {})
+          : { ok: true },
+      );
+      await act(async () => {
+        root.render(<App viewMode={viewMode} />);
+      });
+      await flushEffects();
+      await setOriginalPrompt(container, "Pending prompt");
+      await act(async () => {
+        getImproveButton(container).click();
+      });
+      const toggle = container.querySelector(".layout-toggle-btn") as HTMLButtonElement;
+      expect(toggle.disabled).toBe(true);
+      await act(async () => {
+        toggle.click();
+      });
+      expect(close).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+    },
+  );
+
+  it("blocks submission while a popup-to-panel transition is pending", async () => {
+    let finishOpen!: () => void;
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    Object.assign(browser, {
+      sidePanel: {
+        open: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              finishOpen = resolve;
+            }),
+        ),
+      },
+    });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 1 }] as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "IMPROVE_REQUEST" ? new Promise(() => {}) : { ok: true },
+    );
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Pending prompt");
+    await act(async () => {
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
+    });
+    await act(async () => {
+      getImproveButton(container).click();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true }));
+    });
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
+    expect(getImproveButton(container).disabled).toBe(true);
+    await act(async () => {
+      finishOpen();
+    });
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".processing-screen")).toBeNull();
+  });
+
+  it("allows submission again if opening the sidepanel fails", async () => {
+    Object.assign(browser, {
+      sidePanel: { open: vi.fn().mockRejectedValue(new Error("Open failed")) },
+    });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 1 }] as never);
+    await act(async () => {
+      root.render(<App />);
+    });
+    await flushEffects();
+    await setOriginalPrompt(container, "Retry prompt");
+    await act(async () => {
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
+    });
+    expect(getImproveButton(container).disabled).toBe(false);
+    await act(async () => {
+      getImproveButton(container).click();
+    });
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "IMPROVE_REQUEST" }),
+    );
   });
 
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
@@ -809,6 +1232,7 @@ describe("App", () => {
   });
 
   it("inserts improved text into the active tab", async () => {
+    vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };
       if (typed.type === "GET_LIMITS") {
@@ -865,6 +1289,13 @@ describe("App", () => {
       type: "PASTE_TEXT",
       payload: { text: "Improved prompt" },
     });
+    expect(container.textContent).toContain("Inserted!");
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "TRACK_EVENT",
+        payload: expect.objectContaining({ name: "result_copied" }),
+      }),
+    );
   });
 
   it("auto-detects AI goal from active tab hostname", async () => {

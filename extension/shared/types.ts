@@ -18,6 +18,11 @@ export type ContentImproveGoal =
 
 export type ImproveGoal = AiImproveGoal | ContentImproveGoal;
 
+export interface OptimizerRequestContext {
+  mode: AudienceMode;
+  goal: ImproveGoal;
+}
+
 export interface ImproveRequest {
   text: string;
   audience_mode?: AudienceMode;

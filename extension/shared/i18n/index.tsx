@@ -1,3 +1,4 @@
+import browser from "webextension-polyfill";
 import { createContext, useContext, type ReactNode } from "react";
 import { en, type TranslationKeys } from "./en";
 import { ru } from "./ru";
@@ -5,7 +6,7 @@ import { ru } from "./ru";
 // Detect browser language once at module load — no runtime overhead
 function detectLocale(): "en" | "ru" {
   try {
-    const lang = chrome.i18n.getUILanguage();
+    const lang = browser.i18n.getUILanguage();
     if (lang.startsWith("ru")) return "ru";
   } catch {
     // Fallback: use navigator.language if chrome.i18n is unavailable (e.g. in tests)

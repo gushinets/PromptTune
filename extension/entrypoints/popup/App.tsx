@@ -2,6 +2,8 @@ import { countPromptCharacters, parseInputLengthError } from "@shared/prompt-len
 import { useState, useEffect, useCallback, useMemo, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { PromptForm } from "./components/PromptForm";
+import { ProcessingScreen } from "./components/ProcessingScreen";
+import { OptimizerResult } from "./components/OptimizerResult";
 import { ActionBar } from "./components/ActionBar";
 import { SiteIcons } from "./components/SiteIcons";
 import { Library } from "./components/Library";
@@ -25,8 +27,16 @@ import {
   extractRateLimitResponse,
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
+import { isOptimizerRequestContext } from "@shared/goal-options";
+import { createImproveOwner, type ImproveOwner } from "@shared/improve-owner";
 import { trackEvent } from "@shared/analytics";
-import type { AiImproveGoal, AudienceMode, ImproveGoal, PromptInputLimit } from "@shared/types";
+import type {
+  AiImproveGoal,
+  AudienceMode,
+  ImproveGoal,
+  PromptInputLimit,
+  OptimizerRequestContext,
+} from "@shared/types";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
@@ -78,24 +88,6 @@ export interface ErrorInfo {
 
 const APP_ICON_SRC = browser.runtime.getURL("icon-32.png");
 
-function BookmarkIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
-    </svg>
-  );
-}
-
 function LayoutSidebarRightIcon({
   className,
   mirrored = false,
@@ -118,25 +110,6 @@ function LayoutSidebarRightIcon({
     >
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M15 4v16" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      width="12"
-      height="12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
@@ -215,7 +188,14 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [modeReady, setModeReady] = useState(false);
   const [detectedAiGoal, setDetectedAiGoal] = useState<AiImproveGoal>("general");
   const [goal, setGoal] = useState<ImproveGoal>("general");
+  const [processingContext, setProcessingContext] = useState<OptimizerRequestContext | null>(null);
+  const [resultContext, setResultContext] = useState<OptimizerRequestContext | null>(null);
   const [loading, setLoading] = useState(false);
+  const [layoutTransition, setLayoutTransition] = useState(false);
+  const layoutTransitionRef = useRef(false);
+  const [editingOriginal, setEditingOriginal] = useState(false);
+  const activeRequestRef = useRef<string | null>(null);
+  const activeOwnerRef = useRef<ImproveOwner | null>(null);
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
@@ -223,7 +203,6 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showProComingSoon, setShowProComingSoon] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [siteHostname, setSiteHostname] = useState<string | undefined>(undefined);
   const [siteResolved, setSiteResolved] = useState(false);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
@@ -232,7 +211,6 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
   const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
-  const settingsRef = useRef<HTMLDivElement | null>(null);
   const hasUserSelectedGoalRef = useRef(false);
   const hasTrackedPopupOpenedRef = useRef(false);
 
@@ -270,6 +248,19 @@ export function App({ viewMode = "popup" }: AppProps) {
         setActiveTab(draft.activeTab);
         setOriginal(draft.original);
         setImproved(draft.improved);
+        const [requestMode, requestGoal] = draft.lastRequestContextKey?.split("|") ?? [];
+        const legacyContext = { mode: requestMode, goal: requestGoal };
+        const fallbackContext = isOptimizerRequestContext(legacyContext)
+          ? legacyContext
+          : { mode, goal: draft.goal };
+        setResultContext(
+          isOptimizerRequestContext(draft.result_context)
+            ? draft.result_context
+            : isOptimizerRequestContext(fallbackContext)
+              ? fallbackContext
+              : null,
+        );
+        setEditingOriginal(draft.optimizer_screen === "input");
         setChanges(draft.changes);
         setLastRequestId(draft.lastRequestId);
         setLastRequestContextKey(draft.lastRequestContextKey);
@@ -327,6 +318,8 @@ export function App({ viewMode = "popup" }: AppProps) {
     if (!sessionDraftLoaded) return;
 
     void setPopupSessionDraft({
+      optimizer_screen: improved && !editingOriginal ? "result" : "input",
+      result_context: resultContext,
       activeTab,
       original,
       improved,
@@ -344,6 +337,8 @@ export function App({ viewMode = "popup" }: AppProps) {
     changes,
     goal,
     improved,
+    editingOriginal,
+    resultContext,
     lastLatencyMs,
     lastModel,
     lastRequestContextKey,
@@ -351,21 +346,6 @@ export function App({ viewMode = "popup" }: AppProps) {
     original,
     sessionDraftLoaded,
   ]);
-
-  useEffect(() => {
-    if (!showSettings) return;
-
-    function handlePointerDown(event: MouseEvent) {
-      if (!settingsRef.current?.contains(event.target as Node)) {
-        setShowSettings(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-    };
-  }, [showSettings]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -399,20 +379,38 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
+    if (activeRequestRef.current || layoutTransitionRef.current) return;
+    layoutTransitionRef.current = true;
+    setLayoutTransition(true);
+    let closing = false;
     try {
       if (viewMode === "popup") {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab?.windowId != null) {
-          await chrome.sidePanel.open({ windowId: tab.windowId });
+        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        if (activeRequestRef.current) return;
+        const sidePanel = (
+          browser as typeof browser & {
+            sidePanel?: { open: (options: { windowId: number }) => Promise<void> };
+          }
+        ).sidePanel;
+        if (tab?.windowId != null && sidePanel) {
+          await sidePanel.open({ windowId: tab.windowId });
+          if (activeRequestRef.current) return;
+          window.close();
+          closing = true;
         }
-        window.close();
       } else {
         // Cannot open popup programmatically — just close sidebar
         // User needs to click the extension icon to open popup
         window.close();
+        closing = true;
       }
     } catch {
       // fail silently
+    } finally {
+      if (!closing) {
+        layoutTransitionRef.current = false;
+        setLayoutTransition(false);
+      }
     }
   }, [viewMode]);
 
@@ -509,15 +507,10 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
-    if (isOriginalOverLimit) return;
+    if (isOriginalOverLimit || activeRequestRef.current || layoutTransitionRef.current) return;
     const trimmed = original.trim();
     if (!trimmed) return;
     if (!audienceMode) return;
-
-    if (isExhausted) {
-      setError({ type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) });
-      return;
-    }
 
     const currentRequestContextKey = `${audienceMode}|${goal}|${trimmed}`;
     const isRegeneration =
@@ -525,28 +518,63 @@ export function App({ viewMode = "popup" }: AppProps) {
       !!lastRequestContextKey &&
       lastRequestContextKey === currentRequestContextKey;
 
+    const requestKey = crypto.randomUUID();
+    activeRequestRef.current = requestKey;
+    setProcessingContext({ mode: audienceMode, goal });
     setLoading(true);
     setError(null);
-    setImproved("");
-    setChanges([]);
 
+    let owner: ImproveOwner | null = null;
+    let submitted = false;
     try {
+      if (isExhausted) {
+        // A canceled request may refund quota after a quick retry received 429.
+        // Revalidate the cached zero so an open panel can recover without reopening.
+        const limits = extractRateLimitResponse(
+          await browser.runtime.sendMessage({ type: "GET_LIMITS" }),
+        );
+        if (activeRequestRef.current !== requestKey) return;
+        if (!limits) throw new Error(t.tooltipUnavailable);
+        setRateLimit({
+          remaining: limits.per_day_remaining,
+          total: limits.per_day_total,
+        });
+        setLimitsUnavailable(false);
+        setLimitsLoaded(true);
+        if (limits.per_day_remaining <= 0) {
+          setError({ type: "rate-limit", message: t.errorRateLimitMessage(limits.per_day_total) });
+          return;
+        }
+      }
+      owner = createImproveOwner(requestKey);
+      activeOwnerRef.current = owner;
+      await owner.ready;
+      if (activeRequestRef.current !== requestKey) return;
+      submitted = true;
+      setEditingOriginal(false);
+      setImproved("");
+      setChanges([]);
+      setResultContext(null);
       const nextAttempt = isRegeneration ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
         payload: {
           text: trimmed,
+          client_request_id: requestKey,
+          owner_required: true,
           audience_mode: audienceMode,
           goal,
           site: siteHostname,
           analytics_context: { source: viewMode, view_mode: viewMode, attempt_n: nextAttempt },
         },
       });
+      if (activeRequestRef.current !== requestKey) return;
       const result = extractImproveResponse(response);
 
       if (result) {
         if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
         setImproved(result.improved_text);
+        setResultContext({ mode: audienceMode, goal });
         setChanges(result.changes ?? []);
         setLastRequestId(result.request_id);
         setLastRequestContextKey(currentRequestContextKey);
@@ -581,6 +609,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         throw new Error(describeUnexpectedBackgroundResponse(response));
       }
     } catch (err: unknown) {
+      if (activeRequestRef.current !== requestKey) return;
       const info = mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
@@ -589,7 +618,14 @@ export function App({ viewMode = "popup" }: AppProps) {
         setLimitsLoaded(true);
       }
     } finally {
-      setLoading(false);
+      owner?.close();
+      if (activeOwnerRef.current === owner) activeOwnerRef.current = null;
+      if (activeRequestRef.current === requestKey) {
+        if (!submitted && improved) setEditingOriginal(false);
+        activeRequestRef.current = null;
+        setLoading(false);
+        setProcessingContext(null);
+      }
     }
   }, [
     audienceMode,
@@ -601,15 +637,82 @@ export function App({ viewMode = "popup" }: AppProps) {
     lastRequestContextKey,
     mapErrorToToast,
     original,
-    rateLimit.total,
+    improved,
     siteHostname,
     t,
     viewMode,
   ]);
 
+  const handleCancel = useCallback(() => {
+    const requestKey = activeRequestRef.current;
+    activeRequestRef.current = null;
+    activeOwnerRef.current?.close();
+    activeOwnerRef.current = null;
+    setLoading(false);
+    setProcessingContext(null);
+    setEditingOriginal(true);
+    setError(null);
+    if (requestKey)
+      void browser.runtime
+        .sendMessage({ type: "CANCEL_IMPROVE", payload: { client_request_id: requestKey } })
+        .catch(() => undefined);
+  }, []);
+
+  useEffect(
+    () => () => {
+      const requestKey = activeRequestRef.current;
+      activeRequestRef.current = null;
+      activeOwnerRef.current?.close();
+      activeOwnerRef.current = null;
+      if (requestKey)
+        void browser.runtime
+          .sendMessage({ type: "CANCEL_IMPROVE", payload: { client_request_id: requestKey } })
+          .catch(() => undefined);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Enter" ||
+        !(event.ctrlKey || event.metaKey) ||
+        event.isComposing ||
+        event.repeat ||
+        activeTab !== "improve" ||
+        loading ||
+        (improved && !editingOriginal)
+      )
+        return;
+      event.preventDefault();
+      void handleImprove();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTab, loading, improved, editingOriginal, handleImprove]);
+
+  const handleNew = useCallback(() => {
+    setOriginal("");
+    setImproved("");
+    setResultContext(null);
+    setChanges([]);
+    setError(null);
+    setEditingOriginal(false);
+    setLastRequestId(null);
+    setLastRequestContextKey(null);
+    setLastModel(null);
+    setLastLatencyMs(null);
+    setAttemptN(0);
+  }, []);
+
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (isOriginalOverLimit || saveInFlightRef.current) return false;
-    const originalTrimmed = original.trim();
+    const requestParts = lastRequestContextKey?.split("|");
+    const submittedOriginal =
+      requestParts && isOptimizerRequestContext({ mode: requestParts[0], goal: requestParts[1] })
+        ? requestParts.slice(2).join("|").trim()
+        : "";
+    const originalTrimmed = submittedOriginal || original.trim();
     const improvedTrimmed = improved.trim();
     if (!originalTrimmed || !improvedTrimmed) return false;
     saveInFlightRef.current = true;
@@ -647,7 +750,16 @@ export function App({ viewMode = "popup" }: AppProps) {
     } finally {
       saveInFlightRef.current = false;
     }
-  }, [original, improved, isOriginalOverLimit, refreshLibraryCount, mapErrorToToast, viewMode, t]);
+  }, [
+    original,
+    improved,
+    lastRequestContextKey,
+    isOriginalOverLimit,
+    refreshLibraryCount,
+    mapErrorToToast,
+    viewMode,
+    t,
+  ]);
 
   const handleDismissError = useCallback(() => setError(null), []);
 
@@ -658,17 +770,21 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   const handleModeSelection = useCallback(
     async (mode: AudienceMode) => {
+      if (mode === audienceMode) return;
       hasUserSelectedGoalRef.current = false;
       setAudienceModeState(mode);
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
-      setShowSettings(false);
+      setEditingOriginal(true);
+      setImproved("");
+      setResultContext(null);
+      setChanges([]);
       try {
         await setAudienceMode(mode);
       } catch {
         // Ignore storage write failures; mode stays active for current popup session.
       }
     },
-    [detectedAiGoal],
+    [audienceMode, detectedAiGoal],
   );
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -684,57 +800,29 @@ export function App({ viewMode = "popup" }: AppProps) {
 
         <div className="header-actions">
           {audienceMode && (
-            <div className="settings-menu mode-switch-menu" ref={settingsRef}>
+            <div className="mode-toggle" role="group" aria-label={t.modeLabel}>
               <button
-                type="button"
-                className={`mode-badge mode-switch-btn ${audienceMode}`}
-                title={t.settingsOpen}
-                aria-label={t.settingsOpen}
-                data-testid="mode-switch-trigger"
-                aria-expanded={showSettings}
-                onClick={() => setShowSettings((current) => !current)}
+                className={audienceMode === "ai" ? "selected" : ""}
+                aria-pressed={audienceMode === "ai"}
+                data-mode="ai"
+                disabled={loading || layoutTransition}
+                onClick={() => handleModeSelection("ai")}
               >
-                <span>{audienceMode === "ai" ? t.modeBadgeAi : t.modeBadgeContent}</span>
-                <ChevronDownIcon className={`mode-switch-chevron${showSettings ? " open" : ""}`} />
+                <span aria-hidden="true">{t.modeShortAi}</span>
+                <span className="sr-only">{t.modeBadgeAi}</span>
               </button>
-              {showSettings && (
-                <div className="settings-popover" role="dialog" aria-label={t.settingsTitle}>
-                  <p className="settings-hint">{t.settingsModeHint}</p>
-                  <div className="settings-mode-field">
-                    <button
-                      type="button"
-                      className={`settings-mode-card${audienceMode === "ai" ? " active" : ""}`}
-                      data-mode="ai"
-                      onClick={() => handleModeSelection("ai")}
-                    >
-                      <strong>{t.onboardingAiTitle}</strong>
-                    </button>
-                    <button
-                      type="button"
-                      className={`settings-mode-card${audienceMode === "content" ? " active" : ""}`}
-                      data-mode="content"
-                      onClick={() => handleModeSelection("content")}
-                    >
-                      <strong>{t.onboardingContentTitle}</strong>
-                    </button>
-                  </div>
-                </div>
-              )}
+              <button
+                className={audienceMode === "content" ? "selected" : ""}
+                aria-pressed={audienceMode === "content"}
+                data-mode="content"
+                disabled={loading || layoutTransition}
+                onClick={() => handleModeSelection("content")}
+              >
+                <span aria-hidden="true">{t.modeShortContent}</span>
+                <span className="sr-only">{t.modeBadgeContent}</span>
+              </button>
             </div>
           )}
-          {/* Layout toggle button */}
-          <button
-            type="button"
-            className="layout-toggle-btn"
-            title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
-            onClick={handleLayoutToggle}
-            aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
-          >
-            <LayoutSidebarRightIcon
-              className="layout-toggle-icon"
-              mirrored={viewMode === "sidepanel"}
-            />
-          </button>
 
           {/* Rate-limit badge */}
           <div
@@ -750,12 +838,24 @@ export function App({ viewMode = "popup" }: AppProps) {
           >
             <button
               type="button"
-              className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warn" : ""}`}
+              className={`rate-limit-badge${isExhausted ? " exhausted" : isWarning ? " warning" : ""}`}
+              title={rateLimitBadgeText}
               aria-describedby={showTooltip ? RATE_LIMIT_TOOLTIP_ID : undefined}
               aria-expanded={showRateLimitTooltip ? showTooltip : undefined}
             >
               {showRateLimitTooltip && <span className="status-dot" />}
-              {rateLimitBadgeText}
+              <span className="sr-only">{rateLimitBadgeText}</span>
+              <span aria-hidden="true">
+                {BACKEND_MODE === "fastapi" && limitsLoaded
+                  ? rateLimit.total > 0
+                    ? `${rateLimit.remaining}/${rateLimit.total}`
+                    : String(rateLimit.remaining)
+                  : BACKEND_MODE !== "fastapi"
+                    ? "∞"
+                    : limitsUnavailable
+                      ? "—"
+                      : "…"}
+              </span>
             </button>
             {showRateLimitTooltip && showTooltip && (
               <div className="rate-limit-tooltip" id={RATE_LIMIT_TOOLTIP_ID} role="tooltip">
@@ -803,7 +903,6 @@ export function App({ viewMode = "popup" }: AppProps) {
           className={`tab${activeTab === "improve" ? " active" : ""}`}
           onClick={() => setActiveTab("improve")}
         >
-          <img className="tab-icon" src={APP_ICON_SRC} alt="" aria-hidden="true" />
           {t.tabImprove}
         </button>
         <button
@@ -813,7 +912,6 @@ export function App({ viewMode = "popup" }: AppProps) {
             refreshLibraryCount();
           }}
         >
-          <BookmarkIcon className="tab-icon" />
           {t.tabLibrary}
           {libraryCount > 0 && <span className="tab-badge">{libraryCount}</span>}
         </button>
@@ -847,23 +945,62 @@ export function App({ viewMode = "popup" }: AppProps) {
               </div>
             )}
             {!modeReady ? null : audienceMode ? (
-              <PromptForm
-                original={original}
-                maxInputChars={BACKEND_MODE === "fastapi" ? promptInputMaxChars : null}
-                improved={improved}
-                improvements={changes}
-                mode={audienceMode}
-                goal={goal}
-                loading={loading}
-                onGoalChange={handleGoalChange}
-                onOriginalChange={(text) => {
-                  setOriginal(text);
-                  if (error?.message === t.errorInputTooLong(promptInputMaxChars)) {
-                    setError(null);
-                  }
-                }}
-                onImprove={handleImprove}
-              />
+              <>
+                <PromptForm
+                  original={original}
+                  maxInputChars={BACKEND_MODE === "fastapi" ? promptInputMaxChars : null}
+                  mode={audienceMode}
+                  goal={goal}
+                  loading={loading || layoutTransition}
+                  hidden={loading || Boolean(improved && !editingOriginal)}
+                  onGoalChange={handleGoalChange}
+                  onOriginalChange={(text) => {
+                    setOriginal(text);
+                    setEditingOriginal(true);
+                    if (error?.message === t.errorInputTooLong(promptInputMaxChars)) setError(null);
+                  }}
+                  onImprove={handleImprove}
+                />
+                {loading && (
+                  <ProcessingScreen
+                    mode={processingContext?.mode ?? audienceMode}
+                    goal={processingContext?.goal ?? goal}
+                    onCancel={handleCancel}
+                  />
+                )}
+                {improved && (
+                  <OptimizerResult
+                    improved={improved}
+                    changes={changes}
+                    goal={resultContext?.goal ?? goal}
+                    hidden={loading || editingOriginal}
+                    onEdit={() => {
+                      setEditingOriginal(true);
+                    }}
+                    onNew={handleNew}
+                    lengthWarning={
+                      isOriginalOverLimit ? t.errorInputTooLong(promptInputMaxChars) : undefined
+                    }
+                    actions={
+                      <>
+                        <ActionBar
+                          improved={improved}
+                          disabled={!improved}
+                          saveDisabled={isOriginalOverLimit}
+                          onSave={handleSave}
+                          requestId={lastRequestId}
+                          source={viewMode}
+                          model={lastModel}
+                          latencyMs={lastLatencyMs}
+                        />
+                        {FEATURES.OPEN_AND_PASTE && (
+                          <SiteIcons improved={improved} disabled={!improved} />
+                        )}
+                      </>
+                    }
+                  />
+                )}
+              </>
             ) : (
               <div className="mode-onboarding">
                 <h3>{t.settingsModeRequiredTitle}</h3>
@@ -888,23 +1025,27 @@ export function App({ viewMode = "popup" }: AppProps) {
                 </button>
               </div>
             )}
-            <ActionBar
-              improved={improved}
-              disabled={!improved}
-              saveDisabled={isOriginalOverLimit}
-              onSave={handleSave}
-              requestId={lastRequestId}
-              source={viewMode}
-              model={lastModel}
-              latencyMs={lastLatencyMs}
-            />
-            {FEATURES.OPEN_AND_PASTE && <SiteIcons improved={improved} disabled={!improved} />}
           </>
         ) : (
           <Library onCountChange={setLibraryCount} />
         )}
       </div>
-      <RatingBar />
+      <footer className="utility-footer">
+        <RatingBar />
+        <button
+          type="button"
+          className="layout-toggle-btn"
+          disabled={loading || layoutTransition}
+          title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
+          aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
+          onClick={handleLayoutToggle}
+        >
+          <LayoutSidebarRightIcon
+            className="layout-toggle-icon"
+            mirrored={viewMode === "sidepanel"}
+          />
+        </button>
+      </footer>
     </div>
   );
 }

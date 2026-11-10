@@ -1,5 +1,37 @@
+import type { ImproveGoal } from "../types";
 import { formatCharacterCount } from "../prompt-length";
 export const en = {
+  modeShortAi: "AI",
+  modeShortContent: "Content",
+  btnCancel: "Cancel",
+  btnEditOriginal: "Edit original",
+  btnNew: "New",
+  processingTitle: "Improving your prompt…",
+  processingWaiting:
+    "Waiting for the improved prompt. These steps illustrate the optimization process.",
+  processingStepIntent: "Analyzing the intent",
+  processingStepContext: "Refining role and context",
+  processingStepStructure: "Structuring the output",
+  processingStepConstraints: "Checking constraints",
+  insertHint: "Insert directly into the AI chat input",
+  errorCopyMessage: "Could not copy the prompt. Select the result and copy it manually.",
+  errorNoEditableField:
+    "No supported input field found. Open an AI chat and focus its prompt field.",
+  goalHint: (goal: ImproveGoal) =>
+    ({
+      general: "A clear role, task, context and output format.",
+      chatgpt: "Clear instructions and a step-by-step response format.",
+      claude: "Distinct context, task and output requirements for Claude.",
+      perplexity: "Source requirements and up-to-date information.",
+      structured: "Markdown sections and a predictable output structure.",
+      deep_research: "A research plan, evidence and confidence levels.",
+      seo_article: "A prompt for an SEO article with structure and keywords.",
+      product_description: "A prompt focused on product value, benefits and key details.",
+      ad_copy: "A prompt for persuasive copy with a clear call to action.",
+      email: "A prompt for an email with an audience, purpose and next step.",
+      landing_page: "A prompt for a landing page with an offer and supporting evidence.",
+    })[goal] ?? "",
+
   // Header
   appName: "PromptOptimizer",
   modeBadgeAi: "AI Mode",
@@ -78,10 +110,13 @@ export const en = {
   btnInsert: "Insert",
   btnInserted: "Inserted!",
   btnSaveToLibrary: "Save to Library",
+  btnSaveShort: "Save",
   btnSaved: "Saved!",
 
   // LibraryItem
   siteGeneral: "General",
+  libraryExpand: "Read full entry",
+  libraryCollapse: "Collapse",
   labelOriginal: "Original:",
   labelImproved: "Improved:",
   timeJustNow: "Just now",
@@ -135,4 +170,6 @@ export const en = {
   errorEmptyResponse: "The backend returned an empty improved prompt.",
 } as const;
 
-export type TranslationKeys = typeof en;
+export type TranslationKeys = {
+  [K in keyof typeof en]: (typeof en)[K] extends string ? string : (typeof en)[K];
+};

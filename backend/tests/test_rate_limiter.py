@@ -214,3 +214,24 @@ async def test_refund_restores_consumed_quota():
     assert allowed is True
     assert refunded["per_day_remaining"] == consumed["per_day_remaining"] + 1
     assert refunded["per_minute_remaining"] == consumed["per_minute_remaining"] + 1
+
+
+@pytest.mark.asyncio
+async def test_refund_uses_reserved_buckets_across_midnight_and_only_once():
+    redis_mock = InMemoryRedisMock()
+    current = datetime(2026, 3, 19, 23, 59, tzinfo=UTC)
+    limiter = RateLimiter(redis_mock, now=lambda: current)
+    await limiter.check("A", "1.1.1.1")
+    await RateLimiter(redis_mock, now=lambda: current).check("A", "1.1.1.1")
+    bucket = await limiter.resolve_bucket("A", "1.1.1.1")
+    current = datetime(2026, 3, 20, 0, 0, tzinfo=UTC)
+    # Another request in the new window must keep its charge.
+    await RateLimiter(redis_mock, now=lambda: current).check("A", "1.1.1.1")
+
+    await limiter.refund("A", "1.1.1.1")
+    await limiter.refund("A", "1.1.1.1")
+
+    assert redis_mock.store[f"rl:{bucket}:d:20260319"] == "1"
+    assert redis_mock.store[f"rl:{bucket}:m:202603192359"] == "1"
+    assert redis_mock.store[f"rl:{bucket}:d:20260320"] == "1"
+    assert redis_mock.store[f"rl:{bucket}:m:202603200000"] == "1"
