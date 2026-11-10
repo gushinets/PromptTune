@@ -20,7 +20,7 @@ import {
   setAudienceMode,
   setPopupSessionDraft,
 } from "@shared/storage";
-import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS } from "@shared/constants";
+import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS, LIMITS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
   describeUnexpectedBackgroundResponse,
@@ -421,8 +421,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           await sidePanel.open({ windowId: tab.windowId });
           if (activeRequestRef.current) return;
           if (sourceTabId !== undefined) {
+            const id = crypto.randomUUID();
             await browser.storage.local.set({
-              [panelHandoffKey(tab.windowId)]: { id: crypto.randomUUID(), draft: sessionDraft },
+              [panelHandoffKey(tab.windowId, id)]: {
+                id,
+                draft: sessionDraft,
+                expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+              },
             });
           }
           window.close();

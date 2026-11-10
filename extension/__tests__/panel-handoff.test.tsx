@@ -8,6 +8,7 @@ let host: HTMLDivElement;
 let root: Root;
 const selected = {
   id: "selection-session",
+  expiresAt: Date.now() + 300000,
   draft: {
     sourceTabId: 42,
     optimizer_screen: "result",
@@ -56,11 +57,13 @@ it("loads a handoff when a new panel starts and retains the source for Insert", 
   vi.mocked(browser.storage.local.get).mockResolvedValue({
     audience_mode: "ai",
     library: [],
-    optimizer_panel_handoff_7: selected,
+    "optimizer_panel_handoff_7_selection-session": selected,
   });
   await act(async () => root.render(<SidepanelApp />));
   expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
-  expect(browser.storage.local.remove).toHaveBeenCalledWith("optimizer_panel_handoff_7");
+  expect(browser.storage.local.remove).toHaveBeenCalledWith(
+    "optimizer_panel_handoff_7_selection-session",
+  );
   await act(async () => {
     Array.from(host.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("Insert"))!
@@ -74,13 +77,14 @@ it("loads a handoff when a new panel starts and retains the source for Insert", 
 
 it("updates an already-open panel only for handoffs addressed to its window", async () => {
   await act(async () => root.render(<SidepanelApp />));
-  await change("optimizer_panel_handoff_8", selected);
+  await change("optimizer_panel_handoff_8_other-session", selected);
   expect(host.querySelector(".result-screen")).toBeNull();
-  await change("optimizer_panel_handoff_7", selected);
+  await change("optimizer_panel_handoff_7_selection-session", selected);
   expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
   // A second selection must replace the displayed session, rather than restore its old result.
-  await change("optimizer_panel_handoff_7", {
+  await change("optimizer_panel_handoff_7_second-selection", {
     id: "second-selection",
+    expiresAt: Date.now() + 300000,
     draft: {
       ...selected.draft,
       original: "Second selection",
@@ -96,6 +100,73 @@ it("renders the normal app when the initial handoff read fails", async () => {
   vi.mocked(browser.storage.local.get).mockRejectedValueOnce(new Error("storage failed"));
   await act(async () => root.render(<SidepanelApp />));
   expect(host.querySelector(".original-textarea")).not.toBeNull();
-  await change("optimizer_panel_handoff_7", selected);
+  await change("optimizer_panel_handoff_7_selection-session", selected);
+  expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+});
+
+it.each(["expired", "legacy"])(
+  "does not restore a %s panel handoff at startup or from an event",
+  async (kind) => {
+    const stale = { ...selected, expiresAt: kind === "expired" ? Date.now() - 1 : undefined };
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      audience_mode: "ai",
+      library: [],
+      "optimizer_panel_handoff_7_selection-session": stale,
+    });
+    await act(async () => root.render(<SidepanelApp />));
+    expect(host.querySelector(".result-screen")).toBeNull();
+    expect((host.querySelector("textarea") as HTMLTextAreaElement).value).toBe("");
+    await change("optimizer_panel_handoff_7_selection-session", selected);
+    expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+    await change("optimizer_panel_handoff_7_selection-session", {
+      ...stale,
+      draft: { ...selected.draft, improved: "Stale result" },
+    });
+    expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+    expect(host.querySelector(".result-screen")?.textContent).not.toContain("Stale result");
+  },
+);
+
+it("takes the newest pending handoff and retires older payloads so reopening cannot replay them", async () => {
+  const olderKey = "optimizer_panel_handoff_7_older";
+  const newerKey = "optimizer_panel_handoff_7_newer";
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    [olderKey]: { ...selected, id: "older", expiresAt: Date.now() + 60000 },
+    [newerKey]: {
+      ...selected,
+      id: "newer",
+      expiresAt: Date.now() + 300000,
+      draft: { ...selected.draft, improved: "Newest result" },
+    },
+    optimizer_panel_handoff_8_other: { ...selected },
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  expect(host.querySelector(".result-screen")?.textContent).toContain("Newest result");
+  expect(browser.storage.local.remove).toHaveBeenCalledWith(newerKey);
+  expect(browser.storage.local.remove).toHaveBeenCalledWith([olderKey]);
+  expect(browser.storage.local.remove).not.toHaveBeenCalledWith([
+    "optimizer_panel_handoff_8_other",
+  ]);
+});
+
+it("does not let cleanup deletion events discard a live handoff during startup", async () => {
+  let finishRead!: (value: Record<string, unknown>) => void;
+  vi.mocked(browser.storage.local.get).mockImplementation(async (key) => {
+    if (key === null)
+      return new Promise((resolve) => {
+        finishRead = resolve;
+      });
+    return { audience_mode: "ai", library: [] };
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  await change("optimizer_panel_handoff_7_expired", undefined);
+  await act(async () =>
+    finishRead({
+      optimizer_panel_handoff_7_live: selected,
+      optimizer_panel_handoff_7_expired: { ...selected, expiresAt: Date.now() - 1 },
+    }),
+  );
   expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
 });

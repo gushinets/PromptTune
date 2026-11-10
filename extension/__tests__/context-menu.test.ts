@@ -140,6 +140,17 @@ it("removes an unconsumed selection on the cleanup alarm without touching live s
     optimizer_selection_abandoned: { text: "Never loaded", expiresAt: Date.now() - 1 },
     optimizer_selection_legacy: { text: "Old version without expiry" },
     optimizer_selection_live: { text: "Loading", expiresAt: Date.now() + 300000 },
+    optimizer_panel_handoff_7: {
+      id: "expired-panel",
+      draft: { original: "Old" },
+      expiresAt: Date.now() - 1,
+    },
+    optimizer_panel_handoff_8: { id: "legacy-panel", draft: { original: "Legacy" } },
+    optimizer_panel_handoff_9: {
+      id: "live-panel",
+      draft: { original: "New" },
+      expiresAt: Date.now() + 300000,
+    },
     popup_session_draft: { original: "Keep draft" },
     library: [],
   });
@@ -147,6 +158,8 @@ it("removes an unconsumed selection on the cleanup alarm without touching live s
   expect(browser.storage.local.remove).toHaveBeenCalledWith([
     "optimizer_selection_abandoned",
     "optimizer_selection_legacy",
+    "optimizer_panel_handoff_7",
+    "optimizer_panel_handoff_8",
   ]);
 });
 

@@ -82,7 +82,7 @@ and leaves the prompt available in the optimizer window.
 Private/incognito selections are explicitly unsupported: selecting the menu item
 opens an informational notice without storing or passing the selected text to the
 optimizer. The app's draft storage is shared, so private text must not enter that flow.
-Temporary selection handoffs expire after five minutes. Expired or legacy entries
+Temporary selection and side-panel handoffs expire after five minutes. Expired or legacy entries
 are deleted on installation/update, browser startup, and a one-minute cleanup alarm;
 consumption still removes its own entry immediately. Browser suspension can delay
 the cleanup callback, and expired payloads are rejected even before cleanup runs.

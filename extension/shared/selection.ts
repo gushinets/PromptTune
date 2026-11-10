@@ -1,8 +1,9 @@
 import browser from "webextension-polyfill";
+import { LIMITS } from "./constants";
+import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
 
 export const SELECTION_MENU_ID = "optimize-selection";
 export const SELECTION_CLEANUP_ALARM = "optimizer-selection-cleanup";
-const SELECTION_TTL_MS = 5 * 60 * 1000;
 const SELECTION_KEY_PREFIX = "optimizer_selection_";
 
 export interface PromptSelection {
@@ -29,7 +30,7 @@ export async function openSelection(
   }
   const key = `${SELECTION_KEY_PREFIX}${crypto.randomUUID()}`;
   await browser.storage.local.set({
-    [key]: { text, sourceTabId, expiresAt: Date.now() + SELECTION_TTL_MS },
+    [key]: { text, sourceTabId, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS },
   });
   try {
     await browser.windows.create({
@@ -57,7 +58,7 @@ export async function takeSelection(search: string): Promise<PromptSelection | u
   } finally {
     await browser.storage.local.remove(key).catch(() => undefined);
   }
-  if (!isLiveSelection(value, Date.now()) || typeof value?.text !== "string" || !value.text.trim())
+  if (!isLiveHandoff(value, Date.now()) || typeof value?.text !== "string" || !value.text.trim())
     return;
   return {
     text: value.text,
@@ -66,18 +67,20 @@ export async function takeSelection(search: string): Promise<PromptSelection | u
 }
 
 /** Expired and legacy handoffs must never be restored or retained indefinitely. */
-function isLiveSelection(value: unknown, now: number): boolean {
+function isLiveHandoff(value: unknown, now: number): boolean {
   if (!value || typeof value !== "object") return false;
   const expiresAt = (value as { expiresAt?: unknown }).expiresAt;
   return typeof expiresAt === "number" && Number.isFinite(expiresAt) && expiresAt > now;
 }
 
 /** Remove abandoned handoffs without touching drafts, library entries, or live payloads. */
-export async function cleanupExpiredSelections(): Promise<void> {
+export async function cleanupExpiredHandoffs(): Promise<void> {
   const data = await browser.storage.local.get(null);
   const now = Date.now();
   const staleKeys = Object.keys(data).filter(
-    (key) => key.startsWith(SELECTION_KEY_PREFIX) && !isLiveSelection(data[key], now),
+    (key) =>
+      (key.startsWith(SELECTION_KEY_PREFIX) || key.startsWith(PANEL_HANDOFF_PREFIX)) &&
+      !isLiveHandoff(data[key], now),
   );
   if (staleKeys.length) await browser.storage.local.remove(staleKeys);
 }

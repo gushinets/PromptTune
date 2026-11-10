@@ -17,7 +17,7 @@ import {
   openSelection,
   SELECTION_MENU_ID,
   SELECTION_CLEANUP_ALARM,
-  cleanupExpiredSelections,
+  cleanupExpiredHandoffs,
   ensureSelectionCleanupAlarm,
 } from "@shared/selection";
 
@@ -402,7 +402,7 @@ export default defineBackground(() => {
   const cleanupSelections = async () => {
     try {
       await ensureSelectionCleanupAlarm();
-      await cleanupExpiredSelections();
+      await cleanupExpiredHandoffs();
     } catch {
       // Retain the scheduled alarm so transient storage failures can be retried.
     }

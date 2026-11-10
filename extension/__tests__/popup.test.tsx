@@ -612,11 +612,18 @@ describe("App", () => {
       (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
     });
     expect(open).toHaveBeenCalledWith({ windowId: 7 });
-    expect(browser.storage.local.set).toHaveBeenCalledWith({
-      optimizer_panel_handoff_7: expect.objectContaining({
+    const handoff = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.flatMap(([values]) => Object.entries(values))
+      .find(([key]) => key.startsWith("optimizer_panel_handoff_7_"));
+    expect(handoff).toBeDefined();
+    expect(handoff![1]).toEqual(
+      expect.objectContaining({
+        expiresAt: Date.now() + 300000,
         draft: expect.objectContaining({ original: "Selected text", sourceTabId: 42 }),
       }),
-    });
+    );
+    expect(handoff![0]).toBe(`optimizer_panel_handoff_7_${(handoff![1] as { id: string }).id}`);
     expect(close).toHaveBeenCalledOnce();
   });
 
