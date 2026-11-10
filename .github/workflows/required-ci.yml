@@ -22,9 +22,15 @@ jobs:
               per_page: 100,
             });
 
-            const paths = files.map((file) => file.filename);
+            const paths = files.flatMap((file) =>
+              file.previous_filename
+                ? [file.filename, file.previous_filename]
+                : [file.filename]
+            );
             const backendChanged = paths.some((path) =>
-              path.startsWith("backend/") || path.startsWith(".github/workflows/")
+              path.startsWith("backend/") ||
+              path.startsWith("infra/") ||
+              path.startsWith(".github/workflows/")
             );
             const extensionChanged = paths.some((path) =>
               path.startsWith("extension/") ||
@@ -128,6 +134,7 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm run format:check
       - run: npm run test:coverage
 
