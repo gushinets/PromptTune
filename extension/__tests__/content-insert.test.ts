@@ -1,3 +1,4 @@
+// @vitest-environment-options {"url":"https://chatgpt.com/settings"}
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -70,7 +71,7 @@ it.each(["checkbox", "radio", "range", "number", "date", "file", "button"])(
   },
 );
 
-it.each(["text", "search", "tel", "url", "email", "password"])(
+it.each(["text", "search"])(
   "acknowledges insertion into a live text input of type %s",
   async (type) => {
     const field = document.createElement("input");
@@ -174,3 +175,20 @@ it("does not acknowledge a React-controlled composer that rejects the change", a
     });
   }
 });
+
+it.each(["password", "email", "tel", "url"])(
+  "preserves a focused %s field when the supported site has no composer",
+  async (type) => {
+    expect(location.hostname).toBe("chatgpt.com");
+    expect(document.querySelector("#prompt-textarea")).toBeNull();
+    const field = document.createElement("input");
+    field.type = type;
+    field.value = "existing-value";
+    document.body.append(field);
+    field.focus();
+    expect(await handle({ type: "PASTE_TEXT", payload: { text: "New prompt" } })).toEqual({
+      success: false,
+    });
+    expect(field.value).toBe("existing-value");
+  },
+);

@@ -19,11 +19,7 @@ function canInsertIntoField(field: HTMLElement | null): field is HTMLElement {
     return !field.disabled && !field.readOnly;
   }
   if (field instanceof HTMLInputElement) {
-    return (
-      ["text", "search", "tel", "url", "email", "password"].includes(field.type) &&
-      !field.disabled &&
-      !field.readOnly
-    );
+    return ["text", "search"].includes(field.type) && !field.disabled && !field.readOnly;
   }
   return (
     field.isContentEditable ||
