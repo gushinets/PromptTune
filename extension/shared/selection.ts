@@ -1,6 +1,8 @@
 import browser from "webextension-polyfill";
 
 export const SELECTION_MENU_ID = "optimize-selection";
+export const SELECTION_CLEANUP_ALARM = "optimizer-selection-cleanup";
+const SELECTION_TTL_MS = 5 * 60 * 1000;
 const SELECTION_KEY_PREFIX = "optimizer_selection_";
 
 export interface PromptSelection {
@@ -9,9 +11,26 @@ export interface PromptSelection {
 }
 
 /** Open an isolated optimizer window without placing selected text in its URL. */
-export async function openSelection(text: string, sourceTabId?: number): Promise<void> {
+export async function openSelection(
+  text: string,
+  sourceTabId?: number,
+  incognito = false,
+): Promise<void> {
+  // The optimizer persists drafts in shared local storage, so private selections cannot enter it.
+  if (incognito) {
+    await browser.windows.create({
+      url: `${browser.runtime.getURL("popup.html")}?privateSelectionBlocked=1`,
+      incognito: false,
+      type: "popup",
+      width: 380,
+      height: 320,
+    });
+    return;
+  }
   const key = `${SELECTION_KEY_PREFIX}${crypto.randomUUID()}`;
-  await browser.storage.local.set({ [key]: { text, sourceTabId } });
+  await browser.storage.local.set({
+    [key]: { text, sourceTabId, expiresAt: Date.now() + SELECTION_TTL_MS },
+  });
   try {
     await browser.windows.create({
       url: `${browser.runtime.getURL("popup.html")}?selection=${key}`,
@@ -29,18 +48,43 @@ export async function openSelection(text: string, sourceTabId?: number): Promise
 export async function takeSelection(search: string): Promise<PromptSelection | undefined> {
   const key = new URLSearchParams(search).get("selection");
   if (!key?.startsWith(SELECTION_KEY_PREFIX)) return;
-  let value: Partial<PromptSelection> | undefined;
+  let value: (Partial<PromptSelection> & { expiresAt?: number }) | undefined;
   try {
     const data = await browser.storage.local.get(key);
-    value = data[key] as Partial<PromptSelection> | undefined;
+    value = data[key] as typeof value;
   } catch {
     return;
   } finally {
     await browser.storage.local.remove(key).catch(() => undefined);
   }
-  if (typeof value?.text !== "string" || !value.text.trim()) return;
+  if (!isLiveSelection(value, Date.now()) || typeof value?.text !== "string" || !value.text.trim())
+    return;
   return {
     text: value.text,
     sourceTabId: typeof value.sourceTabId === "number" ? value.sourceTabId : undefined,
   };
+}
+
+/** Expired and legacy handoffs must never be restored or retained indefinitely. */
+function isLiveSelection(value: unknown, now: number): boolean {
+  if (!value || typeof value !== "object") return false;
+  const expiresAt = (value as { expiresAt?: unknown }).expiresAt;
+  return typeof expiresAt === "number" && Number.isFinite(expiresAt) && expiresAt > now;
+}
+
+/** Remove abandoned handoffs without touching drafts, library entries, or live payloads. */
+export async function cleanupExpiredSelections(): Promise<void> {
+  const data = await browser.storage.local.get(null);
+  const now = Date.now();
+  const staleKeys = Object.keys(data).filter(
+    (key) => key.startsWith(SELECTION_KEY_PREFIX) && !isLiveSelection(data[key], now),
+  );
+  if (staleKeys.length) await browser.storage.local.remove(staleKeys);
+}
+
+/** Ensure cleanup survives background worker suspension without resetting an existing alarm. */
+export async function ensureSelectionCleanupAlarm(): Promise<void> {
+  if (!(await browser.alarms.get(SELECTION_CLEANUP_ALARM))) {
+    await browser.alarms.create(SELECTION_CLEANUP_ALARM, { periodInMinutes: 1 });
+  }
 }

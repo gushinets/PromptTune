@@ -13,7 +13,13 @@ import type {
   AnalyticsTrackPayload,
 } from "@shared/analytics-types";
 
-import { openSelection, SELECTION_MENU_ID } from "@shared/selection";
+import {
+  openSelection,
+  SELECTION_MENU_ID,
+  SELECTION_CLEANUP_ALARM,
+  cleanupExpiredSelections,
+  ensureSelectionCleanupAlarm,
+} from "@shared/selection";
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_QUEUE_ITEMS = 500;
@@ -393,12 +399,27 @@ export default defineBackground(() => {
     }
   }
 
+  const cleanupSelections = async () => {
+    try {
+      await ensureSelectionCleanupAlarm();
+      await cleanupExpiredSelections();
+    } catch {
+      // Retain the scheduled alarm so transient storage failures can be retried.
+    }
+  };
+  void ensureSelectionCleanupAlarm().catch(() => undefined);
+  browser.runtime.onStartup.addListener(cleanupSelections);
+  browser.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name === SELECTION_CLEANUP_ALARM) await cleanupSelections();
+  });
+
   browser.runtime.onInstalled.addListener(async (details) => {
     browser.contextMenus.create({
       id: SELECTION_MENU_ID,
       title: "Prompt Optimizer",
       contexts: ["selection"],
     });
+    await cleanupSelections();
     if (details.reason !== "install") return;
 
     const installAt = new Date().toISOString();
@@ -417,7 +438,7 @@ export default defineBackground(() => {
   browser.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId !== SELECTION_MENU_ID || !info.selectionText?.trim()) return;
     try {
-      await openSelection(info.selectionText, tab?.id);
+      await openSelection(info.selectionText, tab?.id, tab?.incognito ?? false);
     } catch (error) {
       console.error("Could not open Prompt Optimizer", error);
     }

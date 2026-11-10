@@ -53,6 +53,7 @@ vi.mock("webextension-polyfill", async () => {
         },
       },
       runtime: {
+        onStartup: { addListener: vi.fn() },
         onConnect: { addListener: vi.fn() },
         connect: vi.fn(() => {
           const { client, server } = createPortPair();
@@ -76,6 +77,11 @@ vi.mock("webextension-polyfill", async () => {
         sendMessage: vi.fn().mockResolvedValue(undefined),
         onActivated: { addListener: vi.fn(), removeListener: vi.fn() },
         onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
+      },
+      alarms: {
+        get: vi.fn().mockResolvedValue(undefined),
+        create: vi.fn().mockResolvedValue(undefined),
+        onAlarm: { addListener: vi.fn() },
       },
       contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
       windows: {

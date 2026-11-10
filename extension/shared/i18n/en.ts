@@ -169,6 +169,8 @@ export const en = {
     "Could not save the prompt on this device. Free up extension storage and try again." as string,
   errorSidePanelMessage:
     "Could not open the side panel. The source tab may have closed or the browser may not support it. Your prompt is still available here.",
+  privateSelectionUnavailable:
+    "Improving selected text from private browsing is not supported. Your selection has not been saved or sent to the optimizer.",
   errorEmptyResponse: "The backend returned an empty improved prompt.",
 } as const;
 

@@ -79,8 +79,16 @@ panel transfers the current prompt/result and retains that source tab even when
 another tab becomes active. If the source tab closes, switching shows an error
 and leaves the prompt available in the optimizer window.
 
+Private/incognito selections are explicitly unsupported: selecting the menu item
+opens an informational notice without storing or passing the selected text to the
+optimizer. The app's draft storage is shared, so private text must not enter that flow.
+Temporary selection handoffs expire after five minutes. Expired or legacy entries
+are deleted on installation/update, browser startup, and a one-minute cleanup alarm;
+consumption still removes its own entry immediately. Browser suspension can delay
+the cleanup callback, and expired payloads are rejected even before cleanup runs.
+
 After installing an updated build, reload the extension to register the new menu
-and its `contextMenus` permission. To check manually in Chrome/Edge and Firefox,
+and its `contextMenus` and `alarms` permissions. To check manually in Chrome/Edge and Firefox,
 select part of a paragraph on an ordinary page and in an editable field, including
 multiline text and emoji. Verify the original field, Improve, and Copy. On a
 supported AI site, also check Insert. Repeat with a saved result/library open and
