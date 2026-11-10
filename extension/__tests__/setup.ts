@@ -70,11 +70,14 @@ vi.mock("webextension-polyfill", async () => {
       },
       tabs: {
         create: vi.fn().mockResolvedValue({ id: 1 }),
+        get: vi.fn().mockResolvedValue({ id: 42, url: "https://example.com" }),
         query: vi.fn().mockResolvedValue([]),
         sendMessage: vi.fn().mockResolvedValue(undefined),
         onActivated: { addListener: vi.fn(), removeListener: vi.fn() },
         onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
       },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+      windows: { create: vi.fn().mockResolvedValue({ id: 2 }) },
       commands: {
         onCommand: { addListener: vi.fn() },
       },

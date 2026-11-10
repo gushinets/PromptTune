@@ -67,6 +67,22 @@ generation, Edit original, New, Copy/Insert/Save, and library search/deletion. C
 that `GET /v1/limits` returns the previous quota after cancellation. Resize the
 sidebar with a long result and expand the changes list to check scrolling.
 
+#### Improve selected text
+
+Select text on a web page, right-click, and choose **Prompt Optimizer**.
+The extension opens its optimizer in a separate window with exactly that selection
+as the original prompt. Choose a mode on first use, then click Improve; opening
+from the menu does not submit a request automatically. Previous results and the
+library screen do not override the selection. Insert targets the originating tab
+on supported AI sites; Copy is available for other pages.
+
+After installing an updated build, reload the extension to register the new menu
+and its `contextMenus` permission. To check manually in Chrome/Edge and Firefox,
+select part of a paragraph on an ordinary page and in an editable field, including
+multiline text and emoji. Verify the original field, Improve, and Copy. On a
+supported AI site, also check Insert. Repeat with a saved result/library open and
+with two selections opened in quick succession.
+
 #### Run extension tests
 
 ```bash

@@ -6,6 +6,7 @@ import type { AnalyticsSource } from "@shared/analytics-types";
 
 interface ActionBarProps {
   improved: string;
+  targetTabId?: number;
   disabled: boolean;
   saveDisabled?: boolean;
   onSave: () => Promise<boolean>;
@@ -84,6 +85,7 @@ function InsertIcon({ className }: { className?: string }) {
 
 export function ActionBar({
   improved,
+  targetTabId,
   disabled,
   saveDisabled = false,
   onSave,
@@ -151,7 +153,10 @@ export function ActionBar({
   const handleInsert = async () => {
     setActionError(null);
     try {
-      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      const tab =
+        targetTabId !== undefined
+          ? { id: targetTabId }
+          : (await browser.tabs.query({ active: true, currentWindow: true }))[0];
       if (typeof tab?.id !== "number") throw new Error("No active tab");
       const response = await browser.tabs.sendMessage(tab.id, {
         type: "PASTE_TEXT",

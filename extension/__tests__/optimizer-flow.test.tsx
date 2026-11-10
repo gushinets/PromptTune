@@ -34,6 +34,7 @@ async function click(label: string) {
 beforeEach(async () => {
   vi.clearAllMocks();
   vi.mocked(browser.tabs.query).mockResolvedValue([]);
+  vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, url: "https://example.com" } as never);
   vi.mocked(browser.storage.local.set).mockResolvedValue(undefined);
   vi.mocked(browser.storage.local.remove).mockResolvedValue(undefined);
   vi.mocked(browser.runtime.getManifest).mockReturnValue({ version: "0.1.0" } as ReturnType<
@@ -214,3 +215,62 @@ it.each([false, undefined, {}])(
     ).toBe(false);
   },
 );
+
+it("uses the exact selected text instead of a previous result and improves it on demand", async () => {
+  await act(async () => root.unmount());
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    popup_session_draft: {
+      updatedAt: Date.now(),
+      activeTab: "library",
+      original: "old",
+      improved: "old result",
+      changes: [],
+      goal: "general",
+      lastRequestId: "old-id",
+      lastRequestContextKey: null,
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 1,
+    },
+  });
+  root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <App initialSelection={{ text: "  Выделенный 👋\nфрагмент  ", sourceTabId: 42 }} />,
+    );
+  });
+  expect(host.querySelector(".original-textarea")).not.toBeNull();
+  expect((host.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
+    "  Выделенный 👋\nфрагмент  ",
+  );
+  expect(host.querySelector(".result-screen")).toBeNull();
+  expect(
+    vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.some(([msg]) => (msg as { type?: string }).type === "IMPROVE_REQUEST"),
+  ).toBe(false);
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+    (message as { type: string }).type === "IMPROVE_REQUEST"
+      ? {
+          type: "IMPROVE_RESULT",
+          payload: { request_id: "selection-result", improved_text: "Better selection" },
+        }
+      : { ok: true },
+  );
+  await click("Improve");
+  expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: "IMPROVE_REQUEST",
+      payload: expect.objectContaining({ text: "Выделенный 👋\nфрагмент" }),
+    }),
+  );
+  expect(host.querySelector(".result-screen")?.textContent).toContain("Better selection");
+  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+  await click("Insert");
+  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(42, {
+    type: "PASTE_TEXT",
+    payload: { text: "Better selection" },
+  });
+});

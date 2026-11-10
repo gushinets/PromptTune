@@ -13,6 +13,8 @@ import type {
   AnalyticsTrackPayload,
 } from "@shared/analytics-types";
 
+import { openSelection, SELECTION_MENU_ID } from "@shared/selection";
+
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_QUEUE_ITEMS = 500;
 const ANALYTICS_BATCH_SIZE = 50;
@@ -392,6 +394,11 @@ export default defineBackground(() => {
   }
 
   browser.runtime.onInstalled.addListener(async (details) => {
+    browser.contextMenus.create({
+      id: SELECTION_MENU_ID,
+      title: "Prompt Optimizer",
+      contexts: ["selection"],
+    });
     if (details.reason !== "install") return;
 
     const installAt = new Date().toISOString();
@@ -404,6 +411,15 @@ export default defineBackground(() => {
         context: { source: "background" },
         properties: { install_source: "unknown" },
       });
+    }
+  });
+
+  browser.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (info.menuItemId !== SELECTION_MENU_ID || !info.selectionText?.trim()) return;
+    try {
+      await openSelection(info.selectionText, tab?.id);
+    } catch (error) {
+      console.error("Could not open Prompt Optimizer", error);
     }
   });
 

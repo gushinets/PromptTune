@@ -4,9 +4,16 @@ import "./App.css";
 import "./layout-toggle.css";
 import { I18nProvider } from "@shared/i18n";
 
-const root = document.getElementById("root")!;
-createRoot(root).render(
-  <I18nProvider>
-    <App viewMode="popup" />
-  </I18nProvider>,
-);
+import { takeSelection } from "@shared/selection";
+
+async function main() {
+  const initialSelection = await takeSelection(window.location.search);
+  const root = document.getElementById("root")!;
+  createRoot(root).render(
+    <I18nProvider>
+      <App viewMode="popup" initialSelection={initialSelection} />
+    </I18nProvider>,
+  );
+}
+
+void main();

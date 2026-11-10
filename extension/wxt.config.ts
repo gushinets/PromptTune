@@ -33,7 +33,7 @@ export default defineConfig({
       "48": "icon-48.png",
       "128": "icon-128.png",
     },
-    permissions: ["storage", "activeTab", "sidePanel"],
+    permissions: ["storage", "activeTab", "sidePanel", "contextMenus"],
     host_permissions: [
       getApiHostPermission(),
       "https://chatgpt.com/*",

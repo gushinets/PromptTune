@@ -38,6 +38,8 @@ import type {
   OptimizerRequestContext,
 } from "@shared/types";
 
+import type { PromptSelection } from "@shared/selection";
+
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
 
@@ -117,12 +119,13 @@ function LayoutSidebarRightIcon({
 interface AppProps {
   /** Whether the App is rendered inside the Chrome side panel. Defaults to false (popup). */
   viewMode?: ViewMode;
+  initialSelection?: PromptSelection;
 }
 
-export function App({ viewMode = "popup" }: AppProps) {
+export function App({ viewMode = "popup", initialSelection }: AppProps) {
   const t = useT();
   const [activeTab, setActiveTab] = useState<TabId>("improve");
-  const [original, setOriginal] = useState("");
+  const [original, setOriginal] = useState(initialSelection?.text ?? "");
   const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
   );
@@ -219,8 +222,11 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, []);
 
   const refreshActiveTabContext = useCallback(() => {
-    browser.tabs
-      .query({ active: true, currentWindow: true })
+    const tabs =
+      initialSelection?.sourceTabId !== undefined
+        ? browser.tabs.get(initialSelection.sourceTabId).then((tab) => [tab])
+        : browser.tabs.query({ active: true, currentWindow: true });
+    tabs
       .then((tabs) => {
         const tabUrl = tabs[0]?.url;
         setSiteHostname(getSupportedSiteHostname(tabUrl));
@@ -232,7 +238,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         setDetectedAiGoal("general");
         setSiteResolved(true);
       });
-  }, []);
+  }, [initialSelection?.sourceTabId]);
 
   useEffect(() => {
     refreshLibraryCount();
@@ -243,7 +249,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       .then(([mode, draft]) => {
         setAudienceModeState(mode);
 
-        if (!draft) return;
+        if (initialSelection || !draft) return;
 
         setActiveTab(draft.activeTab);
         setOriginal(draft.original);
@@ -277,7 +283,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         setSessionDraftLoaded(true);
         setModeReady(true);
       });
-  }, []);
+  }, [initialSelection]);
 
   useEffect(() => {
     refreshActiveTabContext();
@@ -385,7 +391,10 @@ export function App({ viewMode = "popup" }: AppProps) {
     let closing = false;
     try {
       if (viewMode === "popup") {
-        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        const tab =
+          initialSelection?.sourceTabId !== undefined
+            ? await browser.tabs.get(initialSelection.sourceTabId)
+            : (await browser.tabs.query({ active: true, currentWindow: true }))[0];
         if (activeRequestRef.current) return;
         const sidePanel = (
           browser as typeof browser & {
@@ -412,7 +421,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         setLayoutTransition(false);
       }
     }
-  }, [viewMode]);
+  }, [viewMode, initialSelection?.sourceTabId]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
@@ -985,6 +994,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                       <>
                         <ActionBar
                           improved={improved}
+                          targetTabId={initialSelection?.sourceTabId}
                           disabled={!improved}
                           saveDisabled={isOriginalOverLimit}
                           onSave={handleSave}
