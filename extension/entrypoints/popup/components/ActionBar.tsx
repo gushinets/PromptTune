@@ -83,6 +83,7 @@ function InsertIcon({ className }: { className?: string }) {
   );
 }
 
+/** Keep Insert bound to a selected prompt's source tab; ordinary sessions use the active tab. */
 export function ActionBar({
   improved,
   targetTabId,

@@ -274,3 +274,92 @@ it("uses the exact selected text instead of a previous result and improves it on
     payload: { text: "Better selection" },
   });
 });
+
+it("restores a selected result in the panel and keeps Insert bound after tab switches", async () => {
+  await act(async () => root.unmount());
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    popup_session_draft: {
+      updatedAt: Date.now(),
+      activeTab: "improve",
+      optimizer_screen: "result",
+      original: "Selected",
+      improved: "Selected result",
+      sourceTabId: 42,
+      changes: [],
+      goal: "general",
+      lastRequestId: "selection-result",
+      lastRequestContextKey: "ai|general|Selected",
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 1,
+    },
+  });
+  vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 99, url: "https://claude.ai" }] as never);
+  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+  root = createRoot(host);
+  await act(async () => root.render(<App viewMode="sidepanel" />));
+  await act(async () => {
+    const activated = vi.mocked(browser.tabs.onActivated.addListener).mock.calls.at(-1)![0];
+    activated({ tabId: 99, windowId: 7 });
+  });
+  await click("Insert");
+  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(42, {
+    type: "PASTE_TEXT",
+    payload: { text: "Selected result" },
+  });
+  vi.mocked(browser.tabs.get).mockRejectedValue(new Error("Source tab closed"));
+  await click("Insert");
+  expect(browser.tabs.sendMessage).not.toHaveBeenCalledWith(99, expect.anything());
+});
+
+it("clears a restored selection's source binding when starting a new prompt", async () => {
+  await act(async () => root.unmount());
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    popup_session_draft: {
+      updatedAt: Date.now(),
+      activeTab: "improve",
+      optimizer_screen: "result",
+      original: "Selected",
+      improved: "Selected result",
+      sourceTabId: 42,
+      changes: [],
+      goal: "general",
+      lastRequestId: "selection-result",
+      lastRequestContextKey: "ai|general|Selected",
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 1,
+    },
+  });
+  vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 99 }] as never);
+  vi.mocked(browser.tabs.get).mockRejectedValue(new Error("Source tab closed"));
+  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+  root = createRoot(host);
+  await act(async () => root.render(<App />));
+  await click("New");
+  await typeOriginal("A new prompt");
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+    (message as { type: string }).type === "IMPROVE_REQUEST"
+      ? {
+          type: "IMPROVE_RESULT",
+          payload: { request_id: "new-result", improved_text: "New result" },
+        }
+      : { ok: true },
+  );
+  await click("Improve");
+  await click("Insert");
+  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(99, {
+    type: "PASTE_TEXT",
+    payload: { text: "New result" },
+  });
+  expect(browser.storage.local.set).toHaveBeenLastCalledWith({
+    popup_session_draft: expect.objectContaining({
+      sourceTabId: undefined,
+      original: "A new prompt",
+    }),
+  });
+});

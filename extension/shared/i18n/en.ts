@@ -167,6 +167,8 @@ export const en = {
     `Text is too long (maximum ${formatCharacterCount(max)} characters). Shorten it or split it into parts.`,
   errorLibraryStorageMessage:
     "Could not save the prompt on this device. Free up extension storage and try again." as string,
+  errorSidePanelMessage:
+    "Could not open the side panel. The source tab may have closed or the browser may not support it. Your prompt is still available here.",
   errorEmptyResponse: "The backend returned an empty improved prompt.",
 } as const;
 

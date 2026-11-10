@@ -74,7 +74,10 @@ The extension opens its optimizer in a separate window with exactly that selecti
 as the original prompt. Choose a mode on first use, then click Improve; opening
 from the menu does not submit a request automatically. Previous results and the
 library screen do not override the selection. Insert targets the originating tab
-on supported AI sites; Copy is available for other pages.
+on supported AI sites; Copy is available for other pages. Switching to the side
+panel transfers the current prompt/result and retains that source tab even when
+another tab becomes active. If the source tab closes, switching shows an error
+and leaves the prompt available in the optimizer window.
 
 After installing an updated build, reload the extension to register the new menu
 and its `contextMenus` permission. To check manually in Chrome/Edge and Firefox,

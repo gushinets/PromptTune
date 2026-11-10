@@ -75,3 +75,22 @@ it("cleans up the selection if opening the window fails", async () => {
   const stored = vi.mocked(browser.storage.local.set).mock.calls.at(-1)![0];
   expect(browser.storage.local.remove).toHaveBeenCalledWith(Object.keys(stored)[0]);
 });
+
+it("still opens the normal popup flow if reading a selection fails and attempts cleanup", async () => {
+  const { takeSelection } = await import("../shared/selection");
+  vi.mocked(browser.storage.local.get).mockRejectedValueOnce(new Error("read failed"));
+  await expect(takeSelection("?selection=optimizer_selection_failed")).resolves.toBeUndefined();
+  expect(browser.storage.local.remove).toHaveBeenCalledWith("optimizer_selection_failed");
+});
+
+it("retains the retrieved selection if deleting its temporary entry fails", async () => {
+  const { takeSelection } = await import("../shared/selection");
+  vi.mocked(browser.storage.local.get).mockResolvedValueOnce({
+    optimizer_selection_failed: { text: "Selected", sourceTabId: 42 },
+  });
+  vi.mocked(browser.storage.local.remove).mockRejectedValueOnce(new Error("remove failed"));
+  await expect(takeSelection("?selection=optimizer_selection_failed")).resolves.toEqual({
+    text: "Selected",
+    sourceTabId: 42,
+  });
+});

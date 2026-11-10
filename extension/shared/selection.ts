@@ -8,6 +8,7 @@ export interface PromptSelection {
   sourceTabId?: number;
 }
 
+/** Open an isolated optimizer window without placing selected text in its URL. */
 export async function openSelection(text: string, sourceTabId?: number): Promise<void> {
   const key = `${SELECTION_KEY_PREFIX}${crypto.randomUUID()}`;
   await browser.storage.local.set({ [key]: { text, sourceTabId } });
@@ -28,9 +29,15 @@ export async function openSelection(text: string, sourceTabId?: number): Promise
 export async function takeSelection(search: string): Promise<PromptSelection | undefined> {
   const key = new URLSearchParams(search).get("selection");
   if (!key?.startsWith(SELECTION_KEY_PREFIX)) return;
-  const data = await browser.storage.local.get(key);
-  await browser.storage.local.remove(key);
-  const value = data[key] as Partial<PromptSelection> | undefined;
+  let value: Partial<PromptSelection> | undefined;
+  try {
+    const data = await browser.storage.local.get(key);
+    value = data[key] as Partial<PromptSelection> | undefined;
+  } catch {
+    return;
+  } finally {
+    await browser.storage.local.remove(key).catch(() => undefined);
+  }
   if (typeof value?.text !== "string" || !value.text.trim()) return;
   return {
     text: value.text,

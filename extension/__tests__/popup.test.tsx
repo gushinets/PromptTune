@@ -576,6 +576,50 @@ describe("App", () => {
     );
   });
 
+  it("explains a closed source tab without closing or retargeting the selection", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    const open = vi.fn().mockResolvedValue(undefined);
+    Object.assign(browser, { sidePanel: { open } });
+    vi.mocked(browser.tabs.get).mockRejectedValue(new Error("No tab with id: 42"));
+    await act(async () => {
+      root.render(<App initialSelection={{ text: "Selected text", sourceTabId: 42 }} />);
+    });
+    await flushEffects();
+    await act(async () => {
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not open the side panel",
+    );
+    expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
+      "Selected text",
+    );
+    expect(close).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    expect(browser.tabs.query).not.toHaveBeenCalled();
+  });
+
+  it("hands the selected session and source tab to the target window before closing", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    const open = vi.fn().mockResolvedValue(undefined);
+    Object.assign(browser, { sidePanel: { open } });
+    vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 7 } as never);
+    await act(async () => {
+      root.render(<App initialSelection={{ text: "Selected text", sourceTabId: 42 }} />);
+    });
+    await flushEffects();
+    await act(async () => {
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
+    });
+    expect(open).toHaveBeenCalledWith({ windowId: 7 });
+    expect(browser.storage.local.set).toHaveBeenCalledWith({
+      optimizer_panel_handoff_7: expect.objectContaining({
+        draft: expect.objectContaining({ original: "Selected text", sourceTabId: 42 }),
+      }),
+    });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {
       root.render(<App />);

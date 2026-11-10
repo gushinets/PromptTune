@@ -14,6 +14,7 @@ export interface LibraryEntry {
 }
 
 export interface PopupSessionDraft {
+  sourceTabId?: number;
   optimizer_screen?: "input" | "result";
   result_context?: OptimizerRequestContext | null;
   activeTab: "improve" | "library";
@@ -32,11 +33,14 @@ interface StoredPopupSessionDraft extends PopupSessionDraft {
   updatedAt: number;
 }
 
-function isPopupSessionDraft(value: unknown): value is PopupSessionDraft {
+/** Validate a draft before accepting a session from another extension surface. */
+export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft {
   if (!value || typeof value !== "object") return false;
 
   const draft = value as Record<string, unknown>;
   return (
+    (draft.sourceTabId === undefined ||
+      (Number.isSafeInteger(draft.sourceTabId) && (draft.sourceTabId as number) >= 0)) &&
     (draft.result_context === undefined ||
       draft.result_context === null ||
       isOptimizerRequestContext(draft.result_context)) &&

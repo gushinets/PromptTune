@@ -10,6 +10,7 @@ import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
 import {
+  type PopupSessionDraft,
   getAll,
   LibraryStorageError,
   save,
@@ -38,6 +39,7 @@ import type {
   OptimizerRequestContext,
 } from "@shared/types";
 
+import { panelHandoffKey } from "@shared/panel-handoff";
 import type { PromptSelection } from "@shared/selection";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
@@ -120,12 +122,17 @@ interface AppProps {
   /** Whether the App is rendered inside the Chrome side panel. Defaults to false (popup). */
   viewMode?: ViewMode;
   initialSelection?: PromptSelection;
+  initialDraft?: PopupSessionDraft;
 }
 
-export function App({ viewMode = "popup", initialSelection }: AppProps) {
+/** Shared optimizer UI; a selected session keeps its source tab across surface changes. */
+export function App({ viewMode = "popup", initialSelection, initialDraft }: AppProps) {
   const t = useT();
   const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState(initialSelection?.text ?? "");
+  const [sourceTabId, setSourceTabId] = useState(
+    initialSelection?.sourceTabId ?? initialDraft?.sourceTabId,
+  );
   const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
   );
@@ -223,8 +230,8 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
 
   const refreshActiveTabContext = useCallback(() => {
     const tabs =
-      initialSelection?.sourceTabId !== undefined
-        ? browser.tabs.get(initialSelection.sourceTabId).then((tab) => [tab])
+      sourceTabId !== undefined
+        ? browser.tabs.get(sourceTabId).then((tab) => [tab])
         : browser.tabs.query({ active: true, currentWindow: true });
     tabs
       .then((tabs) => {
@@ -238,19 +245,23 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
         setDetectedAiGoal("general");
         setSiteResolved(true);
       });
-  }, [initialSelection?.sourceTabId]);
+  }, [sourceTabId]);
 
   useEffect(() => {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
 
   useEffect(() => {
-    Promise.all([getAudienceMode(), getPopupSessionDraft()])
+    Promise.all([
+      getAudienceMode(),
+      initialDraft ? Promise.resolve(initialDraft) : getPopupSessionDraft(),
+    ])
       .then(([mode, draft]) => {
         setAudienceModeState(mode);
 
         if (initialSelection || !draft) return;
 
+        setSourceTabId(draft.sourceTabId);
         setActiveTab(draft.activeTab);
         setOriginal(draft.original);
         setImproved(draft.improved);
@@ -283,7 +294,7 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
         setSessionDraftLoaded(true);
         setModeReady(true);
       });
-  }, [initialSelection]);
+  }, [initialSelection, initialDraft]);
 
   useEffect(() => {
     refreshActiveTabContext();
@@ -320,10 +331,9 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
     setGoal(defaultGoalForMode(audienceMode, detectedAiGoal));
   }, [audienceMode, detectedAiGoal, modeReady]);
 
-  useEffect(() => {
-    if (!sessionDraftLoaded) return;
-
-    void setPopupSessionDraft({
+  const sessionDraft = useMemo<PopupSessionDraft>(
+    () => ({
+      sourceTabId,
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
       result_context: resultContext,
       activeTab,
@@ -336,22 +346,28 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
       lastModel,
       lastLatencyMs,
       attemptN,
-    }).catch(() => undefined);
-  }, [
-    activeTab,
-    attemptN,
-    changes,
-    goal,
-    improved,
-    editingOriginal,
-    resultContext,
-    lastLatencyMs,
-    lastModel,
-    lastRequestContextKey,
-    lastRequestId,
-    original,
-    sessionDraftLoaded,
-  ]);
+    }),
+    [
+      sourceTabId,
+      improved,
+      editingOriginal,
+      resultContext,
+      activeTab,
+      original,
+      changes,
+      goal,
+      lastRequestId,
+      lastRequestContextKey,
+      lastModel,
+      lastLatencyMs,
+      attemptN,
+    ],
+  );
+
+  useEffect(() => {
+    if (!sessionDraftLoaded) return;
+    void setPopupSessionDraft(sessionDraft).catch(() => undefined);
+  }, [sessionDraftLoaded, sessionDraft]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -392,8 +408,8 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
     try {
       if (viewMode === "popup") {
         const tab =
-          initialSelection?.sourceTabId !== undefined
-            ? await browser.tabs.get(initialSelection.sourceTabId)
+          sourceTabId !== undefined
+            ? await browser.tabs.get(sourceTabId)
             : (await browser.tabs.query({ active: true, currentWindow: true }))[0];
         if (activeRequestRef.current) return;
         const sidePanel = (
@@ -404,8 +420,15 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
         if (tab?.windowId != null && sidePanel) {
           await sidePanel.open({ windowId: tab.windowId });
           if (activeRequestRef.current) return;
+          if (sourceTabId !== undefined) {
+            await browser.storage.local.set({
+              [panelHandoffKey(tab.windowId)]: { id: crypto.randomUUID(), draft: sessionDraft },
+            });
+          }
           window.close();
           closing = true;
+        } else {
+          throw new Error("Side panel unavailable");
         }
       } else {
         // Cannot open popup programmatically — just close sidebar
@@ -414,14 +437,14 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
         closing = true;
       }
     } catch {
-      // fail silently
+      setError({ type: "generic", message: t.errorSidePanelMessage });
     } finally {
       if (!closing) {
         layoutTransitionRef.current = false;
         setLayoutTransition(false);
       }
     }
-  }, [viewMode, initialSelection?.sourceTabId]);
+  }, [viewMode, sourceTabId, sessionDraft, t]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
@@ -701,6 +724,7 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
   }, [activeTab, loading, improved, editingOriginal, handleImprove]);
 
   const handleNew = useCallback(() => {
+    setSourceTabId(undefined);
     setOriginal("");
     setImproved("");
     setResultContext(null);
@@ -994,7 +1018,7 @@ export function App({ viewMode = "popup", initialSelection }: AppProps) {
                       <>
                         <ActionBar
                           improved={improved}
-                          targetTabId={initialSelection?.sourceTabId}
+                          targetTabId={sourceTabId}
                           disabled={!improved}
                           saveDisabled={isOriginalOverLimit}
                           onSave={handleSave}

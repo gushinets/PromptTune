@@ -45,6 +45,7 @@ vi.mock("webextension-polyfill", async () => {
   return {
     default: {
       storage: {
+        onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
         local: {
           get: vi.fn().mockResolvedValue({}),
           set: vi.fn().mockResolvedValue(undefined),
@@ -77,7 +78,10 @@ vi.mock("webextension-polyfill", async () => {
         onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
       },
       contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
-      windows: { create: vi.fn().mockResolvedValue({ id: 2 }) },
+      windows: {
+        create: vi.fn().mockResolvedValue({ id: 2 }),
+        getCurrent: vi.fn().mockResolvedValue({ id: 7 }),
+      },
       commands: {
         onCommand: { addListener: vi.fn() },
       },
