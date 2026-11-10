@@ -22,7 +22,11 @@ jobs:
               per_page: 100,
             });
 
-            const paths = files.map((file) => file.filename);
+            const paths = files.flatMap((file) =>
+              file.previous_filename
+                ? [file.filename, file.previous_filename]
+                : [file.filename]
+            );
             const backendChanged = paths.some((path) =>
               path.startsWith("backend/") ||
               path.startsWith("infra/") ||
