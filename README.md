@@ -86,8 +86,11 @@ three-hour drafts. Reopening restores the most recently created live session;
 editing an older window or panel does not replace that choice. Old drafts are
 removed by the same startup/periodic cleanup that expires temporary handoffs. If the source tab closes, switching shows an error
 and leaves the prompt available in the optimizer window. A failed handoff write
-closes only a panel created by that transition. An already-open panel keeps its
-previous session and displays a notice; the new prompt remains in the optimizer window.
+can close a panel only when it was created by that transition and still holds
+that exact handoff. A panel with another or unconfirmed session is preserved with
+a notice; the new prompt remains in the optimizer window. Ordinary toolbar popups
+also send an explicit handoff, so switching surfaces retains their current session
+even if another optimizer has a newer saved draft.
 The panel retries a failed initial handoff read once, then offers a Retry action
 without showing an unrelated draft. An ended source session has its own Insert
 message explaining that Copy and New remain available.

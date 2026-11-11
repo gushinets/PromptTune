@@ -493,25 +493,27 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         if (tab?.windowId != null && sidePanel) {
           await sidePanel.open({ windowId: tab.windowId });
           if (activeRequestRef.current) return;
-          if (targetTabId !== undefined) {
-            const id = crypto.randomUUID();
-            try {
-              await browser.storage.local.set({
-                [panelHandoffKey(tab.windowId, id)]: {
-                  id,
-                  draft: {
-                    ...sessionDraft,
-                    sourceTabId: targetTabId,
-                    sourceSessionId: targetSessionId,
-                  },
-                  expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+          const id = crypto.randomUUID();
+          try {
+            await browser.storage.local.set({
+              [panelHandoffKey(tab.windowId, id)]: {
+                id,
+                draft: {
+                  ...sessionDraft,
+                  sourceTabId: targetTabId,
+                  sourceSessionId: targetSessionId,
                 },
-              });
-            } catch (error) {
-              // Roll back the opened surface; keep this optimizer and its prompt available.
-              rollbackCleanupRef.current = requestPanelRollback(tab.windowId, transitionStartedAt);
-              throw error;
-            }
+                expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+              },
+            });
+          } catch (error) {
+            // Roll back the opened surface; keep this optimizer and its prompt available.
+            rollbackCleanupRef.current = requestPanelRollback(
+              tab.windowId,
+              transitionStartedAt,
+              id,
+            );
+            throw error;
           }
           window.close();
           closing = true;

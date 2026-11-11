@@ -817,6 +817,55 @@ describe("App", () => {
     );
   });
 
+  it("hands an ordinary popup's own session to the panel even when a newer draft exists", async () => {
+    const open = vi.fn().mockResolvedValue(undefined);
+    Object.assign(browser, { sidePanel: { open } });
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 7 }] as never);
+    const older = {
+      draftSessionId: "older",
+      draftCreatedAt: 100,
+      activeTab: "improve" as const,
+      original: "Current ordinary prompt",
+      improved: "",
+      changes: [],
+      goal: "general" as const,
+      lastRequestId: null,
+      lastRequestContextKey: null,
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 0,
+    };
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      audience_mode: "ai",
+      library: [],
+      optimizer_draft_newer: {
+        ...older,
+        draftSessionId: "newer",
+        draftCreatedAt: 200,
+        original: "Other session",
+        updatedAt: Date.now(),
+      },
+    });
+    await act(async () => root.render(<App initialDraft={older} />));
+    await flushEffects();
+    await act(async () =>
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click(),
+    );
+    const handoff = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.flatMap(([data]) => Object.entries(data))
+      .find(([key]) => key.startsWith("optimizer_panel_handoff_7_"))?.[1];
+    expect(handoff).toMatchObject({
+      draft: {
+        draftSessionId: "older",
+        original: "Current ordinary prompt",
+        sourceTabId: undefined,
+        sourceSessionId: undefined,
+      },
+    });
+  });
+
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {
       root.render(<App />);

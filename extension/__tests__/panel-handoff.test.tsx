@@ -239,18 +239,24 @@ it("keeps two active browser windows on their own transferred sessions", async (
 it("closes only the addressed panel when a transfer fails on a browser without native close", async () => {
   const close = vi.spyOn(window, "close").mockImplementation(() => {});
   await act(async () => root.render(<SidepanelApp />));
+  await change("optimizer_panel_handoff_7_selection-session", selected);
   const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
   await listener({ type: "PANEL_HANDOFF_FAILED", windowId: 8 }, {} as never, vi.fn());
   expect(close).not.toHaveBeenCalled();
   await listener(
-    { type: "PANEL_HANDOFF_FAILED", windowId: 7, openedAfter: 0 },
+    {
+      type: "PANEL_HANDOFF_FAILED",
+      windowId: 7,
+      openedAfter: 0,
+      failedHandoffId: "selection-session",
+    },
     {} as never,
     vi.fn(),
   );
   expect(close).toHaveBeenCalledOnce();
 });
 
-it("delivers a pending rollback when a panel finishes its delayed startup", async () => {
+it("acknowledges a pending rollback without closing an unowned panel during delayed startup", async () => {
   let finishWindow!: (value: { id: number }) => void;
   vi.mocked(browser.windows.getCurrent).mockReturnValue(
     new Promise((resolve) => {
@@ -267,16 +273,26 @@ it("delivers a pending rollback when a panel finishes its delayed startup", asyn
   });
   const close = vi.spyOn(window, "close").mockImplementation(() => {});
   const { requestPanelRollback } = await import("../shared/panel-handoff");
-  const cleanup = requestPanelRollback(7, 0);
+  const cleanup = requestPanelRollback(7, 0, "failed-A");
   try {
     await act(async () => root.render(<SidepanelApp />));
     expect(close).not.toHaveBeenCalled();
     await act(async () => finishWindow({ id: 7 }));
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    const requests = vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.filter(
+        ([msg]) => (msg as { type?: string }).type === "PANEL_HANDOFF_FAILED",
+      ).length;
     await act(async () => {
       await browser.runtime.sendMessage({ type: "PANEL_READY", windowId: 7 });
     });
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+    expect(
+      vi
+        .mocked(browser.runtime.sendMessage)
+        .mock.calls.filter(([msg]) => (msg as { type?: string }).type === "PANEL_HANDOFF_FAILED"),
+    ).toHaveLength(requests);
   } finally {
     cleanup();
   }
@@ -306,4 +322,54 @@ it("preserves an already-open panel and its edits when another optimizer's trans
     "Previous panel edits",
   );
   expect(host.querySelector('[role="alert"]')?.textContent).toContain("previous session");
+});
+
+it("preserves a different accepted handoff when an older failed transfer rolls back", async () => {
+  const close = vi.spyOn(window, "close").mockImplementation(() => {});
+  await act(async () => root.render(<SidepanelApp />));
+  await change("optimizer_panel_handoff_7_selection-session", selected);
+  const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  await act(async () => {
+    await listener(
+      { type: "PANEL_HANDOFF_FAILED", windowId: 7, openedAfter: 0, failedHandoffId: "failed-A" },
+      {} as never,
+      vi.fn(),
+    );
+  });
+  expect(close).not.toHaveBeenCalled();
+  expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+});
+
+it("rechecks transfer ownership after a delayed rollback acknowledgement", async () => {
+  const close = vi.spyOn(window, "close").mockImplementation(() => {});
+  await act(async () => root.render(<SidepanelApp />));
+  await change("optimizer_panel_handoff_7_failed-A", { ...selected, id: "failed-A" });
+  let acknowledge!: () => void;
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    if ((message as { type?: string }).type === "PANEL_ROLLBACK_ACK")
+      return new Promise<void>((resolve) => {
+        acknowledge = resolve;
+      });
+    return { ok: true };
+  });
+  const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  let handled!: unknown;
+  await act(async () => {
+    handled = listener(
+      { type: "PANEL_HANDOFF_FAILED", windowId: 7, openedAfter: 0, failedHandoffId: "failed-A" },
+      {} as never,
+      vi.fn(),
+    );
+  });
+  await change("optimizer_panel_handoff_7_new-B", {
+    ...selected,
+    id: "new-B",
+    draft: { ...selected.draft, improved: "B result" },
+  });
+  await act(async () => {
+    acknowledge();
+    await handled;
+  });
+  expect(close).not.toHaveBeenCalled();
+  expect(host.querySelector(".result-screen")?.textContent).toContain("B result");
 });

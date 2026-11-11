@@ -8,6 +8,7 @@ import { App } from "../popup/App";
 export function SidepanelApp() {
   const t = useT();
   const mountedAt = useRef(Date.now());
+  const acceptedHandoffId = useRef<string | undefined>(undefined);
   const [transferWarning, setTransferWarning] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -29,6 +30,7 @@ export function SidepanelApp() {
         const accept = (key: string, value: unknown) => {
           if (!active || !isPanelHandoff(value)) return;
           received = true;
+          acceptedHandoffId.current = value.id;
           setTransferWarning(false);
           setSession(value);
           setFailed(false);
@@ -53,6 +55,7 @@ export function SidepanelApp() {
             windowId?: number;
             requestId?: string;
             openedAfter?: number;
+            failedHandoffId?: string;
           } | null;
           if (active && msg?.type === "PANEL_HANDOFF_FAILED" && msg.windowId === window.id) {
             return (async () => {
@@ -64,7 +67,12 @@ export function SidepanelApp() {
                   requestId: msg.requestId,
                 })
                 .catch(() => undefined);
-              if (typeof msg.openedAfter === "number" && mountedAt.current >= msg.openedAfter) {
+              if (
+                typeof msg.openedAfter === "number" &&
+                mountedAt.current >= msg.openedAfter &&
+                typeof msg.failedHandoffId === "string" &&
+                acceptedHandoffId.current === msg.failedHandoffId
+              ) {
                 const panel = (
                   browser as typeof browser & {
                     sidePanel?: { close?: (options: { windowId: number }) => Promise<void> };

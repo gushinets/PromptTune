@@ -31,7 +31,11 @@ export function isPanelHandoff(value: unknown): value is PanelHandoff {
 }
 
 /** Keep a failed-transfer rollback pending until an older browser's panel subscribes. */
-export function requestPanelRollback(windowId: number, openedAfter: number): () => void {
+export function requestPanelRollback(
+  windowId: number,
+  openedAfter: number,
+  failedHandoffId: string,
+): () => void {
   const requestId = crypto.randomUUID();
   let active = true;
   const cleanup = () => {
@@ -45,6 +49,7 @@ export function requestPanelRollback(windowId: number, openedAfter: number): () 
         windowId,
         requestId,
         openedAfter,
+        failedHandoffId,
       });
       if (
         active &&
