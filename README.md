@@ -81,9 +81,13 @@ prompt session but keeps its originating browser target for Insert and switching
 to the side panel. Saved source bindings carry a nonce in `storage.session`;
 after a browser restart or extension reload they cannot resolve a reused tab ID.
 The old result remains available to copy or save; New starts an unbound session
-when reopening from the toolbar. If the source tab closes, switching shows an error
+when reopening from the toolbar. Independent optimizer sessions keep separate
+three-hour drafts. Reopening restores the most recently created live session;
+editing an older window or panel does not replace that choice. Old drafts are
+removed by the same startup/periodic cleanup that expires temporary handoffs. If the source tab closes, switching shows an error
 and leaves the prompt available in the optimizer window. A failed handoff write
-closes the opened panel while retaining the optimizer window and its prompt.
+closes only a panel created by that transition. An already-open panel keeps its
+previous session and displays a notice; the new prompt remains in the optimizer window.
 The panel retries a failed initial handoff read once, then offers a Retry action
 without showing an unrelated draft. An ended source session has its own Insert
 message explaining that Copy and New remain available.

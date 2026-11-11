@@ -242,7 +242,11 @@ it("closes only the addressed panel when a transfer fails on a browser without n
   const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
   await listener({ type: "PANEL_HANDOFF_FAILED", windowId: 8 }, {} as never, vi.fn());
   expect(close).not.toHaveBeenCalled();
-  await listener({ type: "PANEL_HANDOFF_FAILED", windowId: 7 }, {} as never, vi.fn());
+  await listener(
+    { type: "PANEL_HANDOFF_FAILED", windowId: 7, openedAfter: 0 },
+    {} as never,
+    vi.fn(),
+  );
   expect(close).toHaveBeenCalledOnce();
 });
 
@@ -263,7 +267,7 @@ it("delivers a pending rollback when a panel finishes its delayed startup", asyn
   });
   const close = vi.spyOn(window, "close").mockImplementation(() => {});
   const { requestPanelRollback } = await import("../shared/panel-handoff");
-  const cleanup = requestPanelRollback(7);
+  const cleanup = requestPanelRollback(7, 0);
   try {
     await act(async () => root.render(<SidepanelApp />));
     expect(close).not.toHaveBeenCalled();
@@ -276,4 +280,30 @@ it("delivers a pending rollback when a panel finishes its delayed startup", asyn
   } finally {
     cleanup();
   }
+});
+
+it("preserves an already-open panel and its edits when another optimizer's transfer fails", async () => {
+  const close = vi.spyOn(window, "close").mockImplementation(() => {});
+  await act(async () => root.render(<SidepanelApp />));
+  await act(async () => {
+    const field = host.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      field,
+      "Previous panel edits",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  await act(async () => {
+    await listener(
+      { type: "PANEL_HANDOFF_FAILED", windowId: 7, openedAfter: Date.now() + 1000 },
+      {} as never,
+      vi.fn(),
+    );
+  });
+  expect(close).not.toHaveBeenCalled();
+  expect((host.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
+    "Previous panel edits",
+  );
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("previous session");
 });

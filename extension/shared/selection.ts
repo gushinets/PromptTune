@@ -1,6 +1,7 @@
 import browser from "webextension-polyfill";
 import { ensureBrowserSessionId } from "./browser-target";
 import { LIMITS } from "./constants";
+import { POPUP_DRAFT_PREFIX } from "./storage";
 import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
 
 export const SELECTION_MENU_ID = "optimize-selection";
@@ -11,6 +12,8 @@ export interface PromptSelection {
   text: string;
   sourceTabId?: number;
   sourceSessionId?: string;
+  draftSessionId?: string;
+  draftCreatedAt?: number;
 }
 
 /** Open an isolated optimizer window without placing selected text in its URL. */
@@ -31,9 +34,18 @@ export async function openSelection(
     return;
   }
   const sourceSessionId = sourceTabId !== undefined ? await ensureBrowserSessionId() : undefined;
-  const key = `${SELECTION_KEY_PREFIX}${crypto.randomUUID()}`;
+  const draftSessionId = crypto.randomUUID();
+  const draftCreatedAt = Date.now();
+  const key = `${SELECTION_KEY_PREFIX}${draftSessionId}`;
   await browser.storage.local.set({
-    [key]: { text, sourceTabId, sourceSessionId, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS },
+    [key]: {
+      text,
+      sourceTabId,
+      sourceSessionId,
+      draftSessionId,
+      draftCreatedAt,
+      expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+    },
   });
   try {
     await browser.windows.create({
@@ -65,6 +77,8 @@ export async function takeSelection(search: string): Promise<PromptSelection | u
     return;
   return {
     text: value.text,
+    ...(typeof value.draftSessionId === "string" ? { draftSessionId: value.draftSessionId } : {}),
+    ...(typeof value.draftCreatedAt === "number" ? { draftCreatedAt: value.draftCreatedAt } : {}),
     sourceTabId: typeof value.sourceTabId === "number" ? value.sourceTabId : undefined,
     ...(typeof value.sourceSessionId === "string"
       ? { sourceSessionId: value.sourceSessionId }
@@ -79,14 +93,20 @@ function isLiveHandoff(value: unknown, now: number): boolean {
   return typeof expiresAt === "number" && Number.isFinite(expiresAt) && expiresAt > now;
 }
 
-/** Remove abandoned handoffs without touching drafts, library entries, or live payloads. */
+/** Remove expired handoffs and drafts while preserving live sessions and library entries. */
 export async function cleanupExpiredHandoffs(): Promise<void> {
   const data = await browser.storage.local.get(null);
   const now = Date.now();
   const staleKeys = Object.keys(data).filter(
     (key) =>
-      (key.startsWith(SELECTION_KEY_PREFIX) || key.startsWith(PANEL_HANDOFF_PREFIX)) &&
-      !isLiveHandoff(data[key], now),
+      ((key.startsWith(SELECTION_KEY_PREFIX) || key.startsWith(PANEL_HANDOFF_PREFIX)) &&
+        !isLiveHandoff(data[key], now)) ||
+      (key.startsWith(POPUP_DRAFT_PREFIX) &&
+        (!data[key] ||
+          typeof data[key] !== "object" ||
+          typeof (data[key] as { updatedAt?: unknown }).updatedAt !== "number" ||
+          !Number.isFinite((data[key] as { updatedAt: number }).updatedAt) ||
+          now - (data[key] as { updatedAt: number }).updatedAt > LIMITS.POPUP_SESSION_TTL_MS)),
   );
   if (staleKeys.length) await browser.storage.local.remove(staleKeys);
 }

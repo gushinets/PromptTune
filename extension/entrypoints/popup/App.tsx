@@ -129,6 +129,12 @@ interface AppProps {
 /** Shared optimizer UI; a selected session keeps its source tab across surface changes. */
 export function App({ viewMode = "popup", initialSelection, initialDraft }: AppProps) {
   const t = useT();
+  const [draftSessionId, setDraftSessionId] = useState(
+    () => initialSelection?.draftSessionId ?? initialDraft?.draftSessionId ?? crypto.randomUUID(),
+  );
+  const [draftCreatedAt, setDraftCreatedAt] = useState(
+    () => initialSelection?.draftCreatedAt ?? initialDraft?.draftCreatedAt ?? Date.now(),
+  );
   const [activeTab, setActiveTab] = useState<TabId>("improve");
   const [original, setOriginal] = useState(initialSelection?.text ?? "");
   const [sourceTabId, setSourceTabId] = useState(
@@ -223,6 +229,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [showProComingSoon, setShowProComingSoon] = useState(false);
   const [siteHostname, setSiteHostname] = useState<string | undefined>(undefined);
   const [siteResolved, setSiteResolved] = useState(false);
+  const [layoutTargetLoading, setLayoutTargetLoading] = useState(true);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
   const [lastRequestContextKey, setLastRequestContextKey] = useState<string | null>(null);
   const [lastModel, setLastModel] = useState<string | null>(null);
@@ -245,24 +252,33 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   useEffect(() => {
     const onRemoved = (tabId: number) => {
-      if (layoutTargetRef.current?.tab.id === tabId) layoutTargetRef.current = undefined;
+      if (layoutTargetRef.current?.tab.id === tabId || tabId === targetTabId) {
+        contextRevisionRef.current++;
+        layoutTargetRef.current = undefined;
+        setLayoutTargetLoading(false);
+      }
     };
     browser.tabs.onRemoved.addListener(onRemoved);
     return () => browser.tabs.onRemoved.removeListener(onRemoved);
-  }, []);
+  }, [targetTabId]);
 
   const refreshActiveTabContext = useCallback(() => {
     if (!sessionDraftLoaded) return;
     const revision = ++contextRevisionRef.current;
-    layoutTargetRef.current = undefined;
+    const cached = layoutTargetRef.current;
+    setLayoutTargetLoading(
+      !cached || cached.id !== targetTabId || cached.session !== targetSessionId,
+    );
     const tabs = resolveBrowserTarget(targetTabId, targetSessionId).then((tab) =>
       tab ? [tab] : [],
     );
     tabs
       .then((tabs) => {
         if (revision !== contextRevisionRef.current) return;
-        if (tabs[0])
-          layoutTargetRef.current = { tab: tabs[0], id: targetTabId, session: targetSessionId };
+        layoutTargetRef.current = tabs[0]
+          ? { tab: tabs[0], id: targetTabId, session: targetSessionId }
+          : undefined;
+        setLayoutTargetLoading(false);
         const tabUrl = tabs[0]?.url;
         setSiteHostname(getSupportedSiteHostname(tabUrl));
         setDetectedAiGoal(detectAiGoalFromUrl(tabUrl));
@@ -270,6 +286,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       })
       .catch(() => {
         if (revision !== contextRevisionRef.current) return;
+        layoutTargetRef.current = undefined;
+        setLayoutTargetLoading(false);
         setSiteHostname(undefined);
         setDetectedAiGoal("general");
         setSiteResolved(true);
@@ -290,6 +308,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
         if (initialSelection || !draft) return;
 
+        if (draft.draftSessionId) setDraftSessionId(draft.draftSessionId);
+        if (typeof draft.draftCreatedAt === "number") setDraftCreatedAt(draft.draftCreatedAt);
         setSourceTabId(draft.sourceTabId);
         setSourceSessionId(draft.sourceSessionId);
         setActiveTab(draft.activeTab);
@@ -334,12 +354,19 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
     browser.tabs.onActivated.addListener(refreshActiveTabContext);
     browser.tabs.onUpdated.addListener(refreshActiveTabContext);
-    browser.tabs.onAttached.addListener(refreshActiveTabContext);
+    const onAttached = (tabId: number, info: browser.Tabs.OnAttachedAttachInfoType) => {
+      const cached = layoutTargetRef.current;
+      if (cached?.tab.id === tabId) {
+        layoutTargetRef.current = { ...cached, tab: { ...cached.tab, windowId: info.newWindowId } };
+      }
+      refreshActiveTabContext();
+    };
+    browser.tabs.onAttached.addListener(onAttached);
 
     return () => {
       browser.tabs.onActivated.removeListener(refreshActiveTabContext);
       browser.tabs.onUpdated.removeListener(refreshActiveTabContext);
-      browser.tabs.onAttached.removeListener(refreshActiveTabContext);
+      browser.tabs.onAttached.removeListener(onAttached);
     };
   }, [refreshActiveTabContext, viewMode, sessionDraftLoaded, targetTabId]);
 
@@ -366,6 +393,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   const sessionDraft = useMemo<PopupSessionDraft>(
     () => ({
+      draftSessionId,
+      draftCreatedAt,
       sourceTabId,
       sourceSessionId,
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
@@ -382,6 +411,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       attemptN,
     }),
     [
+      draftSessionId,
+      draftCreatedAt,
       sourceTabId,
       sourceSessionId,
       improved,
@@ -439,6 +470,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     if (activeRequestRef.current || layoutTransitionRef.current) return;
     rollbackCleanupRef.current?.();
     rollbackCleanupRef.current = undefined;
+    const transitionStartedAt = Date.now();
     layoutTransitionRef.current = true;
     setLayoutTransition(true);
     let closing = false;
@@ -455,7 +487,6 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           browser as typeof browser & {
             sidePanel?: {
               open: (options: { windowId: number }) => Promise<void>;
-              close?: (options: { windowId: number }) => Promise<void>;
             };
           }
         ).sidePanel;
@@ -478,12 +509,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
               });
             } catch (error) {
               // Roll back the opened surface; keep this optimizer and its prompt available.
-              try {
-                if (!sidePanel.close) throw new Error("Panel close API unavailable");
-                await sidePanel.close({ windowId: tab.windowId });
-              } catch {
-                rollbackCleanupRef.current = requestPanelRollback(tab.windowId);
-              }
+              rollbackCleanupRef.current = requestPanelRollback(tab.windowId, transitionStartedAt);
               throw error;
             }
           }
@@ -1135,7 +1161,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         <button
           type="button"
           className="layout-toggle-btn"
-          disabled={loading || layoutTransition}
+          disabled={loading || layoutTransition || (viewMode === "popup" && layoutTargetLoading)}
           title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           onClick={handleLayoutToggle}

@@ -13,7 +13,11 @@ export interface LibraryEntry {
   tags?: string[];
 }
 
+export const POPUP_DRAFT_PREFIX = "optimizer_draft_";
+
 export interface PopupSessionDraft {
+  draftSessionId?: string;
+  draftCreatedAt?: number;
   sourceTabId?: number;
   sourceSessionId?: string;
   optimizer_screen?: "input" | "result";
@@ -40,6 +44,9 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
 
   const draft = value as Record<string, unknown>;
   return (
+    (draft.draftSessionId === undefined || typeof draft.draftSessionId === "string") &&
+    (draft.draftCreatedAt === undefined ||
+      (typeof draft.draftCreatedAt === "number" && Number.isFinite(draft.draftCreatedAt))) &&
     (draft.sourceSessionId === undefined || typeof draft.sourceSessionId === "string") &&
     (draft.sourceTabId === undefined ||
       (Number.isSafeInteger(draft.sourceTabId) && (draft.sourceTabId as number) >= 0)) &&
@@ -229,8 +236,29 @@ export async function setAudienceMode(mode: AudienceMode): Promise<void> {
 }
 
 export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> {
-  const data = await browser.storage.local.get(STORAGE_KEYS.POPUP_SESSION_DRAFT);
-  const draft = data[STORAGE_KEYS.POPUP_SESSION_DRAFT] as
+  const data = await browser.storage.local.get(null);
+  const now = Date.now();
+  const candidates = Object.entries(data)
+    .filter(([key, value]) => {
+      const draft = value as Partial<StoredPopupSessionDraft> | null;
+      const updatedAt = draft?.updatedAt;
+      return (
+        key.startsWith(POPUP_DRAFT_PREFIX) &&
+        isPopupSessionDraft(draft) &&
+        typeof updatedAt === "number" &&
+        Number.isFinite(updatedAt) &&
+        now - updatedAt <= LIMITS.POPUP_SESSION_TTL_MS &&
+        typeof draft.draftCreatedAt === "number" &&
+        Number.isFinite(draft.draftCreatedAt)
+      );
+    })
+    .sort(
+      (a, b) =>
+        (b[1] as StoredPopupSessionDraft).draftCreatedAt! -
+        (a[1] as StoredPopupSessionDraft).draftCreatedAt!,
+    );
+  const key = candidates[0]?.[0] ?? STORAGE_KEYS.POPUP_SESSION_DRAFT;
+  const draft = data[key] as
     | StoredPopupSessionDraft
     | PopupSessionDraft
     | string
@@ -240,13 +268,13 @@ export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> 
   if (!draft) return null;
 
   if (typeof draft !== "object") {
-    await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    await browser.storage.local.remove(key);
     return null;
   }
 
   if (!("updatedAt" in draft)) {
     if (!isPopupSessionDraft(draft)) {
-      await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+      await browser.storage.local.remove(key);
       return null;
     }
 
@@ -255,12 +283,12 @@ export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> 
   }
 
   if (typeof draft.updatedAt !== "number" || !Number.isFinite(draft.updatedAt)) {
-    await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    await browser.storage.local.remove(key);
     return null;
   }
 
   if (Date.now() - draft.updatedAt > LIMITS.POPUP_SESSION_TTL_MS) {
-    await browser.storage.local.remove(STORAGE_KEYS.POPUP_SESSION_DRAFT);
+    await browser.storage.local.remove(key);
     return null;
   }
 
@@ -270,7 +298,9 @@ export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> 
 
 export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<void> {
   await browser.storage.local.set({
-    [STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
+    [draft.draftSessionId
+      ? `${POPUP_DRAFT_PREFIX}${draft.draftSessionId}`
+      : STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
       ...draft,
       updatedAt: Date.now(),
     } satisfies StoredPopupSessionDraft,

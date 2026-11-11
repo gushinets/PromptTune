@@ -173,6 +173,8 @@ export const en = {
     "Improving selected text from private browsing is not supported. Your selection has not been saved or sent to the optimizer.",
   errorSourceSessionEnded:
     "The original browser session has ended. Use Copy or start a new prompt to insert into the current page.",
+  errorPanelTransferPreserved:
+    "The new prompt could not be transferred. This panel still shows your previous session; the new prompt remains in its optimizer window.",
   errorPanelReadMessage:
     "Could not load the transferred prompt. Retry to recover it before the transfer expires.",
   errorEmptyResponse: "The backend returned an empty improved prompt.",

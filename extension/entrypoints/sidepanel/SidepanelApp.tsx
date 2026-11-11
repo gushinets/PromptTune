@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import browser from "webextension-polyfill";
 import { isPanelHandoff, panelHandoffPrefix, type PanelHandoff } from "@shared/panel-handoff";
 import { useT } from "@shared/i18n";
@@ -7,6 +7,8 @@ import { App } from "../popup/App";
 /** Receive sessions for this window, including when its side panel is already open. */
 export function SidepanelApp() {
   const t = useT();
+  const mountedAt = useRef(Date.now());
+  const [transferWarning, setTransferWarning] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [session, setSession] = useState<PanelHandoff>();
@@ -27,6 +29,7 @@ export function SidepanelApp() {
         const accept = (key: string, value: unknown) => {
           if (!active || !isPanelHandoff(value)) return;
           received = true;
+          setTransferWarning(false);
           setSession(value);
           setFailed(false);
           setReady(true);
@@ -45,7 +48,12 @@ export function SidepanelApp() {
         };
         browser.storage.onChanged.addListener(onChanged);
         const onMessage = (message: unknown) => {
-          const msg = message as { type?: string; windowId?: number; requestId?: string } | null;
+          const msg = message as {
+            type?: string;
+            windowId?: number;
+            requestId?: string;
+            openedAfter?: number;
+          } | null;
           if (active && msg?.type === "PANEL_HANDOFF_FAILED" && msg.windowId === window.id) {
             return (async () => {
               // Broadcast the acknowledgement: another extension listener may win the direct response.
@@ -56,8 +64,22 @@ export function SidepanelApp() {
                   requestId: msg.requestId,
                 })
                 .catch(() => undefined);
-              globalThis.window.close();
-              return { closed: true };
+              if (typeof msg.openedAfter === "number" && mountedAt.current >= msg.openedAfter) {
+                const panel = (
+                  browser as typeof browser & {
+                    sidePanel?: { close?: (options: { windowId: number }) => Promise<void> };
+                  }
+                ).sidePanel;
+                try {
+                  if (!panel?.close) throw new Error("Close API unavailable");
+                  await panel.close({ windowId: window.id! });
+                } catch {
+                  globalThis.window.close();
+                }
+                return { closed: true };
+              }
+              setTransferWarning(true);
+              return { preserved: true };
             })();
           }
         };
@@ -110,6 +132,13 @@ export function SidepanelApp() {
       </main>
     );
   return ready ? (
-    <App key={session?.id ?? "draft"} viewMode="sidepanel" initialDraft={session?.draft} />
+    <>
+      {transferWarning && (
+        <aside role="alert" className="mode-onboarding">
+          {t.errorPanelTransferPreserved}
+        </aside>
+      )}
+      <App key={session?.id ?? "draft"} viewMode="sidepanel" initialDraft={session?.draft} />
+    </>
   ) : null;
 }

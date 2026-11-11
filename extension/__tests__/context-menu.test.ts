@@ -45,6 +45,8 @@ it("opens the optimizer with an isolated, exact selection payload", async () => 
       text: "  Привет 👋\nworld  ",
       sourceTabId: 42,
       sourceSessionId: "test-session",
+      draftSessionId: expect.any(String),
+      draftCreatedAt: expect.any(Number),
       expiresAt: expect.any(Number),
     },
   });
@@ -159,6 +161,11 @@ it("removes an unconsumed selection on the cleanup alarm without touching live s
       draft: { original: "New" },
       expiresAt: Date.now() + 300000,
     },
+    optimizer_draft_expired: {
+      original: "Old session",
+      updatedAt: Date.now() - 3 * 60 * 60 * 1000 - 1,
+    },
+    optimizer_draft_live: { original: "Live session", updatedAt: Date.now() },
     popup_session_draft: { original: "Keep draft" },
     library: [],
   });
@@ -168,6 +175,7 @@ it("removes an unconsumed selection on the cleanup alarm without touching live s
     "optimizer_selection_legacy",
     "optimizer_panel_handoff_7",
     "optimizer_panel_handoff_8",
+    "optimizer_draft_expired",
   ]);
 });
 

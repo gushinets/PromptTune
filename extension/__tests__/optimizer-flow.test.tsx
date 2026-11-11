@@ -105,8 +105,9 @@ it("shows input, processing and result screens with edit and new actions", async
   await click("Edit original");
   const lastDraft = vi
     .mocked(browser.storage.local.set)
-    .mock.calls.filter(([data]) => "popup_session_draft" in data)
-    .at(-1)?.[0].popup_session_draft as { optimizer_screen?: string };
+    .mock.calls.flatMap(([data]) => Object.entries(data))
+    .filter(([key]) => key.startsWith("optimizer_draft_"))
+    .at(-1)?.[1] as { optimizer_screen?: string };
   expect(lastDraft.optimizer_screen).toBe("input");
   expect(host.querySelector(".prompt-form")?.hasAttribute("hidden")).toBe(false);
   expect((host.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
@@ -367,12 +368,12 @@ it("clears a restored selection's source binding when starting a new prompt", as
     type: "PASTE_TEXT",
     payload: { text: "New result" },
   });
-  expect(browser.storage.local.set).toHaveBeenLastCalledWith({
-    popup_session_draft: expect.objectContaining({
-      sourceTabId: undefined,
-      original: "A new prompt",
-    }),
-  });
+  const saved = vi
+    .mocked(browser.storage.local.set)
+    .mock.calls.flatMap(([data]) => Object.entries(data))
+    .filter(([key]) => key.startsWith("optimizer_draft_"))
+    .at(-1)?.[1];
+  expect(saved).toMatchObject({ sourceTabId: undefined, original: "A new prompt" });
 });
 
 it("keeps the normal browser target after New in a standalone selection window", async () => {
