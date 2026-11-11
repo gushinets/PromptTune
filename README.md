@@ -76,7 +76,12 @@ from the menu does not submit a request automatically. Previous results and the
 library screen do not override the selection. Insert targets the originating tab
 on supported AI sites; Copy is available for other pages. Switching to the side
 panel transfers the current prompt/result and retains that source tab even when
-another tab becomes active. If the source tab closes, switching shows an error
+another tab becomes active. In the separate optimizer window, New clears the
+prompt session but keeps its originating browser target for Insert and switching
+to the side panel. Saved source bindings carry a nonce in `storage.session`;
+after a browser restart or extension reload they cannot resolve a reused tab ID.
+The old result remains available to copy or save; New starts an unbound session
+when reopening from the toolbar. If the source tab closes, switching shows an error
 and leaves the prompt available in the optimizer window.
 
 Private/incognito selections are explicitly unsupported: selecting the menu item

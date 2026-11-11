@@ -81,6 +81,9 @@ describe("App", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(browser.storage.session.get).mockResolvedValue({
+      optimizer_browser_session: "test-session",
+    });
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-16T12:00:00.000Z"));
     vi.mocked(browser.storage.local.get).mockResolvedValue({
@@ -582,7 +585,15 @@ describe("App", () => {
     Object.assign(browser, { sidePanel: { open } });
     vi.mocked(browser.tabs.get).mockRejectedValue(new Error("No tab with id: 42"));
     await act(async () => {
-      root.render(<App initialSelection={{ text: "Selected text", sourceTabId: 42 }} />);
+      root.render(
+        <App
+          initialSelection={{
+            text: "Selected text",
+            sourceTabId: 42,
+            sourceSessionId: "test-session",
+          }}
+        />,
+      );
     });
     await flushEffects();
     await act(async () => {
@@ -605,7 +616,15 @@ describe("App", () => {
     Object.assign(browser, { sidePanel: { open } });
     vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 7 } as never);
     await act(async () => {
-      root.render(<App initialSelection={{ text: "Selected text", sourceTabId: 42 }} />);
+      root.render(
+        <App
+          initialSelection={{
+            text: "Selected text",
+            sourceTabId: 42,
+            sourceSessionId: "test-session",
+          }}
+        />,
+      );
     });
     await flushEffects();
     await act(async () => {
@@ -625,6 +644,22 @@ describe("App", () => {
     );
     expect(handoff![0]).toBe(`optimizer_panel_handoff_7_${(handoff![1] as { id: string }).id}`);
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("shows a layout failure while the Library tab remains open", async () => {
+    const open = vi.fn().mockRejectedValue(new Error("Panel unavailable"));
+    Object.assign(browser, { sidePanel: { open } });
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 7 }] as never);
+    await act(async () => root.render(<App />));
+    await flushEffects();
+    await act(async () => findButton(container, "Library").click());
+    await act(async () =>
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click(),
+    );
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not open the side panel",
+    );
+    expect(container.querySelector(".tab.active")?.textContent).toContain("Library");
   });
 
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {

@@ -39,6 +39,7 @@ import type {
   OptimizerRequestContext,
 } from "@shared/types";
 
+import { resolveBrowserTarget } from "@shared/browser-target";
 import { panelHandoffKey } from "@shared/panel-handoff";
 import type { PromptSelection } from "@shared/selection";
 
@@ -133,6 +134,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [sourceTabId, setSourceTabId] = useState(
     initialSelection?.sourceTabId ?? initialDraft?.sourceTabId,
   );
+  const [sourceSessionId, setSourceSessionId] = useState(
+    initialSelection?.sourceSessionId ?? initialDraft?.sourceSessionId,
+  );
+  // The standalone window still needs its originating browser target after New clears prompt state.
+  const targetTabId = sourceTabId ?? initialSelection?.sourceTabId;
+  const targetSessionId =
+    sourceTabId !== undefined ? sourceSessionId : initialSelection?.sourceSessionId;
   const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
   );
@@ -229,10 +237,10 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   }, []);
 
   const refreshActiveTabContext = useCallback(() => {
-    const tabs =
-      sourceTabId !== undefined
-        ? browser.tabs.get(sourceTabId).then((tab) => [tab])
-        : browser.tabs.query({ active: true, currentWindow: true });
+    if (!sessionDraftLoaded) return;
+    const tabs = resolveBrowserTarget(targetTabId, targetSessionId).then((tab) =>
+      tab ? [tab] : [],
+    );
     tabs
       .then((tabs) => {
         const tabUrl = tabs[0]?.url;
@@ -245,7 +253,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setDetectedAiGoal("general");
         setSiteResolved(true);
       });
-  }, [sourceTabId]);
+  }, [targetTabId, targetSessionId, sessionDraftLoaded]);
 
   useEffect(() => {
     refreshLibraryCount();
@@ -262,6 +270,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         if (initialSelection || !draft) return;
 
         setSourceTabId(draft.sourceTabId);
+        setSourceSessionId(draft.sourceSessionId);
         setActiveTab(draft.activeTab);
         setOriginal(draft.original);
         setImproved(draft.improved);
@@ -297,6 +306,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   }, [initialSelection, initialDraft]);
 
   useEffect(() => {
+    if (!sessionDraftLoaded) return;
     refreshActiveTabContext();
 
     if (viewMode !== "sidepanel") return;
@@ -308,7 +318,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       browser.tabs.onActivated.removeListener(refreshActiveTabContext);
       browser.tabs.onUpdated.removeListener(refreshActiveTabContext);
     };
-  }, [refreshActiveTabContext, viewMode]);
+  }, [refreshActiveTabContext, viewMode, sessionDraftLoaded]);
 
   useEffect(() => {
     if (!siteResolved || hasTrackedPopupOpenedRef.current) return;
@@ -334,6 +344,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const sessionDraft = useMemo<PopupSessionDraft>(
     () => ({
       sourceTabId,
+      sourceSessionId,
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
       result_context: resultContext,
       activeTab,
@@ -349,6 +360,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     }),
     [
       sourceTabId,
+      sourceSessionId,
       improved,
       editingOriginal,
       resultContext,
@@ -407,10 +419,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     let closing = false;
     try {
       if (viewMode === "popup") {
-        const tab =
-          sourceTabId !== undefined
-            ? await browser.tabs.get(sourceTabId)
-            : (await browser.tabs.query({ active: true, currentWindow: true }))[0];
+        const tab = await resolveBrowserTarget(targetTabId, targetSessionId);
         if (activeRequestRef.current) return;
         const sidePanel = (
           browser as typeof browser & {
@@ -420,12 +429,16 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         if (tab?.windowId != null && sidePanel) {
           await sidePanel.open({ windowId: tab.windowId });
           if (activeRequestRef.current) return;
-          if (sourceTabId !== undefined) {
+          if (targetTabId !== undefined) {
             const id = crypto.randomUUID();
             await browser.storage.local.set({
               [panelHandoffKey(tab.windowId, id)]: {
                 id,
-                draft: sessionDraft,
+                draft: {
+                  ...sessionDraft,
+                  sourceTabId: targetTabId,
+                  sourceSessionId: targetSessionId,
+                },
                 expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
               },
             });
@@ -449,7 +462,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLayoutTransition(false);
       }
     }
-  }, [viewMode, sourceTabId, sessionDraft, t]);
+  }, [viewMode, targetTabId, targetSessionId, sessionDraft, t]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
@@ -730,6 +743,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   const handleNew = useCallback(() => {
     setSourceTabId(undefined);
+    setSourceSessionId(undefined);
     setOriginal("");
     setImproved("");
     setResultContext(null);
@@ -956,15 +970,17 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       </nav>
 
       <div className="tab-content">
+        {error && (
+          <ErrorToast
+            error={error}
+            onDismiss={handleDismissError}
+            onRetry={
+              activeTab === "improve" && error.type === "network" ? handleImprove : undefined
+            }
+          />
+        )}
         {activeTab === "improve" ? (
           <>
-            {error && (
-              <ErrorToast
-                error={error}
-                onDismiss={handleDismissError}
-                onRetry={error.type === "network" ? handleImprove : undefined}
-              />
-            )}
             {isExhausted && (
               <div className="upgrade-banner">
                 <p>{t.exhaustedTitle}</p>
@@ -1023,7 +1039,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                       <>
                         <ActionBar
                           improved={improved}
-                          targetTabId={sourceTabId}
+                          targetTabId={targetTabId}
+                          targetSessionId={targetSessionId}
                           disabled={!improved}
                           saveDisabled={isOriginalOverLimit}
                           onSave={handleSave}

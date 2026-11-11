@@ -45,6 +45,10 @@ vi.mock("webextension-polyfill", async () => {
   return {
     default: {
       storage: {
+        session: {
+          get: vi.fn().mockResolvedValue({ optimizer_browser_session: "test-session" }),
+          set: vi.fn().mockResolvedValue(undefined),
+        },
         onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
         local: {
           get: vi.fn().mockResolvedValue({}),

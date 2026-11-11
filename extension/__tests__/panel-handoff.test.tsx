@@ -11,6 +11,7 @@ const selected = {
   expiresAt: Date.now() + 300000,
   draft: {
     sourceTabId: 42,
+    sourceSessionId: "test-session",
     optimizer_screen: "result",
     result_context: { mode: "ai", goal: "general" },
     activeTab: "improve",
@@ -35,6 +36,9 @@ async function change(key: string, value: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+  });
   vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
   vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, url: "https://chatgpt.com" } as never);
   vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 99, url: "https://claude.ai" }] as never);

@@ -6,6 +6,9 @@ vi.mock("@shared/constants", async (importOriginal) => ({
 }));
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+  });
   vi.mocked(browser.storage.local.get).mockResolvedValue({});
   vi.mocked(browser.storage.local.remove).mockResolvedValue(undefined);
   vi.stubGlobal("defineBackground", (main: () => void) => main);
@@ -38,7 +41,12 @@ it("opens the optimizer with an isolated, exact selection payload", async () => 
   const key = url.searchParams.get("selection");
   expect(key).toBeTruthy();
   expect(browser.storage.local.set).toHaveBeenCalledWith({
-    [key!]: { text: "  Привет 👋\nworld  ", sourceTabId: 42, expiresAt: expect.any(Number) },
+    [key!]: {
+      text: "  Привет 👋\nworld  ",
+      sourceTabId: 42,
+      sourceSessionId: "test-session",
+      expiresAt: expect.any(Number),
+    },
   });
   expect(browser.runtime.sendMessage).not.toHaveBeenCalled();
 });

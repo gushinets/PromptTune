@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { ensureBrowserSessionId } from "./browser-target";
 import { LIMITS } from "./constants";
 import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
 
@@ -9,6 +10,7 @@ const SELECTION_KEY_PREFIX = "optimizer_selection_";
 export interface PromptSelection {
   text: string;
   sourceTabId?: number;
+  sourceSessionId?: string;
 }
 
 /** Open an isolated optimizer window without placing selected text in its URL. */
@@ -28,9 +30,10 @@ export async function openSelection(
     });
     return;
   }
+  const sourceSessionId = sourceTabId !== undefined ? await ensureBrowserSessionId() : undefined;
   const key = `${SELECTION_KEY_PREFIX}${crypto.randomUUID()}`;
   await browser.storage.local.set({
-    [key]: { text, sourceTabId, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS },
+    [key]: { text, sourceTabId, sourceSessionId, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS },
   });
   try {
     await browser.windows.create({
@@ -63,6 +66,9 @@ export async function takeSelection(search: string): Promise<PromptSelection | u
   return {
     text: value.text,
     sourceTabId: typeof value.sourceTabId === "number" ? value.sourceTabId : undefined,
+    ...(typeof value.sourceSessionId === "string"
+      ? { sourceSessionId: value.sourceSessionId }
+      : {}),
   };
 }
 

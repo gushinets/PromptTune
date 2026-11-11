@@ -15,6 +15,7 @@ export interface LibraryEntry {
 
 export interface PopupSessionDraft {
   sourceTabId?: number;
+  sourceSessionId?: string;
   optimizer_screen?: "input" | "result";
   result_context?: OptimizerRequestContext | null;
   activeTab: "improve" | "library";
@@ -39,6 +40,7 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
 
   const draft = value as Record<string, unknown>;
   return (
+    (draft.sourceSessionId === undefined || typeof draft.sourceSessionId === "string") &&
     (draft.sourceTabId === undefined ||
       (Number.isSafeInteger(draft.sourceTabId) && (draft.sourceTabId as number) >= 0)) &&
     (draft.result_context === undefined ||

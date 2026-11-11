@@ -33,6 +33,9 @@ async function click(label: string) {
 }
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+  });
   vi.mocked(browser.tabs.query).mockResolvedValue([]);
   vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, url: "https://example.com" } as never);
   vi.mocked(browser.storage.local.set).mockResolvedValue(undefined);
@@ -238,7 +241,13 @@ it("uses the exact selected text instead of a previous result and improves it on
   root = createRoot(host);
   await act(async () => {
     root.render(
-      <App initialSelection={{ text: "  Выделенный 👋\nфрагмент  ", sourceTabId: 42 }} />,
+      <App
+        initialSelection={{
+          text: "  Выделенный 👋\nфрагмент  ",
+          sourceTabId: 42,
+          sourceSessionId: "test-session",
+        }}
+      />,
     );
   });
   expect(host.querySelector(".original-textarea")).not.toBeNull();
@@ -287,6 +296,7 @@ it("restores a selected result in the panel and keeps Insert bound after tab swi
       original: "Selected",
       improved: "Selected result",
       sourceTabId: 42,
+      sourceSessionId: "test-session",
       changes: [],
       goal: "general",
       lastRequestId: "selection-result",
@@ -326,6 +336,7 @@ it("clears a restored selection's source binding when starting a new prompt", as
       original: "Selected",
       improved: "Selected result",
       sourceTabId: 42,
+      sourceSessionId: "test-session",
       changes: [],
       goal: "general",
       lastRequestId: "selection-result",
@@ -362,4 +373,80 @@ it("clears a restored selection's source binding when starting a new prompt", as
       original: "A new prompt",
     }),
   });
+});
+
+it("keeps the normal browser target after New in a standalone selection window", async () => {
+  await act(async () => root.unmount());
+  vi.mocked(browser.tabs.query).mockResolvedValue([
+    { id: 100, windowId: 100, url: "chrome-extension://test/popup.html" },
+  ] as never);
+  vi.mocked(browser.tabs.get).mockResolvedValue({
+    id: 42,
+    windowId: 7,
+    url: "https://chatgpt.com",
+  } as never);
+  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+    (message as { type: string }).type === "IMPROVE_REQUEST"
+      ? { type: "IMPROVE_RESULT", payload: { request_id: "r", improved_text: "Result" } }
+      : { ok: true },
+  );
+  root = createRoot(host);
+  await act(async () =>
+    root.render(
+      <App
+        initialSelection={{ text: "First", sourceTabId: 42, sourceSessionId: "test-session" }}
+      />,
+    ),
+  );
+  await click("Improve");
+  await click("New");
+  await typeOriginal("Second");
+  await click("Improve");
+  await click("Insert");
+  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(42, {
+    type: "PASTE_TEXT",
+    payload: { text: "Result" },
+  });
+  const open = vi.fn().mockResolvedValue(undefined);
+  Object.assign(browser, { sidePanel: { open } });
+  vi.spyOn(window, "close").mockImplementation(() => {});
+  await act(async () => host.querySelector<HTMLButtonElement>(".layout-toggle-btn")!.click());
+  expect(open).toHaveBeenCalledWith({ windowId: 7 });
+  expect(browser.tabs.sendMessage).not.toHaveBeenCalledWith(100, expect.anything());
+});
+
+it("refuses a restored source tab when its browser session has ended, even if the ID is reused", async () => {
+  await act(async () => root.unmount());
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    popup_session_draft: {
+      updatedAt: Date.now(),
+      activeTab: "improve",
+      optimizer_screen: "result",
+      original: "Old selected text",
+      improved: "Old result",
+      sourceTabId: 42,
+      sourceSessionId: "previous-session",
+      changes: [],
+      goal: "general",
+      lastRequestId: "old",
+      lastRequestContextKey: "ai|general|Old selected text",
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 1,
+    },
+  });
+  vi.mocked(browser.tabs.get).mockResolvedValue({
+    id: 42,
+    windowId: 9,
+    url: "https://claude.ai/new-conversation",
+  } as never);
+  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+  root = createRoot(host);
+  await act(async () => root.render(<App />));
+  await click("Insert");
+  expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
+  expect(host.querySelector('[role="alert"]')).not.toBeNull();
 });
