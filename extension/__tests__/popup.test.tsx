@@ -662,6 +662,49 @@ describe("App", () => {
     expect(container.querySelector(".tab.active")?.textContent).toContain("Library");
   });
 
+  it("closes the opened panel if persisting its selected session fails and keeps the optimizer open", async () => {
+    const closeWindow = vi.spyOn(window, "close").mockImplementation(() => {});
+    const open = vi.fn().mockResolvedValue(undefined);
+    const closePanel = vi.fn().mockResolvedValue(undefined);
+    Object.assign(browser, { sidePanel: { open, close: closePanel } });
+    vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 7 } as never);
+    await act(async () =>
+      root.render(
+        <App
+          initialSelection={{ text: "Keep me", sourceTabId: 42, sourceSessionId: "test-session" }}
+        />,
+      ),
+    );
+    await flushEffects();
+    vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+      if (Object.keys(values).some((key) => key.startsWith("optimizer_panel_handoff_")))
+        throw new Error("write failed");
+    });
+    await act(async () =>
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click(),
+    );
+    expect(open).toHaveBeenCalledWith({ windowId: 7 });
+    expect(closePanel).toHaveBeenCalledWith({ windowId: 7 });
+    expect(closeWindow).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not open the side panel",
+    );
+    expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe("Keep me");
+  });
+
+  it("calls sidePanel.open synchronously from the click using the prevalidated target", async () => {
+    const open = vi.fn().mockResolvedValue(undefined);
+    Object.assign(browser, { sidePanel: { open } });
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 7 }] as never);
+    await act(async () => root.render(<App />));
+    await flushEffects();
+    await act(async () => {
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
+      expect(open).toHaveBeenCalledWith({ windowId: 7 });
+    });
+  });
+
   it("blocks oversized pastes and allows exactly 30000 Unicode characters", async () => {
     await act(async () => {
       root.render(<App />);

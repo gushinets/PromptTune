@@ -82,7 +82,11 @@ to the side panel. Saved source bindings carry a nonce in `storage.session`;
 after a browser restart or extension reload they cannot resolve a reused tab ID.
 The old result remains available to copy or save; New starts an unbound session
 when reopening from the toolbar. If the source tab closes, switching shows an error
-and leaves the prompt available in the optimizer window.
+and leaves the prompt available in the optimizer window. A failed handoff write
+closes the opened panel while retaining the optimizer window and its prompt.
+The panel retries a failed initial handoff read once, then offers a Retry action
+without showing an unrelated draft. An ended source session has its own Insert
+message explaining that Copy and New remain available.
 
 Private/incognito selections are explicitly unsupported: selecting the menu item
 opens an informational notice without storing or passing the selected text to the

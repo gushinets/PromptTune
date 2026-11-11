@@ -40,7 +40,7 @@ import type {
 } from "@shared/types";
 
 import { resolveBrowserTarget } from "@shared/browser-target";
-import { panelHandoffKey } from "@shared/panel-handoff";
+import { panelHandoffKey, requestPanelRollback } from "@shared/panel-handoff";
 import type { PromptSelection } from "@shared/selection";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
@@ -236,19 +236,40 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     getAll().then((entries) => setLibraryCount(entries.length));
   }, []);
 
+  const rollbackCleanupRef = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => () => rollbackCleanupRef.current?.(), []);
+  const layoutTargetRef = useRef<
+    { tab: browser.Tabs.Tab; id?: number; session?: string } | undefined
+  >(undefined);
+  const contextRevisionRef = useRef(0);
+
+  useEffect(() => {
+    const onRemoved = (tabId: number) => {
+      if (layoutTargetRef.current?.tab.id === tabId) layoutTargetRef.current = undefined;
+    };
+    browser.tabs.onRemoved.addListener(onRemoved);
+    return () => browser.tabs.onRemoved.removeListener(onRemoved);
+  }, []);
+
   const refreshActiveTabContext = useCallback(() => {
     if (!sessionDraftLoaded) return;
+    const revision = ++contextRevisionRef.current;
+    layoutTargetRef.current = undefined;
     const tabs = resolveBrowserTarget(targetTabId, targetSessionId).then((tab) =>
       tab ? [tab] : [],
     );
     tabs
       .then((tabs) => {
+        if (revision !== contextRevisionRef.current) return;
+        if (tabs[0])
+          layoutTargetRef.current = { tab: tabs[0], id: targetTabId, session: targetSessionId };
         const tabUrl = tabs[0]?.url;
         setSiteHostname(getSupportedSiteHostname(tabUrl));
         setDetectedAiGoal(detectAiGoalFromUrl(tabUrl));
         setSiteResolved(true);
       })
       .catch(() => {
+        if (revision !== contextRevisionRef.current) return;
         setSiteHostname(undefined);
         setDetectedAiGoal("general");
         setSiteResolved(true);
@@ -309,16 +330,18 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     if (!sessionDraftLoaded) return;
     refreshActiveTabContext();
 
-    if (viewMode !== "sidepanel") return;
+    if (viewMode !== "sidepanel" && targetTabId === undefined) return;
 
     browser.tabs.onActivated.addListener(refreshActiveTabContext);
     browser.tabs.onUpdated.addListener(refreshActiveTabContext);
+    browser.tabs.onAttached.addListener(refreshActiveTabContext);
 
     return () => {
       browser.tabs.onActivated.removeListener(refreshActiveTabContext);
       browser.tabs.onUpdated.removeListener(refreshActiveTabContext);
+      browser.tabs.onAttached.removeListener(refreshActiveTabContext);
     };
-  }, [refreshActiveTabContext, viewMode, sessionDraftLoaded]);
+  }, [refreshActiveTabContext, viewMode, sessionDraftLoaded, targetTabId]);
 
   useEffect(() => {
     if (!siteResolved || hasTrackedPopupOpenedRef.current) return;
@@ -414,16 +437,26 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
     if (activeRequestRef.current || layoutTransitionRef.current) return;
+    rollbackCleanupRef.current?.();
+    rollbackCleanupRef.current = undefined;
     layoutTransitionRef.current = true;
     setLayoutTransition(true);
     let closing = false;
     try {
       if (viewMode === "popup") {
-        const tab = await resolveBrowserTarget(targetTabId, targetSessionId);
+        // Resolve/validate ahead of the click so open() retains the user gesture.
+        const cached = layoutTargetRef.current;
+        const tab =
+          cached?.id === targetTabId && cached?.session === targetSessionId
+            ? cached?.tab
+            : undefined;
         if (activeRequestRef.current) return;
         const sidePanel = (
           browser as typeof browser & {
-            sidePanel?: { open: (options: { windowId: number }) => Promise<void> };
+            sidePanel?: {
+              open: (options: { windowId: number }) => Promise<void>;
+              close?: (options: { windowId: number }) => Promise<void>;
+            };
           }
         ).sidePanel;
         if (tab?.windowId != null && sidePanel) {
@@ -431,17 +464,28 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           if (activeRequestRef.current) return;
           if (targetTabId !== undefined) {
             const id = crypto.randomUUID();
-            await browser.storage.local.set({
-              [panelHandoffKey(tab.windowId, id)]: {
-                id,
-                draft: {
-                  ...sessionDraft,
-                  sourceTabId: targetTabId,
-                  sourceSessionId: targetSessionId,
+            try {
+              await browser.storage.local.set({
+                [panelHandoffKey(tab.windowId, id)]: {
+                  id,
+                  draft: {
+                    ...sessionDraft,
+                    sourceTabId: targetTabId,
+                    sourceSessionId: targetSessionId,
+                  },
+                  expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
                 },
-                expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
-              },
-            });
+              });
+            } catch (error) {
+              // Roll back the opened surface; keep this optimizer and its prompt available.
+              try {
+                if (!sidePanel.close) throw new Error("Panel close API unavailable");
+                await sidePanel.close({ windowId: tab.windowId });
+              } catch {
+                rollbackCleanupRef.current = requestPanelRollback(tab.windowId);
+              }
+              throw error;
+            }
           }
           window.close();
           closing = true;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
-import { resolveBrowserTarget } from "@shared/browser-target";
+import { resolveBrowserTarget, SourceSessionEndedError } from "@shared/browser-target";
 import { trackEvent } from "@shared/analytics";
 import type { AnalyticsSource } from "@shared/analytics-types";
 
@@ -179,8 +179,12 @@ export function ActionBar({
       }
       setInserted(true);
       later(() => setInserted(false));
-    } catch {
-      setActionError(t.errorNoEditableField);
+    } catch (error) {
+      setActionError(
+        error instanceof SourceSessionEndedError
+          ? t.errorSourceSessionEnded
+          : t.errorNoEditableField,
+      );
     }
   };
 

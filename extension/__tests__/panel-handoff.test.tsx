@@ -174,3 +174,106 @@ it("does not let cleanup deletion events discard a live handoff during startup",
   );
   expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
 });
+
+it("retries the initial read to recover a handoff written before subscription", async () => {
+  vi.mocked(browser.storage.local.get).mockRejectedValueOnce(new Error("temporary read failure"));
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    "optimizer_panel_handoff_7_selection-session": selected,
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+});
+
+it("shows a recoverable error instead of an unrelated draft when both initial reads fail", async () => {
+  vi.mocked(browser.storage.local.get)
+    .mockRejectedValueOnce(new Error("read failed"))
+    .mockRejectedValueOnce(new Error("retry failed"));
+  await act(async () => root.render(<SidepanelApp />));
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    "Could not load the transferred prompt",
+  );
+  expect(host.querySelector("textarea")).toBeNull();
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    "optimizer_panel_handoff_7_selection-session": selected,
+  });
+  await act(async () => host.querySelector("button")!.click());
+  expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+});
+
+it("keeps two active browser windows on their own transferred sessions", async () => {
+  await act(async () => root.render(<SidepanelApp />));
+  const secondHost = document.createElement("div");
+  document.body.appendChild(secondHost);
+  const secondRoot = createRoot(secondHost);
+  vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 8 } as never);
+  try {
+    await act(async () => secondRoot.render(<SidepanelApp />));
+    const listeners = vi
+      .mocked(browser.storage.onChanged.addListener)
+      .mock.calls.map(([listener]) => listener);
+    const deliver = async (key: string, value: unknown) => {
+      await act(async () => {
+        for (const listener of listeners) listener({ [key]: { newValue: value } }, "local");
+      });
+    };
+    await deliver("optimizer_panel_handoff_7_first", selected);
+    await deliver("optimizer_panel_handoff_8_second", {
+      ...selected,
+      id: "second",
+      draft: { ...selected.draft, improved: "Window eight result" },
+    });
+    expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+    expect(secondHost.querySelector(".result-screen")?.textContent).toContain(
+      "Window eight result",
+    );
+  } finally {
+    await act(async () => secondRoot.unmount());
+    secondHost.remove();
+  }
+});
+
+it("closes only the addressed panel when a transfer fails on a browser without native close", async () => {
+  const close = vi.spyOn(window, "close").mockImplementation(() => {});
+  await act(async () => root.render(<SidepanelApp />));
+  const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  await listener({ type: "PANEL_HANDOFF_FAILED", windowId: 8 }, {} as never, vi.fn());
+  expect(close).not.toHaveBeenCalled();
+  await listener({ type: "PANEL_HANDOFF_FAILED", windowId: 7 }, {} as never, vi.fn());
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("delivers a pending rollback when a panel finishes its delayed startup", async () => {
+  let finishWindow!: (value: { id: number }) => void;
+  vi.mocked(browser.windows.getCurrent).mockReturnValue(
+    new Promise((resolve) => {
+      finishWindow = resolve;
+    }) as never,
+  );
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    for (const [listener] of vi.mocked(browser.runtime.onMessage.addListener).mock.calls) {
+      const result = listener(message, {} as never, vi.fn());
+      if (result !== undefined) await result;
+    }
+    // Emulate the background listener winning the direct response channel.
+    return undefined;
+  });
+  const close = vi.spyOn(window, "close").mockImplementation(() => {});
+  const { requestPanelRollback } = await import("../shared/panel-handoff");
+  const cleanup = requestPanelRollback(7);
+  try {
+    await act(async () => root.render(<SidepanelApp />));
+    expect(close).not.toHaveBeenCalled();
+    await act(async () => finishWindow({ id: 7 }));
+    expect(close).toHaveBeenCalledOnce();
+    await act(async () => {
+      await browser.runtime.sendMessage({ type: "PANEL_READY", windowId: 7 });
+    });
+    expect(close).toHaveBeenCalledOnce();
+  } finally {
+    cleanup();
+  }
+});

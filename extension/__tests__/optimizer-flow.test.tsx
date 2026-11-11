@@ -448,5 +448,8 @@ it("refuses a restored source tab when its browser session has ended, even if th
   await act(async () => root.render(<App />));
   await click("Insert");
   expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
-  expect(host.querySelector('[role="alert"]')).not.toBeNull();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+    "original browser session has ended",
+  );
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Copy");
 });

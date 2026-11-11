@@ -1,5 +1,12 @@
 import browser from "webextension-polyfill";
 
+export class SourceSessionEndedError extends Error {
+  constructor() {
+    super("The original browser session has ended. Start a new prompt.");
+    this.name = "SourceSessionEndedError";
+  }
+}
+
 const BROWSER_SESSION_KEY = "optimizer_browser_session";
 let initialization: Promise<string> | undefined;
 
@@ -24,7 +31,7 @@ export async function resolveBrowserTarget(tabId?: number, sessionId?: string) {
   if (tabId !== undefined) {
     const data = await browser.storage.session.get(BROWSER_SESSION_KEY);
     if (!sessionId || data[BROWSER_SESSION_KEY] !== sessionId) {
-      throw new Error("The original browser session has ended. Start a new prompt.");
+      throw new SourceSessionEndedError();
     }
     return browser.tabs.get(tabId);
   }
