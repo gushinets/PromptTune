@@ -507,3 +507,81 @@ it("does not apply a saved standalone target to a normal toolbar popup after New
   });
   expect(browser.tabs.sendMessage).not.toHaveBeenCalledWith(42, expect.anything());
 });
+
+it("keeps the original selection recoverable across reload when initial draft writes reject", async () => {
+  const search = "?selection=optimizer_selection_a&session=a";
+  state.optimizer_selection_a = {
+    text: "Recover selected A",
+    draftSessionId: "a",
+    draftCreatedAt: 100,
+    sourceTabId: 42,
+    sourceSessionId: "test-session",
+    expiresAt: Date.now() + 300000,
+  };
+  const persist = vi.mocked(browser.storage.local.set).getMockImplementation()!;
+  vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+    if (Object.keys(values).some((key) => key.startsWith("optimizer_draft_")))
+      throw new Error("Draft writes unavailable");
+    return persist(values);
+  });
+  const first = await loadSelectionSession(search);
+  expect(first.initialSelection?.text).toBe("Recover selected A");
+  expect(state.optimizer_selection_a).toBeDefined();
+  expect(state.optimizer_draft_a).toBeUndefined();
+  const originalUrl = window.location.href;
+  window.history.replaceState(null, "", search);
+  try {
+    const reloaded = mount();
+    const restored = await loadSelectionSession(search);
+    await act(async () => reloaded.root.render(<App {...restored} />));
+    expect(reloaded.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe(
+      "Recover selected A",
+    );
+    expect(reloaded.host.textContent).not.toContain("select the text again");
+    vi.mocked(browser.storage.local.set).mockImplementation(persist);
+    await loadSelectionSession(search);
+    expect(state.optimizer_selection_a).toBeUndefined();
+    expect(state.optimizer_draft_a).toMatchObject({ original: "Recover selected A" });
+  } finally {
+    window.history.replaceState(null, "", originalUrl);
+  }
+});
+
+it("retains the selection payload until a deferred initial draft write commits", async () => {
+  const search = "?selection=optimizer_selection_a&session=a";
+  state.optimizer_selection_a = {
+    text: "Deferred selection",
+    draftSessionId: "a",
+    draftCreatedAt: 100,
+    expiresAt: Date.now() + 300000,
+  };
+  const persist = vi.mocked(browser.storage.local.set).getMockImplementation()!;
+  let release!: () => void;
+  vi.mocked(browser.storage.local.set).mockImplementationOnce(async (values) => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await persist(values);
+  });
+  const first = loadSelectionSession(search);
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  expect(state.optimizer_selection_a).toBeDefined();
+  expect(state.optimizer_draft_a).toBeUndefined();
+  const reloaded = loadSelectionSession(search);
+  await vi.waitFor(() =>
+    expect(
+      vi
+        .mocked(browser.storage.local.get)
+        .mock.calls.filter(([key]) => key === "optimizer_selection_a"),
+    ).toHaveLength(2),
+  );
+  expect(state.optimizer_selection_a).toBeDefined();
+  release();
+  await first;
+  expect((await reloaded).initialDraft).toMatchObject({ original: "Deferred selection" });
+  expect(state.optimizer_draft_a).toMatchObject({ original: "Deferred selection" });
+  expect(state.optimizer_selection_a).toBeUndefined();
+  expect((await loadSelectionSession(search)).initialDraft).toMatchObject({
+    original: "Deferred selection",
+  });
+});

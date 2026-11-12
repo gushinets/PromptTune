@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import {
   getPopupSessionDraft,
+  initializePopupSessionDraft,
   setOptimizerHandoff,
   preferPopupSessionDraft,
   setPopupSessionDraft,
@@ -319,3 +320,19 @@ it.each(["draft", "handoff"])(
     });
   },
 );
+
+it("does not overwrite an existing autosaved result during selection initialization", async () => {
+  const edited = { ...draft("1", "Edited original"), improved: "Durable result" };
+  const [, initialized] = await Promise.all([
+    setPopupSessionDraft(edited),
+    initializePopupSessionDraft(draft("1", "Initial selection")),
+  ]);
+  expect(initialized).toMatchObject({
+    created: false,
+    draft: { original: "Edited original", improved: "Durable result" },
+  });
+  expect(state.optimizer_draft_1).toMatchObject({
+    original: "Edited original",
+    improved: "Durable result",
+  });
+});

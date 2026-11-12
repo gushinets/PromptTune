@@ -9,6 +9,7 @@ import {
   migrateLegacyPopupDraft,
   readLocalEntries,
   getPopupSessionDraftById,
+  initializePopupSessionDraft,
   type PopupSessionDraft,
 } from "./storage";
 import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
@@ -67,8 +68,8 @@ export async function openSelection(
   }
 }
 
-/** Consume only the payload addressed to this window, never a shared pending draft. */
-export async function takeSelection(search: string): Promise<PromptSelection | undefined> {
+/** Read the addressed payload; retain it until the initial draft is committed. */
+export async function readSelection(search: string): Promise<PromptSelection | undefined> {
   const key = new URLSearchParams(search).get("selection");
   if (!key?.startsWith(SELECTION_KEY_PREFIX)) return;
   let value: (Partial<PromptSelection> & { expiresAt?: number }) | undefined;
@@ -77,11 +78,11 @@ export async function takeSelection(search: string): Promise<PromptSelection | u
     value = data[key] as typeof value;
   } catch {
     return;
-  } finally {
-    await browser.storage.local.remove(key).catch(() => undefined);
   }
-  if (!isLiveHandoff(value, Date.now()) || typeof value?.text !== "string" || !value.text.trim())
+  if (!isLiveHandoff(value, Date.now()) || typeof value?.text !== "string" || !value.text.trim()) {
+    await browser.storage.local.remove(key).catch(() => undefined);
     return;
+  }
   return {
     text: value.text,
     ...(typeof value.draftSessionId === "string" ? { draftSessionId: value.draftSessionId } : {}),
@@ -105,8 +106,52 @@ export async function loadSelectionSession(search: string): Promise<{
   const id = key.slice(SELECTION_KEY_PREFIX.length);
   if (!id || (params.has("session") && params.get("session") !== id)) return {};
   const draft = await getPopupSessionDraftById(id).catch(() => null);
-  if (draft) return { initialDraft: draft };
-  return { initialSelection: await takeSelection(search) };
+  if (draft) {
+    await browser.storage.local.remove(key).catch(() => undefined);
+    return { initialDraft: draft };
+  }
+  const selection = await readSelection(search);
+  if (!selection) return {};
+  const initialSelection = {
+    ...selection,
+    draftSessionId: id,
+    draftCreatedAt:
+      typeof selection.draftCreatedAt === "number" && Number.isFinite(selection.draftCreatedAt)
+        ? selection.draftCreatedAt
+        : Date.now(),
+  };
+  try {
+    const initial = await initializePopupSessionDraft({
+      draftSessionId: id,
+      draftCreatedAt: initialSelection.draftCreatedAt,
+      sourceTabId: selection.sourceTabId,
+      sourceSessionId: selection.sourceSessionId,
+      ...(selection.sourceTabId !== undefined
+        ? {
+            standaloneTarget: {
+              tabId: selection.sourceTabId,
+              sessionId: selection.sourceSessionId,
+            },
+          }
+        : {}),
+      activeTab: "improve",
+      optimizer_screen: "input",
+      original: selection.text,
+      improved: "",
+      changes: [],
+      goal: null,
+      lastRequestId: null,
+      lastRequestContextKey: null,
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 0,
+    });
+    await browser.storage.local.remove(key).catch(() => undefined);
+    return initial.created ? { initialSelection } : { initialDraft: initial.draft };
+  } catch {
+    // The window remains usable; its payload stays available for reload/retry until expiry.
+    return { initialSelection };
+  }
 }
 
 /** Expired and legacy handoffs must never be restored or retained indefinitely. */

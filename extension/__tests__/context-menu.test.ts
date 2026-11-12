@@ -59,8 +59,8 @@ it.each([undefined, "", " \n "])("ignores an empty selection (%s)", async (selec
   expect(browser.windows.create).not.toHaveBeenCalled();
 });
 
-it("consumes only the selection addressed to its window and removes the temporary text", async () => {
-  const { takeSelection } = await import("../shared/selection");
+it("reads only the addressed selection and retains its temporary text until commit", async () => {
+  const { readSelection } = await import("../shared/selection");
   vi.mocked(browser.storage.local.get).mockResolvedValue({
     optimizer_selection_first: {
       text: "  First\n👋  ",
@@ -69,18 +69,18 @@ it("consumes only the selection addressed to its window and removes the temporar
     },
     optimizer_selection_second: { text: "Second", sourceTabId: 20 },
   });
-  await expect(takeSelection("?selection=optimizer_selection_first")).resolves.toEqual({
+  await expect(readSelection("?selection=optimizer_selection_first")).resolves.toEqual({
     text: "  First\n👋  ",
     sourceTabId: 10,
   });
   expect(browser.storage.local.get).toHaveBeenCalledWith("optimizer_selection_first");
-  expect(browser.storage.local.remove).toHaveBeenCalledWith("optimizer_selection_first");
+  expect(browser.storage.local.remove).not.toHaveBeenCalled();
   expect(browser.storage.local.remove).not.toHaveBeenCalledWith("optimizer_selection_second");
 });
 
 it("does not consume unrelated storage keys from URL parameters", async () => {
-  const { takeSelection } = await import("../shared/selection");
-  await expect(takeSelection("?selection=library")).resolves.toBeUndefined();
+  const { readSelection } = await import("../shared/selection");
+  await expect(readSelection("?selection=library")).resolves.toBeUndefined();
   expect(browser.storage.local.remove).not.toHaveBeenCalled();
 });
 
@@ -93,15 +93,15 @@ it("cleans up the selection if opening the window fails", async () => {
 });
 
 it("still opens the normal popup flow if reading a selection fails and attempts cleanup", async () => {
-  const { takeSelection } = await import("../shared/selection");
+  const { readSelection } = await import("../shared/selection");
   vi.mocked(browser.storage.local.get).mockRejectedValueOnce(new Error("read failed"));
-  await expect(takeSelection("?selection=optimizer_selection_failed")).resolves.toBeUndefined();
-  expect(browser.storage.local.remove).toHaveBeenCalledWith("optimizer_selection_failed");
+  await expect(readSelection("?selection=optimizer_selection_failed")).resolves.toBeUndefined();
+  expect(browser.storage.local.remove).not.toHaveBeenCalled();
 });
 
-it("retains the retrieved selection if deleting its temporary entry fails", async () => {
-  const { takeSelection } = await import("../shared/selection");
-  vi.mocked(browser.storage.local.get).mockResolvedValueOnce({
+it("retains the retrieved selection if deleting its temporary entry fails after committing a draft", async () => {
+  const { loadSelectionSession } = await import("../shared/selection");
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
     optimizer_selection_failed: {
       text: "Selected",
       sourceTabId: 42,
@@ -109,9 +109,13 @@ it("retains the retrieved selection if deleting its temporary entry fails", asyn
     },
   });
   vi.mocked(browser.storage.local.remove).mockRejectedValueOnce(new Error("remove failed"));
-  await expect(takeSelection("?selection=optimizer_selection_failed")).resolves.toEqual({
-    text: "Selected",
-    sourceTabId: 42,
+  await expect(
+    loadSelectionSession("?selection=optimizer_selection_failed"),
+  ).resolves.toMatchObject({
+    initialSelection: { text: "Selected", sourceTabId: 42, draftSessionId: "failed" },
+  });
+  expect(browser.storage.local.set).toHaveBeenCalledWith({
+    optimizer_draft_failed: expect.objectContaining({ original: "Selected" }),
   });
 });
 
@@ -135,11 +139,11 @@ it("rejects private selections without persisting or opening their text", async 
 });
 
 it("refuses an expired selection and deletes the abandoned payload", async () => {
-  const { takeSelection } = await import("../shared/selection");
+  const { readSelection } = await import("../shared/selection");
   vi.mocked(browser.storage.local.get).mockResolvedValueOnce({
     optimizer_selection_expired: { text: "Abandoned", sourceTabId: 42, expiresAt: Date.now() - 1 },
   });
-  await expect(takeSelection("?selection=optimizer_selection_expired")).resolves.toBeUndefined();
+  await expect(readSelection("?selection=optimizer_selection_expired")).resolves.toBeUndefined();
   expect(browser.storage.local.remove).toHaveBeenCalledWith("optimizer_selection_expired");
 });
 

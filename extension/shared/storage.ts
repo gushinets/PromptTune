@@ -491,6 +491,22 @@ export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<vo
   });
 }
 
+/** Commit the first selection snapshot without overwriting a concurrent autosave. */
+export async function initializePopupSessionDraft(draft: PopupSessionDraft): Promise<{
+  created: boolean;
+  draft: PopupSessionDraft;
+}> {
+  if (!draft.draftSessionId) throw new Error("Selection draft identity unavailable");
+  const id = draft.draftSessionId;
+  return withOptimizerStorageLock(async () => {
+    const existing = await getPopupSessionDraftById(id);
+    if (existing) return { created: false, draft: existing };
+    const value = { ...draft, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
+    await writeWithDraftBudget(`${POPUP_DRAFT_PREFIX}${id}`, value, value);
+    return { created: true, draft };
+  });
+}
+
 /** Keep draft growth from blocking selection/panel handoffs, including after an upgrade. */
 export async function setOptimizerHandoff(key: string, value: unknown): Promise<void> {
   await withOptimizerStorageLock(async () => {

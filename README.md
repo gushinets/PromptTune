@@ -109,6 +109,8 @@ The panel retries a failed initial handoff read once, then offers a Retry action
 without showing an unrelated draft. An ended source session has its own Insert
 message explaining that Copy and New remain available.
 
+The initial selection draft is committed before its temporary payload is removed.
+If that write fails, the payload remains recoverable until its five-minute expiry.
 A standalone optimizer URL retains its draft identity. Reloading restores only
 that live session, including edits and results; it never selects another window’s
 newer draft. Temporary popup/panel transfers carry the browser-session nonce in
