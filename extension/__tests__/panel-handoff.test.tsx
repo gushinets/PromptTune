@@ -157,11 +157,14 @@ it("takes the newest pending handoff and retires older payloads so reopening can
 
 it("does not let cleanup deletion events discard a live handoff during startup", async () => {
   let finishRead!: (value: Record<string, unknown>) => void;
+  let initialRead = true;
   vi.mocked(browser.storage.local.get).mockImplementation(async (key) => {
-    if (key === null)
+    if (key === null && initialRead) {
+      initialRead = false;
       return new Promise((resolve) => {
         finishRead = resolve;
       });
+    }
     return { audience_mode: "ai", library: [] };
   });
   await act(async () => root.render(<SidepanelApp />));
@@ -256,7 +259,7 @@ it("closes only the addressed panel when a transfer fails on a browser without n
   expect(close).toHaveBeenCalledOnce();
 });
 
-it("acknowledges a pending rollback without closing an unowned panel during delayed startup", async () => {
+it("closes a newly opened panel after a rejected handoff write even during delayed startup", async () => {
   let finishWindow!: (value: { id: number }) => void;
   vi.mocked(browser.windows.getCurrent).mockReturnValue(
     new Promise((resolve) => {
@@ -273,12 +276,17 @@ it("acknowledges a pending rollback without closing an unowned panel during dela
   });
   const close = vi.spyOn(window, "close").mockImplementation(() => {});
   const { requestPanelRollback } = await import("../shared/panel-handoff");
+  const { setOptimizerHandoff } = await import("../shared/storage");
+  vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error("Handoff write failed"));
+  await expect(setOptimizerHandoff("optimizer_panel_handoff_7_failed-A", selected)).rejects.toThrow(
+    "Handoff write failed",
+  );
   const cleanup = requestPanelRollback(7, 0, "failed-A");
   try {
     await act(async () => root.render(<SidepanelApp />));
     expect(close).not.toHaveBeenCalled();
     await act(async () => finishWindow({ id: 7 }));
-    expect(close).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
     const requests = vi
       .mocked(browser.runtime.sendMessage)
       .mock.calls.filter(
@@ -287,7 +295,7 @@ it("acknowledges a pending rollback without closing an unowned panel during dela
     await act(async () => {
       await browser.runtime.sendMessage({ type: "PANEL_READY", windowId: 7 });
     });
-    expect(close).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledOnce();
     expect(
       vi
         .mocked(browser.runtime.sendMessage)

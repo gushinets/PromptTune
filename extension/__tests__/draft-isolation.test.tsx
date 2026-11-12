@@ -9,6 +9,7 @@ const roots = new Set<Root>();
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
   state = { audience_mode: "ai", library: [] };
   vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...state }));
   vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {

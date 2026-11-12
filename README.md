@@ -88,14 +88,18 @@ editing an older window or panel does not replace that choice. Drafts share a
 evicts the least recently updated older drafts as needed. Selection and panel
 handoff writes enforce this budget too, including after an upgrade, leaving room
 for the 6 MiB library, 1 MiB pending-save reservation and temporary handoffs.
-Expired drafts, including the legacy single-draft key, are removed by startup/periodic cleanup. If the source tab closes, switching shows an error
-and leaves the prompt available in the optimizer window. A failed handoff write
+Valid legacy drafts without timestamps receive a timestamp before cleanup.
+Expired drafts, including the legacy single-draft key, are removed by
+startup/periodic cleanup. If the source tab closes, switching shows an error and
+leaves the prompt available in the optimizer window. A failed handoff write
 can close a panel only when it was created by that transition and still holds
-that exact handoff. A panel with another or unconfirmed session is preserved with
-a notice; the new prompt remains in the optimizer window. Ordinary toolbar popups
+that exact handoff or has not accepted any handoff yet. An already-open panel or
+a panel that accepted another transfer is preserved with a notice; the new prompt
+remains in the optimizer window. Ordinary toolbar popups
 also send an explicit handoff, so switching surfaces retains their current session
 even if another optimizer has a newer saved draft. Switching back from the panel
-stores a one-shot snapshot for the next toolbar popup (valid for five minutes).
+stores a one-shot snapshot for the next toolbar popup in the same browser window
+(valid for five minutes).
 Other panels and explicit selection launches do not consume that snapshot.
 The panel retries a failed initial handoff read once, then offers a Retry action
 without showing an unrelated draft. An ended source session has its own Insert

@@ -6,6 +6,7 @@ import {
   POPUP_HANDOFF_KEY,
   setOptimizerHandoff,
   withOptimizerStorageLock,
+  migrateLegacyPopupDraft,
 } from "./storage";
 import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
 
@@ -100,12 +101,14 @@ function isLiveHandoff(value: unknown, now: number): boolean {
 export async function cleanupExpiredHandoffs(): Promise<void> {
   await withOptimizerStorageLock(async () => {
     const data = await browser.storage.local.get(null);
+    await migrateLegacyPopupDraft(data);
     const now = Date.now();
     const staleKeys = Object.keys(data).filter(
       (key) =>
         ((key.startsWith(SELECTION_KEY_PREFIX) ||
           key.startsWith(PANEL_HANDOFF_PREFIX) ||
-          key === POPUP_HANDOFF_KEY) &&
+          key === POPUP_HANDOFF_KEY ||
+          key.startsWith(`${POPUP_HANDOFF_KEY}_`)) &&
           !isLiveHandoff(data[key], now)) ||
         ((key.startsWith(POPUP_DRAFT_PREFIX) || key === STORAGE_KEYS.POPUP_SESSION_DRAFT) &&
           (!data[key] ||

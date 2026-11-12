@@ -71,7 +71,8 @@ export function SidepanelApp() {
                 typeof msg.openedAfter === "number" &&
                 mountedAt.current >= msg.openedAfter &&
                 typeof msg.failedHandoffId === "string" &&
-                acceptedHandoffId.current === msg.failedHandoffId
+                (acceptedHandoffId.current === undefined ||
+                  acceptedHandoffId.current === msg.failedHandoffId)
               ) {
                 const panel = (
                   browser as typeof browser & {

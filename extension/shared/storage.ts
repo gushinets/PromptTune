@@ -15,6 +15,9 @@ export interface LibraryEntry {
 
 export const POPUP_DRAFT_PREFIX = "optimizer_draft_";
 export const POPUP_HANDOFF_KEY = "optimizer_popup_handoff";
+export function popupHandoffKey(windowId: number): string {
+  return `${POPUP_HANDOFF_KEY}_${windowId}`;
+}
 
 export interface PopupSessionDraft {
   draftSessionId?: string;
@@ -240,22 +243,30 @@ export async function getPopupSessionDraft(
   consumePopupHandoff = true,
 ): Promise<PopupSessionDraft | null> {
   const data = await browser.storage.local.get(null);
-  if (consumePopupHandoff && data[POPUP_HANDOFF_KEY]) {
-    const preferred = await withOptimizerStorageLock(async () => {
-      // Re-read under the lock so simultaneous popups cannot consume the same snapshot.
-      const latest = await browser.storage.local.get(POPUP_HANDOFF_KEY);
-      const handoff = latest[POPUP_HANDOFF_KEY] as
-        | { draft?: unknown; expiresAt?: number }
-        | undefined;
-      if (handoff) await browser.storage.local.remove(POPUP_HANDOFF_KEY);
-      return handoff &&
-        typeof handoff.expiresAt === "number" &&
-        handoff.expiresAt > Date.now() &&
-        isPopupSessionDraft(handoff.draft)
-        ? handoff.draft
-        : null;
-    });
-    if (preferred) return preferred;
+  if (
+    consumePopupHandoff &&
+    Object.keys(data).some((key) => key.startsWith(`${POPUP_HANDOFF_KEY}_`))
+  ) {
+    const window = await browser.windows.getCurrent();
+    const key = typeof window.id === "number" ? popupHandoffKey(window.id) : undefined;
+    if (key && data[key]) {
+      const preferred = await withOptimizerStorageLock(async () => {
+        // Re-read under the lock: only this window may consume its one-shot snapshot.
+        const latest = await browser.storage.local.get(key);
+        const handoff = latest[key] as
+          | { windowId?: number; draft?: unknown; expiresAt?: number }
+          | undefined;
+        if (!handoff || handoff.windowId !== window.id) return null;
+        await browser.storage.local.remove(key);
+        return typeof handoff.expiresAt === "number" &&
+          Number.isFinite(handoff.expiresAt) &&
+          handoff.expiresAt > Date.now() &&
+          isPopupSessionDraft(handoff.draft)
+          ? handoff.draft
+          : null;
+      });
+      if (preferred) return preferred;
+    }
   }
   const now = Date.now();
   const candidates = Object.entries(data)
@@ -298,7 +309,7 @@ export async function getPopupSessionDraft(
       return null;
     }
 
-    await setPopupSessionDraft(draft);
+    await withOptimizerStorageLock(() => migrateLegacyPopupDraft({ [key]: draft }));
     return draft;
   }
 
@@ -326,6 +337,25 @@ export async function withOptimizerStorageLock<T>(operation: () => Promise<T>): 
   return result;
 }
 
+/** Called under the draft lock; timestamp old valid drafts once before any TTL cleanup. */
+export async function migrateLegacyPopupDraft(data: Record<string, unknown>): Promise<void> {
+  const legacy = data[STORAGE_KEYS.POPUP_SESSION_DRAFT];
+  if (isPopupSessionDraft(legacy) && !("updatedAt" in legacy)) {
+    const migrated = { ...legacy, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
+    await browser.storage.local.set({ [STORAGE_KEYS.POPUP_SESSION_DRAFT]: migrated });
+    data[STORAGE_KEYS.POPUP_SESSION_DRAFT] = migrated;
+  }
+}
+
+/** Enumerate keys without loading library payloads on every edit. Older browsers use get(). */
+async function readDrafts(): Promise<Record<string, unknown>> {
+  if (typeof browser.storage.local.getKeys !== "function") return browser.storage.local.get(null);
+  const keys = (await browser.storage.local.getKeys()).filter(
+    (key) => key.startsWith(POPUP_DRAFT_PREFIX) || key === STORAGE_KEYS.POPUP_SESSION_DRAFT,
+  );
+  return keys.length ? browser.storage.local.get(keys) : {};
+}
+
 /** Called under the draft lock before writes, including the first write on upgrade. */
 async function pruneDrafts(
   currentKey?: string,
@@ -333,7 +363,8 @@ async function pruneDrafts(
 ): Promise<void> {
   const incomingBytes = currentKey ? storedBytes(currentKey, currentValue) : 0;
   if (incomingBytes > LIMITS.MAX_POPUP_DRAFT_BYTES) throw new Error("Draft exceeds storage budget");
-  const data = await browser.storage.local.get(null);
+  const data = await readDrafts();
+  await migrateLegacyPopupDraft(data);
   const candidates = Object.entries(data)
     .filter(
       ([key]) => key.startsWith(POPUP_DRAFT_PREFIX) || key === STORAGE_KEYS.POPUP_SESSION_DRAFT,
@@ -391,8 +422,11 @@ export async function setOptimizerHandoff(key: string, value: unknown): Promise<
 
 /** One-shot snapshot for the next toolbar popup; independent launches do not consume it. */
 export async function preferPopupSessionDraft(draft: PopupSessionDraft): Promise<void> {
-  const value = { draft, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS };
-  if (storedBytes(POPUP_HANDOFF_KEY, value) > LIMITS.MAX_POPUP_DRAFT_BYTES)
+  const window = await browser.windows.getCurrent();
+  if (typeof window.id !== "number") throw new Error("Popup window unavailable");
+  const key = popupHandoffKey(window.id);
+  const value = { windowId: window.id, draft, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS };
+  if (storedBytes(key, value) > LIMITS.MAX_POPUP_DRAFT_BYTES)
     throw new Error("Draft exceeds storage budget");
-  await setOptimizerHandoff(POPUP_HANDOFF_KEY, value);
+  await setOptimizerHandoff(key, value);
 }
