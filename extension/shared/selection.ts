@@ -7,6 +7,7 @@ import {
   setOptimizerHandoff,
   withOptimizerStorageLock,
   migrateLegacyPopupDraft,
+  readLocalEntries,
 } from "./storage";
 import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
 
@@ -100,7 +101,15 @@ function isLiveHandoff(value: unknown, now: number): boolean {
 /** Remove expired handoffs and drafts while preserving live sessions and library entries. */
 export async function cleanupExpiredHandoffs(): Promise<void> {
   await withOptimizerStorageLock(async () => {
-    const data = await browser.storage.local.get(null);
+    const data = await readLocalEntries(
+      (key) =>
+        key.startsWith(SELECTION_KEY_PREFIX) ||
+        key.startsWith(PANEL_HANDOFF_PREFIX) ||
+        key === POPUP_HANDOFF_KEY ||
+        key.startsWith(`${POPUP_HANDOFF_KEY}_`) ||
+        key.startsWith(POPUP_DRAFT_PREFIX) ||
+        key === STORAGE_KEYS.POPUP_SESSION_DRAFT,
+    );
     await migrateLegacyPopupDraft(data);
     const now = Date.now();
     const staleKeys = Object.keys(data).filter(

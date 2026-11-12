@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
+import { takeSelection } from "../shared/selection";
 import { App } from "../entrypoints/popup/App";
 
 let state: Record<string, unknown>;
@@ -151,9 +152,7 @@ it("restores the panel's session once after an explicit switch, despite a newer 
   window.history.replaceState(null, "", "?selection=optimizer_selection_consumed");
   try {
     await act(async () => reloadedSelection.root.render(<App />));
-    expect(reloadedSelection.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe(
-      "Selection B",
-    );
+    expect(reloadedSelection.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("");
   } finally {
     window.history.replaceState(null, "", originalUrl);
   }
@@ -163,4 +162,72 @@ it("restores the panel's session once after an explicit switch, despite a newer 
   const later = mount();
   await act(async () => later.root.render(<App />));
   expect(later.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Selection B");
+});
+
+it.each(["missing", "expired", "read failure"])(
+  "does not restore another saved session after a %s selection handoff",
+  async (failure) => {
+    const saved = mount();
+    await act(async () =>
+      saved.root.render(
+        <App
+          initialSelection={{
+            text: "Unrelated saved B",
+            draftSessionId: "saved-b",
+            draftCreatedAt: 200,
+          }}
+        />,
+      ),
+    );
+    state.optimizer_selection_a =
+      failure === "expired" ? { text: "Selected A", expiresAt: Date.now() - 1 } : undefined;
+    const originalUrl = window.location.href;
+    window.history.replaceState(null, "", "?selection=optimizer_selection_a");
+    try {
+      if (failure === "read failure")
+        vi.mocked(browser.storage.local.get).mockRejectedValueOnce(
+          new Error("Storage read failed"),
+        );
+      const initialSelection = await takeSelection(window.location.search);
+      expect(initialSelection).toBeUndefined();
+      const launched = mount();
+      await act(async () => launched.root.render(<App initialSelection={initialSelection} />));
+      expect(launched.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("");
+      expect(launched.host.textContent).not.toContain("Unrelated saved B");
+      expect(launched.host.textContent).toContain("select the text again");
+      expect(launched.host.querySelector<HTMLButtonElement>(".btn-improve")!.disabled).toBe(true);
+      expect(launched.host.querySelector(".result-screen")).toBeNull();
+    } finally {
+      window.history.replaceState(null, "", originalUrl);
+    }
+    const toolbar = mount();
+    await act(async () => toolbar.root.render(<App />));
+    expect(toolbar.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe(
+      "Unrelated saved B",
+    );
+  },
+);
+
+it("autosaves user input after a failed selection launch, including clearing that input", async () => {
+  const originalUrl = window.location.href;
+  window.history.replaceState(null, "", "?selection=optimizer_selection_missing");
+  const launched = mount();
+  try {
+    await act(async () => launched.root.render(<App />));
+    expect(Object.keys(state).filter((key) => key.startsWith("optimizer_draft_"))).toHaveLength(0);
+    for (const text of ["New prompt after failed selection", ""]) {
+      await act(async () => {
+        const field = launched.host.querySelector<HTMLTextAreaElement>("textarea")!;
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          field,
+          text,
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      const saved = Object.entries(state).find(([key]) => key.startsWith("optimizer_draft_"));
+      expect(saved?.[1]).toMatchObject({ original: text });
+    }
+  } finally {
+    window.history.replaceState(null, "", originalUrl);
+  }
 });

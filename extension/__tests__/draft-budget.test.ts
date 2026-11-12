@@ -170,3 +170,34 @@ it("does not load unrelated library payloads when saving a draft", async () => {
   await expect(setPopupSessionDraft(draft("2"))).resolves.toBeUndefined();
   expect(state.optimizer_draft_2).toMatchObject({ original: "prompt" });
 });
+
+it("cleans only optimizer records without reading library, pending saves or analytics", async () => {
+  state.library = "large library";
+  state.pending_library_saves = "large pending save";
+  state.analytics_queue = ["unrelated analytics"];
+  state.optimizer_selection_expired = { text: "old", expiresAt: Date.now() - 1 };
+  state.optimizer_panel_handoff_7_expired = { expiresAt: Date.now() - 1 };
+  state.optimizer_popup_handoff_7 = { expiresAt: Date.now() - 1 };
+  state.optimizer_draft_old = { ...draft("1"), updatedAt: Date.now() - 3 * 60 * 60 * 1000 - 1 };
+  state.optimizer_draft_live = { ...draft("2"), updatedAt: Date.now() };
+  state.popup_session_draft = {
+    ...draft("legacy"),
+    updatedAt: Date.now() - 3 * 60 * 60 * 1000 - 1,
+  };
+  Object.assign(browser.storage.local, { getKeys: vi.fn(async () => Object.keys(state)) });
+  vi.mocked(browser.storage.local.get).mockImplementation(async (keys) => {
+    if (
+      !Array.isArray(keys) ||
+      keys.some((key) => ["library", "pending_library_saves", "analytics_queue"].includes(key))
+    )
+      throw new Error("Unrelated values were loaded");
+    return Object.fromEntries(keys.map((key) => [key, state[key]]));
+  });
+  await expect(cleanupExpiredHandoffs()).resolves.toBeUndefined();
+  expect(Object.keys(state).sort()).toEqual([
+    "analytics_queue",
+    "library",
+    "optimizer_draft_live",
+    "pending_library_saves",
+  ]);
+});

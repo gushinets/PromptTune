@@ -131,6 +131,11 @@ interface AppProps {
 /** Shared optimizer UI; a selected session keeps its source tab across surface changes. */
 export function App({ viewMode = "popup", initialSelection, initialDraft }: AppProps) {
   const t = useT();
+  const [isSelectionLaunch] = useState(
+    () => viewMode === "popup" && new URLSearchParams(window.location.search).has("selection"),
+  );
+  const selectionLaunchFailed = isSelectionLaunch && !initialSelection;
+  const maySaveSelectionDraftRef = useRef(!selectionLaunchFailed);
   const [draftSessionId, setDraftSessionId] = useState(
     () => initialSelection?.draftSessionId ?? initialDraft?.draftSessionId ?? crypto.randomUUID(),
   );
@@ -222,7 +227,9 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [editingOriginal, setEditingOriginal] = useState(false);
   const activeRequestRef = useRef<string | null>(null);
   const activeOwnerRef = useRef<ImproveOwner | null>(null);
-  const [error, setError] = useState<ErrorInfo | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(() =>
+    selectionLaunchFailed ? { type: "generic", message: t.errorSelectionUnavailable } : null,
+  );
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
@@ -303,13 +310,11 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   useEffect(() => {
     Promise.all([
       getAudienceMode(),
-      initialSelection
+      initialSelection || isSelectionLaunch
         ? Promise.resolve(null)
         : initialDraft
           ? Promise.resolve(initialDraft)
-          : getPopupSessionDraft(
-              viewMode === "popup" && !new URLSearchParams(window.location.search).has("selection"),
-            ),
+          : getPopupSessionDraft(viewMode === "popup"),
     ])
       .then(([mode, draft]) => {
         setAudienceModeState(mode);
@@ -352,7 +357,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setSessionDraftLoaded(true);
         setModeReady(true);
       });
-  }, [initialSelection, initialDraft, viewMode]);
+  }, [initialSelection, initialDraft, viewMode, isSelectionLaunch]);
 
   useEffect(() => {
     if (!sessionDraftLoaded) return;
@@ -440,6 +445,11 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   useEffect(() => {
     if (!sessionDraftLoaded) return;
+    // An unsuccessful selection launch must not become a newer blank restore candidate.
+    if (!maySaveSelectionDraftRef.current) {
+      if (!sessionDraft.original && !sessionDraft.improved) return;
+      maySaveSelectionDraftRef.current = true;
+    }
     void setPopupSessionDraft(sessionDraft).catch(() => undefined);
   }, [sessionDraftLoaded, sessionDraft]);
 

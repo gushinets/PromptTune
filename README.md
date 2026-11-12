@@ -105,6 +105,12 @@ The panel retries a failed initial handoff read once, then offers a Retry action
 without showing an unrelated draft. An ended source session has its own Insert
 message explaining that Copy and New remain available.
 
+If a selection payload is missing, expired or unreadable, its optimizer window
+shows an empty input and a recovery message instead of restoring another draft.
+The empty failed launch is not autosaved; entering a new prompt starts normal
+draft saving. Cleanup reads only optimizer records when key enumeration is
+available, retaining a compatible fallback for older browsers.
+
 Private/incognito selections are explicitly unsupported: selecting the menu item
 opens an informational notice without storing or passing the selected text to the
 optimizer. The app's draft storage is shared, so private text must not enter that flow.

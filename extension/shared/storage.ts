@@ -347,13 +347,19 @@ export async function migrateLegacyPopupDraft(data: Record<string, unknown>): Pr
   }
 }
 
-/** Enumerate keys without loading library payloads on every edit. Older browsers use get(). */
-async function readDrafts(): Promise<Record<string, unknown>> {
+/** Read selected records without transferring unrelated values; retain an older-browser fallback. */
+export async function readLocalEntries(
+  matchesKey: (key: string) => boolean,
+): Promise<Record<string, unknown>> {
   if (typeof browser.storage.local.getKeys !== "function") return browser.storage.local.get(null);
-  const keys = (await browser.storage.local.getKeys()).filter(
+  const keys = (await browser.storage.local.getKeys()).filter(matchesKey);
+  return keys.length ? browser.storage.local.get(keys) : {};
+}
+
+async function readDrafts(): Promise<Record<string, unknown>> {
+  return readLocalEntries(
     (key) => key.startsWith(POPUP_DRAFT_PREFIX) || key === STORAGE_KEYS.POPUP_SESSION_DRAFT,
   );
-  return keys.length ? browser.storage.local.get(keys) : {};
 }
 
 /** Called under the draft lock before writes, including the first write on upgrade. */

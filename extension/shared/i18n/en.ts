@@ -171,6 +171,8 @@ export const en = {
     "Could not open the side panel. The source tab may have closed or the browser may not support it. Your prompt is still available here.",
   privateSelectionUnavailable:
     "Improving selected text from private browsing is not supported. Your selection has not been saved or sent to the optimizer.",
+  errorSelectionUnavailable:
+    "Could not load the selected text. Close this window and select the text again, or enter a new prompt here.",
   errorSourceSessionEnded:
     "The original browser session has ended. Use Copy or start a new prompt to insert into the current page.",
   errorPanelTransferPreserved:
