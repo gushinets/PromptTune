@@ -12,16 +12,18 @@ export function panelHandoffKey(windowId: number, transferId: string): string {
 }
 
 export interface PanelHandoff {
+  browserSessionId: string;
   id: string;
   expiresAt: number;
   draft: PopupSessionDraft;
 }
 
 /** Reject malformed, expired, and legacy transfers before replacing an open session. */
-export function isPanelHandoff(value: unknown): value is PanelHandoff {
+export function isPanelHandoff(value: unknown, browserSessionId: string): value is PanelHandoff {
   if (!value || typeof value !== "object") return false;
   const handoff = value as Partial<PanelHandoff>;
   return (
+    handoff.browserSessionId === browserSessionId &&
     typeof handoff.id === "string" &&
     typeof handoff.expiresAt === "number" &&
     Number.isFinite(handoff.expiresAt) &&

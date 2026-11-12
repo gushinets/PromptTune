@@ -7,6 +7,7 @@ import { SidepanelApp } from "../entrypoints/sidepanel/SidepanelApp";
 let host: HTMLDivElement;
 let root: Root;
 const selected = {
+  browserSessionId: "test-session",
   id: "selection-session",
   expiresAt: Date.now() + 300000,
   draft: {
@@ -87,6 +88,7 @@ it("updates an already-open panel only for handoffs addressed to its window", as
   expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
   // A second selection must replace the displayed session, rather than restore its old result.
   await change("optimizer_panel_handoff_7_second-selection", {
+    browserSessionId: "test-session",
     id: "second-selection",
     expiresAt: Date.now() + 300000,
     draft: {
@@ -381,3 +383,18 @@ it("rechecks transfer ownership after a delayed rollback acknowledgement", async
   expect(close).not.toHaveBeenCalled();
   expect(host.querySelector(".result-screen")?.textContent).toContain("B result");
 });
+
+it.each(["previous-browser", undefined])(
+  "does not accept stale or unversioned panel transfers after window ID reuse (%s)",
+  async (staleSession) => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      audience_mode: "ai",
+      library: [],
+      optimizer_panel_handoff_7_old: { ...selected, browserSessionId: staleSession },
+    });
+    await act(async () => root.render(<SidepanelApp />));
+    expect(host.textContent).not.toContain("Improved selection");
+    await change("optimizer_panel_handoff_7_old", { ...selected, browserSessionId: staleSession });
+    expect(host.textContent).not.toContain("Improved selection");
+  },
+);

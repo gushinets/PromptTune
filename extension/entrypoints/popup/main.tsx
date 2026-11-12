@@ -5,7 +5,7 @@ import "./App.css";
 import "./layout-toggle.css";
 import { I18nProvider } from "@shared/i18n";
 
-import { takeSelection } from "@shared/selection";
+import { loadSelectionSession } from "@shared/selection";
 
 async function main() {
   const root = document.getElementById("root")!;
@@ -17,10 +17,10 @@ async function main() {
     );
     return;
   }
-  const initialSelection = await takeSelection(window.location.search);
+  const selectionSession = await loadSelectionSession(window.location.search);
   createRoot(root).render(
     <I18nProvider>
-      <App viewMode="popup" initialSelection={initialSelection} />
+      <App viewMode="popup" {...selectionSession} />
     </I18nProvider>,
   );
 }

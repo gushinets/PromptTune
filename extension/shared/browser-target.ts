@@ -10,18 +10,28 @@ export class SourceSessionEndedError extends Error {
 const BROWSER_SESSION_KEY = "optimizer_browser_session";
 let initialization: Promise<string> | undefined;
 
-/** Called by the background selection producer; session storage survives worker suspension. */
+/** Read the nonce without creating a session while validating an old transfer. */
+export async function getBrowserSessionId(): Promise<string | undefined> {
+  const data = await browser.storage.session.get(BROWSER_SESSION_KEY);
+  const id = data[BROWSER_SESSION_KEY];
+  return typeof id === "string" && id ? id : undefined;
+}
+
+/** Share one nonce across producers and surfaces, including concurrent first opens. */
 export function ensureBrowserSessionId(): Promise<string> {
-  initialization ??= (async () => {
-    const data = await browser.storage.session.get(BROWSER_SESSION_KEY);
-    const existing = data[BROWSER_SESSION_KEY];
-    if (typeof existing === "string" && existing) return existing;
+  const initialize = async () => {
+    const existing = await getBrowserSessionId();
+    if (existing) return existing;
     const id = crypto.randomUUID();
     await browser.storage.session.set({ [BROWSER_SESSION_KEY]: id });
     return id;
-  })().catch((error) => {
+  };
+  initialization ??= Promise.resolve(
+    navigator.locks
+      ? navigator.locks.request("prompttune-browser-session", initialize)
+      : initialize(),
+  ).finally(() => {
     initialization = undefined;
-    throw error;
   });
   return initialization;
 }

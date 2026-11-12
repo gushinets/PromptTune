@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 
 beforeEach(() => {
@@ -65,4 +65,49 @@ it("preserves unbound active-tab query errors", async () => {
   const failure = new Error("Query unavailable");
   vi.mocked(browser.tabs.query).mockRejectedValueOnce(failure);
   await expect(resolveBrowserTarget()).rejects.toBe(failure);
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+it("refreshes the nonce after session storage clears without reloading the module", async () => {
+  let session: Record<string, unknown> = {};
+  vi.mocked(browser.storage.session.get).mockImplementation(async () => ({ ...session }));
+  vi.mocked(browser.storage.session.set).mockImplementation(async (values) => {
+    Object.assign(session, values);
+  });
+  const producer = await import("../shared/browser-target");
+  const original = await producer.ensureBrowserSessionId();
+  session = {};
+  expect(await producer.ensureBrowserSessionId()).not.toBe(original);
+});
+
+it("shares the first nonce across independently loaded surfaces using the same Web Lock", async () => {
+  const queues = new Map<string, Promise<unknown>>();
+  vi.stubGlobal("navigator", {
+    locks: {
+      request: <T>(name: string, operation: () => Promise<T>) => {
+        const result = (queues.get(name) ?? Promise.resolve()).then(operation);
+        queues.set(
+          name,
+          result.catch(() => undefined),
+        );
+        return result;
+      },
+    },
+  });
+  const session: Record<string, unknown> = {};
+  vi.mocked(browser.storage.session.get).mockImplementation(async () => ({ ...session }));
+  vi.mocked(browser.storage.session.set).mockImplementation(async (values) => {
+    Object.assign(session, values);
+  });
+  const popup = await import("../shared/browser-target");
+  vi.resetModules();
+  const panel = await import("../shared/browser-target");
+  const [a, b] = await Promise.all([
+    popup.ensureBrowserSessionId(),
+    panel.ensureBrowserSessionId(),
+  ]);
+  expect(a).toBe(b);
+  expect(session.optimizer_browser_session).toBe(a);
+  expect(browser.storage.session.set).toHaveBeenCalledOnce();
 });

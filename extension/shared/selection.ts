@@ -8,6 +8,8 @@ import {
   withOptimizerStorageLock,
   migrateLegacyPopupDraft,
   readLocalEntries,
+  getPopupSessionDraftById,
+  type PopupSessionDraft,
 } from "./storage";
 import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
 
@@ -54,7 +56,7 @@ export async function openSelection(
   });
   try {
     await browser.windows.create({
-      url: `${browser.runtime.getURL("popup.html")}?selection=${key}`,
+      url: `${browser.runtime.getURL("popup.html")}?selection=${key}&session=${draftSessionId}`,
       type: "popup",
       width: 380,
       height: 660,
@@ -89,6 +91,22 @@ export async function takeSelection(search: string): Promise<PromptSelection | u
       ? { sourceSessionId: value.sourceSessionId }
       : {}),
   };
+}
+
+/** Keep the session identity after its one-shot selection payload has been consumed. */
+export async function loadSelectionSession(search: string): Promise<{
+  initialSelection?: PromptSelection;
+  initialDraft?: PopupSessionDraft;
+}> {
+  const params = new URLSearchParams(search);
+  const key = params.get("selection");
+  if (!key?.startsWith(SELECTION_KEY_PREFIX)) return {};
+  // Earlier optimizer URLs already encoded the draft identity in the selection key.
+  const id = key.slice(SELECTION_KEY_PREFIX.length);
+  if (!id || (params.has("session") && params.get("session") !== id)) return {};
+  const draft = await getPopupSessionDraftById(id).catch(() => null);
+  if (draft) return { initialDraft: draft };
+  return { initialSelection: await takeSelection(search) };
 }
 
 /** Expired and legacy handoffs must never be restored or retained indefinitely. */

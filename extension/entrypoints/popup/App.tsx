@@ -41,7 +41,7 @@ import type {
   OptimizerRequestContext,
 } from "@shared/types";
 
-import { resolveBrowserTarget } from "@shared/browser-target";
+import { resolveBrowserTarget, ensureBrowserSessionId } from "@shared/browser-target";
 import { panelHandoffKey, requestPanelRollback } from "@shared/panel-handoff";
 import type { PromptSelection } from "@shared/selection";
 
@@ -134,7 +134,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [isSelectionLaunch] = useState(
     () => viewMode === "popup" && new URLSearchParams(window.location.search).has("selection"),
   );
-  const selectionLaunchFailed = isSelectionLaunch && !initialSelection;
+  const selectionLaunchFailed = isSelectionLaunch && !initialSelection && !initialDraft;
   const maySaveSelectionDraftRef = useRef(!selectionLaunchFailed);
   const [draftSessionId, setDraftSessionId] = useState(
     () => initialSelection?.draftSessionId ?? initialDraft?.draftSessionId ?? crypto.randomUUID(),
@@ -310,11 +310,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   useEffect(() => {
     Promise.all([
       getAudienceMode(),
-      initialSelection || isSelectionLaunch
+      initialSelection
         ? Promise.resolve(null)
         : initialDraft
           ? Promise.resolve(initialDraft)
-          : getPopupSessionDraft(viewMode === "popup"),
+          : isSelectionLaunch
+            ? Promise.resolve(null)
+            : getPopupSessionDraft(viewMode === "popup"),
     ])
       .then(([mode, draft]) => {
         const restoredMode = draft?.audienceMode ?? mode;
@@ -516,6 +518,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           if (activeRequestRef.current) return;
           const id = crypto.randomUUID();
           try {
+            const browserSessionId = await ensureBrowserSessionId();
             const current = layoutTargetRef.current;
             if (
               !current ||
@@ -528,6 +531,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
             }
             await setOptimizerHandoff(panelHandoffKey(tab.windowId, id), {
               id,
+              browserSessionId,
               draft: {
                 ...sessionDraft,
                 sourceTabId: targetTabId,

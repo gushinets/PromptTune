@@ -3,7 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import type { PopupSessionDraft } from "../shared/storage";
-import { takeSelection } from "../shared/selection";
+import { loadSelectionSession } from "../shared/selection";
 import { App } from "../entrypoints/popup/App";
 
 let state: Record<string, unknown>;
@@ -11,6 +11,9 @@ const roots = new Set<Root>();
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+  });
   vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
   state = { audience_mode: "ai", library: [] };
   vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...state }));
@@ -182,6 +185,12 @@ it.each(["missing", "expired", "read failure"])(
     );
     state.optimizer_selection_a =
       failure === "expired" ? { text: "Selected A", expiresAt: Date.now() - 1 } : undefined;
+    if (failure === "expired")
+      state.optimizer_draft_a = {
+        ...(state["optimizer_draft_saved-b"] as PopupSessionDraft),
+        draftSessionId: "a",
+        updatedAt: Date.now() - 3 * 60 * 60 * 1000 - 1,
+      };
     const originalUrl = window.location.href;
     window.history.replaceState(null, "", "?selection=optimizer_selection_a");
     try {
@@ -189,10 +198,11 @@ it.each(["missing", "expired", "read failure"])(
         vi.mocked(browser.storage.local.get).mockRejectedValueOnce(
           new Error("Storage read failed"),
         );
-      const initialSelection = await takeSelection(window.location.search);
-      expect(initialSelection).toBeUndefined();
+      const props = await loadSelectionSession(window.location.search);
+      expect(props.initialSelection).toBeUndefined();
+      expect(props.initialDraft).toBeUndefined();
       const launched = mount();
-      await act(async () => launched.root.render(<App initialSelection={initialSelection} />));
+      await act(async () => launched.root.render(<App {...props} />));
       expect(launched.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("");
       expect(launched.host.textContent).not.toContain("Unrelated saved B");
       expect(launched.host.textContent).toContain("select the text again");
@@ -310,4 +320,64 @@ it("remaps an incompatible legacy goal before submitting in the global mode", as
       payload: expect.objectContaining({ audience_mode: "content", goal: "general" }),
     }),
   );
+});
+
+it("reloads the same selection session with its edits, result, mode and source binding", async () => {
+  const search = "?selection=optimizer_selection_a&session=a";
+  state.optimizer_selection_a = {
+    text: "Selected A",
+    draftSessionId: "a",
+    draftCreatedAt: 100,
+    sourceTabId: 42,
+    sourceSessionId: "test-session",
+    expiresAt: Date.now() + 300000,
+  };
+  const firstLaunch = await loadSelectionSession(search);
+  expect(state.optimizer_selection_a).toBeUndefined();
+  const a = mount();
+  await act(async () => a.root.render(<App {...firstLaunch} />));
+  await act(async () => {
+    const field = a.host.querySelector<HTMLTextAreaElement>("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      field,
+      "Edited A",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    a.host.querySelector<HTMLInputElement>('input[value="claude"]')!.click();
+  });
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
+    (message as { type?: string }).type === "IMPROVE_REQUEST"
+      ? { type: "IMPROVE_RESULT", payload: { request_id: "a-result", improved_text: "Result A" } }
+      : { ok: true },
+  );
+  await act(async () => a.host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+  expect(a.host.querySelector(".result-screen")?.textContent).toContain("Result A");
+  const b = mount();
+  await act(async () =>
+    b.root.render(
+      <App initialSelection={{ text: "Newer B", draftSessionId: "b", draftCreatedAt: 200 }} />,
+    ),
+  );
+  const originalUrl = window.location.href;
+  window.history.replaceState(null, "", search);
+  try {
+    const props = await loadSelectionSession(search);
+    expect(
+      (await loadSelectionSession("?selection=optimizer_selection_a")).initialDraft,
+    ).toMatchObject({ original: "Edited A" });
+    const reloaded = mount();
+    await act(async () => reloaded.root.render(<App {...props} />));
+    expect(reloaded.host.textContent).toContain("Edited A");
+    expect(reloaded.host.querySelector(".result-screen")?.textContent).toContain("Result A");
+    expect(reloaded.host.textContent).not.toContain("Newer B");
+    expect(reloaded.host.querySelector('[role="alert"]')).toBeNull();
+    expect(props.initialDraft).toMatchObject({
+      audienceMode: "ai",
+      goal: "claude",
+      sourceTabId: 42,
+      sourceSessionId: "test-session",
+    });
+  } finally {
+    window.history.replaceState(null, "", originalUrl);
+  }
 });

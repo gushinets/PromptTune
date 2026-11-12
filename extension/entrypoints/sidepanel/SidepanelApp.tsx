@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import browser from "webextension-polyfill";
 import { isPanelHandoff, panelHandoffPrefix, type PanelHandoff } from "@shared/panel-handoff";
 import { useT } from "@shared/i18n";
+import { ensureBrowserSessionId } from "@shared/browser-target";
 import { App } from "../popup/App";
 
 /** Receive sessions for this window, including when its side panel is already open. */
@@ -25,10 +26,12 @@ export function SidepanelApp() {
         const window = await browser.windows.getCurrent();
         if (!active) return;
         if (window.id === undefined) throw new Error("Panel window unavailable");
+        const browserSessionId = await ensureBrowserSessionId();
+        if (!active) return;
         const prefix = panelHandoffPrefix(window.id);
         let revision = 0;
         const accept = (key: string, value: unknown) => {
-          if (!active || !isPanelHandoff(value)) return;
+          if (!active || !isPanelHandoff(value, browserSessionId)) return;
           received = true;
           acceptedHandoffId.current = value.id;
           setTransferWarning(false);
@@ -43,7 +46,8 @@ export function SidepanelApp() {
         ) => {
           if (area !== "local") return;
           for (const [key, change] of Object.entries(changes)) {
-            if (!key.startsWith(prefix) || !isPanelHandoff(change.newValue)) continue;
+            if (!key.startsWith(prefix) || !isPanelHandoff(change.newValue, browserSessionId))
+              continue;
             revision++;
             accept(key, change.newValue);
           }
@@ -111,7 +115,9 @@ export function SidepanelApp() {
         let acceptedKey: string | undefined;
         if (revision === initialRevision) {
           const newest = pending
-            .filter((entry): entry is [string, PanelHandoff] => isPanelHandoff(entry[1]))
+            .filter((entry): entry is [string, PanelHandoff] =>
+              isPanelHandoff(entry[1], browserSessionId),
+            )
             .sort((a, b) => b[1].expiresAt - a[1].expiresAt)[0];
           if (newest) {
             acceptedKey = newest[0];

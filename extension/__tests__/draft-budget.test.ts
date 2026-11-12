@@ -32,6 +32,9 @@ const bytes = (data: Record<string, unknown>) =>
   );
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+  });
   state = {};
   vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
   vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...state }));
@@ -101,6 +104,7 @@ it("retains a previously saved current draft when a replacement exceeds the byte
 });
 it("ignores and consumes an expired popup handoff", async () => {
   state.optimizer_popup_handoff_7 = {
+    browserSessionId: "test-session",
     windowId: 7,
     draft: draft("1", "expired"),
     expiresAt: Date.now() - 1,
@@ -266,3 +270,18 @@ it("keeps a committed handoff successful when draft cleanup fails, then retries 
   expect(Object.keys(state).filter((key) => key.startsWith("optimizer_draft_"))).toHaveLength(10);
   expect(state.optimizer_draft_0).toBeUndefined();
 });
+
+it.each(["new-browser", undefined])(
+  "rejects a reverse handoff when its numeric window ID is reused (new nonce: %s)",
+  async (nextSession) => {
+    vi.mocked(browser.storage.session.get).mockResolvedValue({
+      optimizer_browser_session: "old-browser",
+    });
+    state.optimizer_draft_2 = { ...draft("2", "Normal restore"), updatedAt: Date.now() };
+    await preferPopupSessionDraft(draft("1", "Old browser transfer"));
+    vi.mocked(browser.storage.session.get).mockResolvedValue(
+      nextSession ? { optimizer_browser_session: nextSession } : {},
+    );
+    expect(await getPopupSessionDraft()).toMatchObject({ original: "Normal restore" });
+  },
+);

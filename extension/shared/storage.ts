@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { ensureBrowserSessionId, getBrowserSessionId } from "./browser-target";
 import { STORAGE_KEYS, LIMITS } from "./constants";
 import type { AudienceMode, ImproveGoal, OptimizerRequestContext } from "./types";
 import { isOptimizerRequestContext } from "./goal-options";
@@ -259,11 +260,14 @@ export async function getPopupSessionDraft(
         // Re-read under the lock: only this window may consume its one-shot snapshot.
         const latest = await browser.storage.local.get(key);
         const handoff = latest[key] as
-          | { windowId?: number; draft?: unknown; expiresAt?: number }
+          | { windowId?: number; browserSessionId?: string; draft?: unknown; expiresAt?: number }
           | undefined;
         if (!handoff || handoff.windowId !== window.id) return null;
+        const browserSessionId = await getBrowserSessionId();
         await browser.storage.local.remove(key).catch(() => undefined);
-        return typeof handoff.expiresAt === "number" &&
+        return !!browserSessionId &&
+          handoff.browserSessionId === browserSessionId &&
+          typeof handoff.expiresAt === "number" &&
           Number.isFinite(handoff.expiresAt) &&
           handoff.expiresAt > Date.now() &&
           isPopupSessionDraft(handoff.draft)
@@ -330,6 +334,25 @@ export async function getPopupSessionDraft(
 
   const { updatedAt: _updatedAt, ...sessionDraft } = draft;
   return sessionDraft;
+}
+
+/** Restore only the live draft addressed by a standalone optimizer URL. */
+export async function getPopupSessionDraftById(id: string): Promise<PopupSessionDraft | null> {
+  if (!id) return null;
+  const key = `${POPUP_DRAFT_PREFIX}${id}`;
+  const data = await browser.storage.local.get(key);
+  const draft = data[key] as Partial<StoredPopupSessionDraft> | undefined;
+  const updatedAt = draft?.updatedAt;
+  if (
+    !isPopupSessionDraft(draft) ||
+    draft.draftSessionId !== id ||
+    typeof updatedAt !== "number" ||
+    !Number.isFinite(updatedAt) ||
+    Date.now() - updatedAt > LIMITS.POPUP_SESSION_TTL_MS
+  )
+    return null;
+  const { updatedAt: _updatedAt, ...session } = draft as StoredPopupSessionDraft;
+  return session;
 }
 
 let draftQueue: Promise<unknown> = Promise.resolve();
@@ -463,7 +486,13 @@ export async function preferPopupSessionDraft(draft: PopupSessionDraft): Promise
   const window = await browser.windows.getCurrent();
   if (typeof window.id !== "number") throw new Error("Popup window unavailable");
   const key = popupHandoffKey(window.id);
-  const value = { windowId: window.id, draft, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS };
+  const browserSessionId = await ensureBrowserSessionId();
+  const value = {
+    windowId: window.id,
+    browserSessionId,
+    draft,
+    expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+  };
   if (storedBytes(key, value) > LIMITS.MAX_POPUP_DRAFT_BYTES)
     throw new Error("Draft exceeds storage budget");
   await setOptimizerHandoff(key, value);

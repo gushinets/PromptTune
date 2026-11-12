@@ -107,7 +107,13 @@ The panel retries a failed initial handoff read once, then offers a Retry action
 without showing an unrelated draft. An ended source session has its own Insert
 message explaining that Copy and New remain available.
 
-If a selection payload is missing, expired or unreadable, its optimizer window
+A standalone optimizer URL retains its draft identity. Reloading restores only
+that live session, including edits and results; it never selects another window’s
+newer draft. Temporary popup/panel transfers carry the browser-session nonce in
+addition to the window ID, so restarting the browser cannot replay them into a
+window with a reused ID.
+
+If neither the addressed draft nor its selection payload can be recovered, the window
 shows an empty input and a recovery message instead of restoring another draft.
 The empty failed launch is not autosaved; entering a new prompt starts normal
 draft saving. Cleanup reads only optimizer records when key enumeration is
