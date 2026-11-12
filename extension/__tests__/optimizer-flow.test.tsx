@@ -320,8 +320,15 @@ it("restores a selected result in the panel and keeps Insert bound after tab swi
     type: "PASTE_TEXT",
     payload: { text: "Selected result" },
   });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 2100));
+  });
+  expect(button("Insert").disabled).toBe(false);
+  vi.mocked(browser.tabs.sendMessage).mockClear();
   vi.mocked(browser.tabs.get).mockRejectedValue(new Error("Source tab closed"));
   await click("Insert");
+  expect(host.textContent).toContain("original browser session has ended");
+  expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
   expect(browser.tabs.sendMessage).not.toHaveBeenCalledWith(99, expect.anything());
 });
 

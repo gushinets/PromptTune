@@ -14,6 +14,7 @@ export interface LibraryEntry {
 }
 
 export const POPUP_DRAFT_PREFIX = "optimizer_draft_";
+export const POPUP_HANDOFF_KEY = "optimizer_popup_handoff";
 
 export interface PopupSessionDraft {
   draftSessionId?: string;
@@ -235,8 +236,27 @@ export async function setAudienceMode(mode: AudienceMode): Promise<void> {
   await browser.storage.local.set({ [STORAGE_KEYS.AUDIENCE_MODE]: mode });
 }
 
-export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> {
+export async function getPopupSessionDraft(
+  consumePopupHandoff = true,
+): Promise<PopupSessionDraft | null> {
   const data = await browser.storage.local.get(null);
+  if (consumePopupHandoff && data[POPUP_HANDOFF_KEY]) {
+    const preferred = await withOptimizerStorageLock(async () => {
+      // Re-read under the lock so simultaneous popups cannot consume the same snapshot.
+      const latest = await browser.storage.local.get(POPUP_HANDOFF_KEY);
+      const handoff = latest[POPUP_HANDOFF_KEY] as
+        | { draft?: unknown; expiresAt?: number }
+        | undefined;
+      if (handoff) await browser.storage.local.remove(POPUP_HANDOFF_KEY);
+      return handoff &&
+        typeof handoff.expiresAt === "number" &&
+        handoff.expiresAt > Date.now() &&
+        isPopupSessionDraft(handoff.draft)
+        ? handoff.draft
+        : null;
+    });
+    if (preferred) return preferred;
+  }
   const now = Date.now();
   const candidates = Object.entries(data)
     .filter(([key, value]) => {
@@ -296,13 +316,83 @@ export async function getPopupSessionDraft(): Promise<PopupSessionDraft | null> 
   return sessionDraft;
 }
 
+let draftQueue: Promise<unknown> = Promise.resolve();
+
+/** Serialize quota decisions across extension surfaces, with a per-context fallback. */
+export async function withOptimizerStorageLock<T>(operation: () => Promise<T>): Promise<T> {
+  if (navigator.locks) return navigator.locks.request("prompttune-drafts", operation);
+  const result = draftQueue.then(operation);
+  draftQueue = result.catch(() => undefined);
+  return result;
+}
+
+/** Called under the draft lock before writes, including the first write on upgrade. */
+async function pruneDrafts(
+  currentKey?: string,
+  currentValue?: StoredPopupSessionDraft,
+): Promise<void> {
+  const incomingBytes = currentKey ? storedBytes(currentKey, currentValue) : 0;
+  if (incomingBytes > LIMITS.MAX_POPUP_DRAFT_BYTES) throw new Error("Draft exceeds storage budget");
+  const data = await browser.storage.local.get(null);
+  const candidates = Object.entries(data)
+    .filter(
+      ([key]) => key.startsWith(POPUP_DRAFT_PREFIX) || key === STORAGE_KEYS.POPUP_SESSION_DRAFT,
+    )
+    .sort(
+      (a, b) =>
+        ((b[1] as StoredPopupSessionDraft)?.updatedAt ?? 0) -
+          ((a[1] as StoredPopupSessionDraft)?.updatedAt ?? 0) ||
+        ((b[1] as StoredPopupSessionDraft)?.draftCreatedAt ?? 0) -
+          ((a[1] as StoredPopupSessionDraft)?.draftCreatedAt ?? 0) ||
+        b[0].localeCompare(a[0]),
+    );
+  let bytes = incomingBytes;
+  let count = currentKey ? 1 : 0;
+  const evicted: string[] = [];
+  for (const [key, value] of candidates) {
+    if (key === currentKey) continue;
+    const updatedAt = (value as StoredPopupSessionDraft | null)?.updatedAt;
+    const size = storedBytes(key, value);
+    if (
+      !isPopupSessionDraft(value) ||
+      typeof updatedAt !== "number" ||
+      !Number.isFinite(updatedAt) ||
+      Date.now() - updatedAt > LIMITS.POPUP_SESSION_TTL_MS ||
+      count >= LIMITS.MAX_POPUP_DRAFTS ||
+      bytes + size > LIMITS.MAX_POPUP_DRAFT_BYTES
+    ) {
+      evicted.push(key);
+    } else {
+      bytes += size;
+      count++;
+    }
+  }
+  if (evicted.length) await browser.storage.local.remove(evicted);
+}
+
 export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<void> {
-  await browser.storage.local.set({
-    [draft.draftSessionId
-      ? `${POPUP_DRAFT_PREFIX}${draft.draftSessionId}`
-      : STORAGE_KEYS.POPUP_SESSION_DRAFT]: {
-      ...draft,
-      updatedAt: Date.now(),
-    } satisfies StoredPopupSessionDraft,
+  const key = draft.draftSessionId
+    ? `${POPUP_DRAFT_PREFIX}${draft.draftSessionId}`
+    : STORAGE_KEYS.POPUP_SESSION_DRAFT;
+  const value = { ...draft, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
+  await withOptimizerStorageLock(async () => {
+    await pruneDrafts(key, value);
+    await browser.storage.local.set({ [key]: value });
   });
+}
+
+/** Keep draft growth from blocking selection/panel handoffs, including after an upgrade. */
+export async function setOptimizerHandoff(key: string, value: unknown): Promise<void> {
+  await withOptimizerStorageLock(async () => {
+    await pruneDrafts();
+    await browser.storage.local.set({ [key]: value });
+  });
+}
+
+/** One-shot snapshot for the next toolbar popup; independent launches do not consume it. */
+export async function preferPopupSessionDraft(draft: PopupSessionDraft): Promise<void> {
+  const value = { draft, expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS };
+  if (storedBytes(POPUP_HANDOFF_KEY, value) > LIMITS.MAX_POPUP_DRAFT_BYTES)
+    throw new Error("Draft exceeds storage budget");
+  await setOptimizerHandoff(POPUP_HANDOFF_KEY, value);
 }

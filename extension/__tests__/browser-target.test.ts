@@ -49,3 +49,20 @@ it("keeps the nonce across worker restarts and changes it after session storage 
   expect(await producer.ensureBrowserSessionId()).not.toBe(original);
   expect(browser.storage.local.set).not.toHaveBeenCalled();
 });
+
+it("reports a closed bound tab as an ended source session", async () => {
+  const { resolveBrowserTarget, SourceSessionEndedError } =
+    await import("../shared/browser-target");
+  vi.mocked(browser.tabs.get).mockRejectedValueOnce(new Error("No tab with id: 42"));
+  await expect(resolveBrowserTarget(42, "current-session")).rejects.toBeInstanceOf(
+    SourceSessionEndedError,
+  );
+  expect(browser.tabs.query).not.toHaveBeenCalled();
+});
+
+it("preserves unbound active-tab query errors", async () => {
+  const { resolveBrowserTarget } = await import("../shared/browser-target");
+  const failure = new Error("Query unavailable");
+  vi.mocked(browser.tabs.query).mockRejectedValueOnce(failure);
+  await expect(resolveBrowserTarget()).rejects.toBe(failure);
+});

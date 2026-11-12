@@ -103,3 +103,63 @@ it.each(["popup", "sidepanel"] as const)(
     expect(state["optimizer_draft_session-a"]).toMatchObject({ original: "Edited A" });
   },
 );
+
+it("restores the panel's session once after an explicit switch, despite a newer live session", async () => {
+  const close = vi.spyOn(window, "close").mockImplementation(() => undefined);
+  const a = mount();
+  const b = mount();
+  await act(async () =>
+    a.root.render(
+      <App
+        viewMode="sidepanel"
+        initialSelection={{
+          text: "Selection A",
+          draftSessionId: "a",
+          draftCreatedAt: 100,
+        }}
+      />,
+    ),
+  );
+  await act(async () =>
+    b.root.render(
+      <App
+        initialSelection={{
+          text: "Selection B",
+          draftSessionId: "b",
+          draftCreatedAt: 200,
+        }}
+      />,
+    ),
+  );
+  await act(async () => {
+    a.host.querySelector<HTMLButtonElement>(".layout-toggle-btn")!.click();
+  });
+  expect(close).toHaveBeenCalledOnce();
+  // A different panel or explicit selection must not consume the toolbar handoff.
+  const otherPanel = mount();
+  await act(async () => otherPanel.root.render(<App viewMode="sidepanel" />));
+  expect(otherPanel.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Selection B");
+  const selection = mount();
+  await act(async () =>
+    selection.root.render(
+      <App initialSelection={{ text: "Selection C", draftSessionId: "c", draftCreatedAt: 150 }} />,
+    ),
+  );
+  const reloadedSelection = mount();
+  const originalUrl = window.location.href;
+  window.history.replaceState(null, "", "?selection=optimizer_selection_consumed");
+  try {
+    await act(async () => reloadedSelection.root.render(<App />));
+    expect(reloadedSelection.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe(
+      "Selection B",
+    );
+  } finally {
+    window.history.replaceState(null, "", originalUrl);
+  }
+  const reopened = mount();
+  await act(async () => reopened.root.render(<App />));
+  expect(reopened.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Selection A");
+  const later = mount();
+  await act(async () => later.root.render(<App />));
+  expect(later.host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Selection B");
+});

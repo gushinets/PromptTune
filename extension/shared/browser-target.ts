@@ -33,7 +33,11 @@ export async function resolveBrowserTarget(tabId?: number, sessionId?: string) {
     if (!sessionId || data[BROWSER_SESSION_KEY] !== sessionId) {
       throw new SourceSessionEndedError();
     }
-    return browser.tabs.get(tabId);
+    try {
+      return await browser.tabs.get(tabId);
+    } catch {
+      throw new SourceSessionEndedError();
+    }
   }
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   return tab;

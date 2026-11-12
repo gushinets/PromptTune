@@ -166,7 +166,7 @@ it("removes an unconsumed selection on the cleanup alarm without touching live s
       updatedAt: Date.now() - 3 * 60 * 60 * 1000 - 1,
     },
     optimizer_draft_live: { original: "Live session", updatedAt: Date.now() },
-    popup_session_draft: { original: "Keep draft" },
+    popup_session_draft: { original: "Keep draft", updatedAt: Date.now() },
     library: [],
   });
   await onAlarm!({ name: "optimizer-selection-cleanup", scheduledTime: Date.now() });

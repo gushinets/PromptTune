@@ -19,6 +19,8 @@ import {
   getPopupSessionDraft,
   setAudienceMode,
   setPopupSessionDraft,
+  setOptimizerHandoff,
+  preferPopupSessionDraft,
 } from "@shared/storage";
 import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS, LIMITS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
@@ -301,7 +303,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   useEffect(() => {
     Promise.all([
       getAudienceMode(),
-      initialDraft ? Promise.resolve(initialDraft) : getPopupSessionDraft(),
+      initialSelection
+        ? Promise.resolve(null)
+        : initialDraft
+          ? Promise.resolve(initialDraft)
+          : getPopupSessionDraft(
+              viewMode === "popup" && !new URLSearchParams(window.location.search).has("selection"),
+            ),
     ])
       .then(([mode, draft]) => {
         setAudienceModeState(mode);
@@ -344,7 +352,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setSessionDraftLoaded(true);
         setModeReady(true);
       });
-  }, [initialSelection, initialDraft]);
+  }, [initialSelection, initialDraft, viewMode]);
 
   useEffect(() => {
     if (!sessionDraftLoaded) return;
@@ -495,16 +503,14 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           if (activeRequestRef.current) return;
           const id = crypto.randomUUID();
           try {
-            await browser.storage.local.set({
-              [panelHandoffKey(tab.windowId, id)]: {
-                id,
-                draft: {
-                  ...sessionDraft,
-                  sourceTabId: targetTabId,
-                  sourceSessionId: targetSessionId,
-                },
-                expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+            await setOptimizerHandoff(panelHandoffKey(tab.windowId, id), {
+              id,
+              draft: {
+                ...sessionDraft,
+                sourceTabId: targetTabId,
+                sourceSessionId: targetSessionId,
               },
+              expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
             });
           } catch (error) {
             // Roll back the opened surface; keep this optimizer and its prompt available.
@@ -521,8 +527,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           throw new Error("Side panel unavailable");
         }
       } else {
-        // Cannot open popup programmatically — just close sidebar
-        // User needs to click the extension icon to open popup
+        // The next toolbar popup explicitly resumes this panel, even if another session is newer.
+        await preferPopupSessionDraft(sessionDraft);
         window.close();
         closing = true;
       }

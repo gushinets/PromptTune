@@ -1,7 +1,12 @@
 import browser from "webextension-polyfill";
 import { ensureBrowserSessionId } from "./browser-target";
-import { LIMITS } from "./constants";
-import { POPUP_DRAFT_PREFIX } from "./storage";
+import { LIMITS, STORAGE_KEYS } from "./constants";
+import {
+  POPUP_DRAFT_PREFIX,
+  POPUP_HANDOFF_KEY,
+  setOptimizerHandoff,
+  withOptimizerStorageLock,
+} from "./storage";
 import { PANEL_HANDOFF_PREFIX } from "./panel-handoff";
 
 export const SELECTION_MENU_ID = "optimize-selection";
@@ -37,15 +42,13 @@ export async function openSelection(
   const draftSessionId = crypto.randomUUID();
   const draftCreatedAt = Date.now();
   const key = `${SELECTION_KEY_PREFIX}${draftSessionId}`;
-  await browser.storage.local.set({
-    [key]: {
-      text,
-      sourceTabId,
-      sourceSessionId,
-      draftSessionId,
-      draftCreatedAt,
-      expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
-    },
+  await setOptimizerHandoff(key, {
+    text,
+    sourceTabId,
+    sourceSessionId,
+    draftSessionId,
+    draftCreatedAt,
+    expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
   });
   try {
     await browser.windows.create({
@@ -95,20 +98,24 @@ function isLiveHandoff(value: unknown, now: number): boolean {
 
 /** Remove expired handoffs and drafts while preserving live sessions and library entries. */
 export async function cleanupExpiredHandoffs(): Promise<void> {
-  const data = await browser.storage.local.get(null);
-  const now = Date.now();
-  const staleKeys = Object.keys(data).filter(
-    (key) =>
-      ((key.startsWith(SELECTION_KEY_PREFIX) || key.startsWith(PANEL_HANDOFF_PREFIX)) &&
-        !isLiveHandoff(data[key], now)) ||
-      (key.startsWith(POPUP_DRAFT_PREFIX) &&
-        (!data[key] ||
-          typeof data[key] !== "object" ||
-          typeof (data[key] as { updatedAt?: unknown }).updatedAt !== "number" ||
-          !Number.isFinite((data[key] as { updatedAt: number }).updatedAt) ||
-          now - (data[key] as { updatedAt: number }).updatedAt > LIMITS.POPUP_SESSION_TTL_MS)),
-  );
-  if (staleKeys.length) await browser.storage.local.remove(staleKeys);
+  await withOptimizerStorageLock(async () => {
+    const data = await browser.storage.local.get(null);
+    const now = Date.now();
+    const staleKeys = Object.keys(data).filter(
+      (key) =>
+        ((key.startsWith(SELECTION_KEY_PREFIX) ||
+          key.startsWith(PANEL_HANDOFF_PREFIX) ||
+          key === POPUP_HANDOFF_KEY) &&
+          !isLiveHandoff(data[key], now)) ||
+        ((key.startsWith(POPUP_DRAFT_PREFIX) || key === STORAGE_KEYS.POPUP_SESSION_DRAFT) &&
+          (!data[key] ||
+            typeof data[key] !== "object" ||
+            typeof (data[key] as { updatedAt?: unknown }).updatedAt !== "number" ||
+            !Number.isFinite((data[key] as { updatedAt: number }).updatedAt) ||
+            now - (data[key] as { updatedAt: number }).updatedAt > LIMITS.POPUP_SESSION_TTL_MS)),
+    );
+    if (staleKeys.length) await browser.storage.local.remove(staleKeys);
+  });
 }
 
 /** Ensure cleanup survives background worker suspension without resetting an existing alarm. */
