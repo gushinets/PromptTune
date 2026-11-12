@@ -381,3 +381,129 @@ it("reloads the same selection session with its edits, result, mode and source b
     window.history.replaceState(null, "", originalUrl);
   }
 });
+
+it.each(["test-session", "next-browser-session"])(
+  "Selection → Improve → New → Improve → Reload → Insert (browser session: %s)",
+  async (browserSession) => {
+    const search = "?selection=optimizer_selection_a&session=a";
+    const originalUrl = window.location.href;
+    window.history.replaceState(null, "", search);
+    state.optimizer_selection_a = {
+      text: "Selected prompt",
+      draftSessionId: "a",
+      draftCreatedAt: 100,
+      sourceTabId: 42,
+      sourceSessionId: "test-session",
+      expiresAt: Date.now() + 300000,
+    };
+    vi.mocked(browser.tabs.get).mockResolvedValue({
+      id: 42,
+      windowId: 7,
+      url: "https://chatgpt.com",
+    } as never);
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 99, windowId: 9, url: "chrome-extension://optimizer/popup.html" },
+    ] as never);
+    vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      const msg = message as { type?: string; payload?: { text: string } };
+      return msg.type === "IMPROVE_REQUEST"
+        ? {
+            type: "IMPROVE_RESULT",
+            payload: {
+              request_id: crypto.randomUUID(),
+              improved_text: `Improved: ${msg.payload!.text}`,
+            },
+          }
+        : { ok: true };
+    });
+    try {
+      const first = mount();
+      const launch = await loadSelectionSession(search);
+      await act(async () => first.root.render(<App {...launch} />));
+      await act(async () => first.host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+      expect(first.host.querySelector(".result-screen")?.textContent).toContain(
+        "Improved: Selected prompt",
+      );
+      await act(async () => first.host.querySelector<HTMLButtonElement>(".btn-new")!.click());
+      await act(async () => {
+        const field = first.host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          field,
+          "Another prompt",
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () => first.host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+      expect(first.host.querySelector(".result-screen")?.textContent).toContain(
+        "Improved: Another prompt",
+      );
+      expect((state.optimizer_draft_a as PopupSessionDraft).sourceTabId).toBeUndefined();
+      expect((state.optimizer_draft_a as PopupSessionDraft).sourceSessionId).toBeUndefined();
+      await act(async () => first.root.unmount());
+      roots.delete(first.root);
+      const reloaded = mount();
+      const restored = await loadSelectionSession(search);
+      await act(async () => reloaded.root.render(<App {...restored} />));
+      vi.mocked(browser.storage.session.get).mockResolvedValue({
+        optimizer_browser_session: browserSession,
+      });
+      vi.mocked(browser.tabs.sendMessage).mockClear();
+      vi.mocked(browser.tabs.query).mockClear();
+      await act(async () =>
+        Array.from(reloaded.host.querySelectorAll("button"))
+          .find((button) => button.textContent?.includes("Insert"))!
+          .click(),
+      );
+      if (browserSession === "test-session") {
+        expect(browser.tabs.sendMessage).toHaveBeenCalledWith(42, {
+          type: "PASTE_TEXT",
+          payload: { text: "Improved: Another prompt" },
+        });
+      } else {
+        expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
+        expect(reloaded.host.textContent).toContain("original browser session has ended");
+      }
+      expect(browser.tabs.query).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, "", originalUrl);
+    }
+  },
+);
+
+it("does not apply a saved standalone target to a normal toolbar popup after New", async () => {
+  state.optimizer_draft_a = {
+    draftSessionId: "a",
+    draftCreatedAt: 100,
+    updatedAt: Date.now(),
+    audienceMode: "ai",
+    activeTab: "improve",
+    optimizer_screen: "result",
+    original: "New prompt",
+    improved: "New result",
+    standaloneTarget: { tabId: 42, sessionId: "test-session" },
+    changes: [],
+    goal: "general",
+    lastRequestId: "a",
+    lastRequestContextKey: "ai|general|New prompt",
+    lastModel: null,
+    lastLatencyMs: null,
+    attemptN: 1,
+  };
+  vi.mocked(browser.tabs.query).mockResolvedValue([
+    { id: 99, windowId: 7, url: "https://claude.ai" },
+  ] as never);
+  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+  const toolbar = mount();
+  await act(async () => toolbar.root.render(<App />));
+  await act(async () =>
+    Array.from(toolbar.host.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("Insert"))!
+      .click(),
+  );
+  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(99, {
+    type: "PASTE_TEXT",
+    payload: { text: "New result" },
+  });
+  expect(browser.tabs.sendMessage).not.toHaveBeenCalledWith(42, expect.anything());
+});

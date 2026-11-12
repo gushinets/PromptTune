@@ -150,10 +150,24 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [sourceSessionId, setSourceSessionId] = useState(
     initialSelection?.sourceSessionId ?? initialDraft?.sourceSessionId,
   );
-  // The standalone window still needs its originating browser target after New clears prompt state.
-  const targetTabId = sourceTabId ?? initialSelection?.sourceTabId;
+  // A standalone window's target survives New independently of the current prompt binding.
+  const [standaloneTarget, setStandaloneTarget] = useState<PopupSessionDraft["standaloneTarget"]>(
+    () =>
+      initialSelection?.sourceTabId !== undefined
+        ? { tabId: initialSelection.sourceTabId, sessionId: initialSelection.sourceSessionId }
+        : (initialDraft?.standaloneTarget ??
+          (isSelectionLaunch && initialDraft?.sourceTabId !== undefined
+            ? { tabId: initialDraft.sourceTabId, sessionId: initialDraft.sourceSessionId }
+            : undefined)),
+  );
+  const isStandaloneWindow = isSelectionLaunch || initialSelection !== undefined;
+  const targetTabId = sourceTabId ?? (isStandaloneWindow ? standaloneTarget?.tabId : undefined);
   const targetSessionId =
-    sourceTabId !== undefined ? sourceSessionId : initialSelection?.sourceSessionId;
+    sourceTabId !== undefined
+      ? sourceSessionId
+      : isStandaloneWindow
+        ? standaloneTarget?.sessionId
+        : undefined;
   const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
   );
@@ -328,6 +342,12 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         if (typeof draft.draftCreatedAt === "number") setDraftCreatedAt(draft.draftCreatedAt);
         setSourceTabId(draft.sourceTabId);
         setSourceSessionId(draft.sourceSessionId);
+        setStandaloneTarget(
+          draft.standaloneTarget ??
+            (isSelectionLaunch && draft.sourceTabId !== undefined
+              ? { tabId: draft.sourceTabId, sessionId: draft.sourceSessionId }
+              : undefined),
+        );
         setActiveTab(draft.activeTab);
         setOriginal(draft.original);
         setImproved(draft.improved);
@@ -413,6 +433,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       draftCreatedAt,
       sourceTabId,
       sourceSessionId,
+      standaloneTarget,
       audienceMode,
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
       result_context: resultContext,
@@ -432,6 +453,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       draftCreatedAt,
       sourceTabId,
       sourceSessionId,
+      standaloneTarget,
       audienceMode,
       improved,
       editingOriginal,
@@ -847,6 +869,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   }, [activeTab, loading, improved, editingOriginal, handleImprove]);
 
   const handleNew = useCallback(() => {
+    // The standalone window keeps its launch target; only the prompt binding is cleared.
     setSourceTabId(undefined);
     setSourceSessionId(undefined);
     setOriginal("");

@@ -26,6 +26,7 @@ export interface PopupSessionDraft {
   draftCreatedAt?: number;
   sourceTabId?: number;
   sourceSessionId?: string;
+  standaloneTarget?: { tabId: number; sessionId?: string };
   optimizer_screen?: "input" | "result";
   result_context?: OptimizerRequestContext | null;
   activeTab: "improve" | "library";
@@ -44,6 +45,16 @@ interface StoredPopupSessionDraft extends PopupSessionDraft {
   updatedAt: number;
 }
 
+function isStandaloneTarget(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const target = value as { tabId?: unknown; sessionId?: unknown };
+  return (
+    Number.isSafeInteger(target.tabId) &&
+    (target.tabId as number) >= 0 &&
+    (target.sessionId === undefined || typeof target.sessionId === "string")
+  );
+}
+
 /** Validate a draft before accepting a session from another extension surface. */
 export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft {
   if (!value || typeof value !== "object") return false;
@@ -57,6 +68,7 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
     (draft.draftSessionId === undefined || typeof draft.draftSessionId === "string") &&
     (draft.draftCreatedAt === undefined ||
       (typeof draft.draftCreatedAt === "number" && Number.isFinite(draft.draftCreatedAt))) &&
+    (draft.standaloneTarget === undefined || isStandaloneTarget(draft.standaloneTarget)) &&
     (draft.sourceSessionId === undefined || typeof draft.sourceSessionId === "string") &&
     (draft.sourceTabId === undefined ||
       (Number.isSafeInteger(draft.sourceTabId) && (draft.sourceTabId as number) >= 0)) &&

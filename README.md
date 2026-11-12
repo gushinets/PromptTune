@@ -78,7 +78,9 @@ on supported AI sites; Copy is available for other pages. Switching to the side
 panel transfers the current prompt/result and retains that source tab even when
 another tab becomes active. In the separate optimizer window, New clears the
 prompt session but keeps its originating browser target for Insert and switching
-to the side panel. Saved source bindings carry a nonce in `storage.session`;
+to the side panel. That standalone target is saved separately from the current
+prompt binding, so New followed by a window reload retains it too. A normal
+toolbar popup still uses the active tab after starting a new prompt. Saved source bindings carry a nonce in `storage.session`;
 after a browser restart or extension reload they cannot resolve a reused tab ID.
 The old result remains available to copy or save; New starts an unbound session
 when reopening from the toolbar. Independent optimizer sessions keep separate
