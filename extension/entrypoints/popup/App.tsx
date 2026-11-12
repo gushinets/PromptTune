@@ -317,7 +317,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           : getPopupSessionDraft(viewMode === "popup"),
     ])
       .then(([mode, draft]) => {
-        setAudienceModeState(mode);
+        const restoredMode = draft?.audienceMode ?? mode;
+        setAudienceModeState(restoredMode);
 
         if (initialSelection || !draft) return;
 
@@ -332,7 +333,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         const legacyContext = { mode: requestMode, goal: requestGoal };
         const fallbackContext = isOptimizerRequestContext(legacyContext)
           ? legacyContext
-          : { mode, goal: draft.goal };
+          : { mode: restoredMode, goal: draft.goal };
         setResultContext(
           isOptimizerRequestContext(draft.result_context)
             ? draft.result_context
@@ -348,7 +349,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLastLatencyMs(draft.lastLatencyMs);
         setAttemptN(draft.attemptN);
 
-        if (draft.goal) {
+        if (draft.goal && isOptimizerRequestContext({ mode: restoredMode, goal: draft.goal })) {
           hasUserSelectedGoalRef.current = true;
           setGoal(draft.goal);
         }
@@ -410,6 +411,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       draftCreatedAt,
       sourceTabId,
       sourceSessionId,
+      audienceMode,
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
       result_context: resultContext,
       activeTab,
@@ -428,6 +430,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       draftCreatedAt,
       sourceTabId,
       sourceSessionId,
+      audienceMode,
       improved,
       editingOriginal,
       resultContext,
@@ -513,6 +516,16 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           if (activeRequestRef.current) return;
           const id = crypto.randomUUID();
           try {
+            const current = layoutTargetRef.current;
+            if (
+              !current ||
+              current.tab.id !== tab.id ||
+              current.tab.windowId !== tab.windowId ||
+              current.id !== targetTabId ||
+              current.session !== targetSessionId
+            ) {
+              throw new Error("Source tab changed while opening the side panel");
+            }
             await setOptimizerHandoff(panelHandoffKey(tab.windowId, id), {
               id,
               draft: {

@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
+import type { PopupSessionDraft } from "../shared/storage";
 import { takeSelection } from "../shared/selection";
 import { App } from "../entrypoints/popup/App";
 
@@ -230,4 +231,83 @@ it("autosaves user input after a failed selection launch, including clearing tha
   } finally {
     window.history.replaceState(null, "", originalUrl);
   }
+});
+
+it.each(["popup", "sidepanel"] as const)(
+  "restores mode and goal together in %s after another live session changes the global mode",
+  async (surface) => {
+    const a = mount();
+    await act(async () =>
+      a.root.render(
+        <App initialSelection={{ text: "Session A", draftSessionId: "a", draftCreatedAt: 200 }} />,
+      ),
+    );
+    await act(async () => a.host.querySelector<HTMLInputElement>('input[value="claude"]')!.click());
+    const b = mount();
+    await act(async () =>
+      b.root.render(
+        <App initialSelection={{ text: "Session B", draftSessionId: "b", draftCreatedAt: 100 }} />,
+      ),
+    );
+    await act(async () =>
+      b.host.querySelector<HTMLButtonElement>('[data-mode="content"]')!.click(),
+    );
+    expect(state.audience_mode).toBe("content");
+    const reopened = mount();
+    await act(async () =>
+      reopened.root.render(
+        surface === "popup" ? (
+          <App />
+        ) : (
+          <App viewMode="sidepanel" initialDraft={state.optimizer_draft_a as PopupSessionDraft} />
+        ),
+      ),
+    );
+    expect(reopened.host.querySelector('[data-mode="ai"]')?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(reopened.host.querySelector<HTMLInputElement>('input[value="claude"]')!.checked).toBe(
+      true,
+    );
+    vi.mocked(browser.runtime.sendMessage).mockClear();
+    await act(async () => reopened.host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+        payload: expect.objectContaining({
+          audience_mode: "ai",
+          goal: "claude",
+          text: "Session A",
+        }),
+      }),
+    );
+  },
+);
+it("remaps an incompatible legacy goal before submitting in the global mode", async () => {
+  state.audience_mode = "content";
+  state.popup_session_draft = {
+    activeTab: "improve",
+    original: "Legacy session",
+    improved: "",
+    changes: [],
+    goal: "claude",
+    lastRequestId: null,
+    lastRequestContextKey: null,
+    lastModel: null,
+    lastLatencyMs: null,
+    attemptN: 0,
+    updatedAt: Date.now(),
+  };
+  const reopened = mount();
+  await act(async () => reopened.root.render(<App />));
+  expect(reopened.host.querySelector<HTMLInputElement>('input[value="general"]')!.checked).toBe(
+    true,
+  );
+  await act(async () => reopened.host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+  expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: "IMPROVE_REQUEST",
+      payload: expect.objectContaining({ audience_mode: "content", goal: "general" }),
+    }),
+  );
 });

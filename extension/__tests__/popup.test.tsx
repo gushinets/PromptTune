@@ -759,6 +759,54 @@ describe("App", () => {
     expect(toggle.disabled).toBe(false);
   });
 
+  it("keeps the optimizer open and rolls back if its source closes while the panel is opening", async () => {
+    const closeWindow = vi.spyOn(window, "close").mockImplementation(() => {});
+    let finishOpen!: () => void;
+    const open = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishOpen = resolve;
+        }),
+    );
+    Object.assign(browser, { sidePanel: { open } });
+    vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 7 } as never);
+    await act(async () =>
+      root.render(
+        <App
+          initialSelection={{
+            text: "Keep this selection",
+            sourceTabId: 42,
+            sourceSessionId: "test-session",
+          }}
+        />,
+      ),
+    );
+    await flushEffects();
+    await act(async () =>
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click(),
+    );
+    const removed = vi.mocked(browser.tabs.onRemoved.addListener).mock.calls.at(-1)![0];
+    await act(async () => removed(42, { windowId: 7, isWindowClosing: false }));
+    await act(async () => finishOpen());
+    expect(closeWindow).not.toHaveBeenCalled();
+    expect(
+      vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.some(([values]) =>
+          Object.keys(values).some((key) => key.startsWith("optimizer_panel_handoff_")),
+        ),
+    ).toBe(false);
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "PANEL_HANDOFF_FAILED", windowId: 7 }),
+    );
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Could not open the side panel",
+    );
+    expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
+      "Keep this selection",
+    );
+  });
+
   it("uses the new browser window immediately when the source tab moves during revalidation", async () => {
     const open = vi.fn().mockResolvedValue(undefined);
     Object.assign(browser, { sidePanel: { open } });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import {
   getPopupSessionDraft,
+  setOptimizerHandoff,
   preferPopupSessionDraft,
   setPopupSessionDraft,
   type PopupSessionDraft,
@@ -200,4 +201,68 @@ it("cleans only optimizer records without reading library, pending saves or anal
     "optimizer_draft_live",
     "pending_library_saves",
   ]);
+});
+
+it.each(["draft", "handoff"])(
+  "keeps every recoverable draft when a %s replacement write fails at capacity",
+  async (path) => {
+    for (let i = 1; i <= 10; i++) await setPopupSessionDraft(draft(String(i)));
+    if (path === "handoff") state.optimizer_draft_0 = { ...draft("0"), updatedAt: Date.now() - 1 };
+    const original = structuredClone(state);
+    vi.mocked(browser.storage.local.set).mockRejectedValueOnce(
+      new Error("Transient storage failure"),
+    );
+    const write =
+      path === "draft"
+        ? setPopupSessionDraft(draft("11"))
+        : setOptimizerHandoff("optimizer_selection_a", {
+            text: "New",
+            expiresAt: Date.now() + 1000,
+          });
+    await expect(write).rejects.toThrow("Transient storage failure");
+    expect(Object.keys(state).sort()).toEqual(Object.keys(original).sort());
+    for (const key of Object.keys(original))
+      expect(JSON.stringify(state[key]) === JSON.stringify(original[key])).toBe(true);
+  },
+);
+it("restores quota-pressure evictions if the retried replacement also fails", async () => {
+  state.library = "l".repeat(7 * 1024 * 1024 - 100);
+  for (let i = 1; i <= 10; i++)
+    state[`optimizer_draft_${i}`] = {
+      ...draft(String(i), "я".repeat(140000)),
+      updatedAt: Date.now(),
+    };
+  const original = structuredClone(state);
+  const persist = vi.mocked(browser.storage.local.set).getMockImplementation()!;
+  vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+    if ("optimizer_selection_a" in values && bytes({ ...state, ...values }) <= 10 * 1024 * 1024)
+      throw new Error("Retried write failed");
+    return persist(values);
+  });
+  await expect(
+    setOptimizerHandoff("optimizer_selection_a", { text: "я".repeat(250000) }),
+  ).rejects.toThrow();
+  expect(Object.keys(state).sort()).toEqual(Object.keys(original).sort());
+  for (const key of Object.keys(original))
+    expect(JSON.stringify(state[key]) === JSON.stringify(original[key])).toBe(true);
+});
+
+it("restores a validated popup handoff even when consuming its key fails", async () => {
+  await preferPopupSessionDraft(draft("1", "Recover this panel"));
+  vi.mocked(browser.storage.local.remove).mockRejectedValueOnce(new Error("Removal failed"));
+  await expect(getPopupSessionDraft()).resolves.toMatchObject({ original: "Recover this panel" });
+});
+
+it("keeps a committed handoff successful when draft cleanup fails, then retries eviction on the next save", async () => {
+  for (let i = 1; i <= 10; i++) await setPopupSessionDraft(draft(String(i)));
+  state.optimizer_draft_0 = { ...draft("0"), updatedAt: Date.now() - 1 };
+  vi.mocked(browser.storage.local.remove).mockRejectedValueOnce(new Error("Cleanup failed"));
+  await expect(
+    setOptimizerHandoff("optimizer_selection_a", { text: "Committed selection" }),
+  ).resolves.toBeUndefined();
+  expect(state.optimizer_selection_a).toEqual({ text: "Committed selection" });
+  expect(state.optimizer_draft_0).toBeDefined();
+  await setPopupSessionDraft(draft("11"));
+  expect(Object.keys(state).filter((key) => key.startsWith("optimizer_draft_"))).toHaveLength(10);
+  expect(state.optimizer_draft_0).toBeUndefined();
 });

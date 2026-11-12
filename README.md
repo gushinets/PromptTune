@@ -82,10 +82,12 @@ to the side panel. Saved source bindings carry a nonce in `storage.session`;
 after a browser restart or extension reload they cannot resolve a reused tab ID.
 The old result remains available to copy or save; New starts an unbound session
 when reopening from the toolbar. Independent optimizer sessions keep separate
-three-hour drafts. Reopening restores the most recently created live session;
+three-hour drafts, including each session’s audience mode and goal. Legacy goals
+are validated against the restored mode before submission. Reopening restores the most recently created live session;
 editing an older window or panel does not replace that choice. Drafts share a
 1 MiB / 10-session budget; each save preserves the session being written and
-evicts the least recently updated older drafts as needed. Selection and panel
+evicts the least recently updated older drafts after a successful write. Under
+quota pressure, failed replacement writes restore records removed for the retry. Selection and panel
 handoff writes enforce this budget too, including after an upgrade, leaving room
 for the 6 MiB library, 1 MiB pending-save reservation and temporary handoffs.
 Valid legacy drafts without timestamps receive a timestamp before cleanup.

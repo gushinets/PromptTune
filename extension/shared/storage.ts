@@ -20,6 +20,7 @@ export function popupHandoffKey(windowId: number): string {
 }
 
 export interface PopupSessionDraft {
+  audienceMode?: AudienceMode | null;
   draftSessionId?: string;
   draftCreatedAt?: number;
   sourceTabId?: number;
@@ -48,6 +49,10 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
 
   const draft = value as Record<string, unknown>;
   return (
+    (draft.audienceMode === undefined ||
+      draft.audienceMode === null ||
+      draft.audienceMode === "ai" ||
+      draft.audienceMode === "content") &&
     (draft.draftSessionId === undefined || typeof draft.draftSessionId === "string") &&
     (draft.draftCreatedAt === undefined ||
       (typeof draft.draftCreatedAt === "number" && Number.isFinite(draft.draftCreatedAt))) &&
@@ -257,7 +262,7 @@ export async function getPopupSessionDraft(
           | { windowId?: number; draft?: unknown; expiresAt?: number }
           | undefined;
         if (!handoff || handoff.windowId !== window.id) return null;
-        await browser.storage.local.remove(key);
+        await browser.storage.local.remove(key).catch(() => undefined);
         return typeof handoff.expiresAt === "number" &&
           Number.isFinite(handoff.expiresAt) &&
           handoff.expiresAt > Date.now() &&
@@ -363,10 +368,10 @@ async function readDrafts(): Promise<Record<string, unknown>> {
 }
 
 /** Called under the draft lock before writes, including the first write on upgrade. */
-async function pruneDrafts(
+async function planDraftEvictions(
   currentKey?: string,
   currentValue?: StoredPopupSessionDraft,
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const incomingBytes = currentKey ? storedBytes(currentKey, currentValue) : 0;
   if (incomingBytes > LIMITS.MAX_POPUP_DRAFT_BYTES) throw new Error("Draft exceeds storage budget");
   const data = await readDrafts();
@@ -404,7 +409,36 @@ async function pruneDrafts(
       count++;
     }
   }
-  if (evicted.length) await browser.storage.local.remove(evicted);
+  return Object.fromEntries(evicted.map((key) => [key, data[key]]));
+}
+
+/** Preserve recoverable drafts on write failures; release quota only when a retry needs it. */
+async function writeWithDraftBudget(
+  key: string,
+  value: unknown,
+  draft?: StoredPopupSessionDraft,
+): Promise<void> {
+  const evicted = await planDraftEvictions(draft ? key : undefined, draft);
+  const keys = Object.keys(evicted);
+  try {
+    await browser.storage.local.set({ [key]: value });
+  } catch (error) {
+    const message = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+    if (!keys.length || !/quota/i.test(message)) throw error;
+    // A full store cannot hold both snapshots. Keep the old records for rollback.
+    await browser.storage.local.remove(keys);
+    try {
+      await browser.storage.local.set({ [key]: value });
+    } catch (writeError) {
+      // The rejected write has not occupied the released space, so the original data fits again.
+      await browser.storage.local.set(evicted);
+      throw writeError;
+    }
+    return;
+  }
+  // The new value is committed. Cleanup must not turn success into a failed transfer.
+  // A later save retries any remaining budget evictions.
+  if (keys.length) await browser.storage.local.remove(keys).catch(() => undefined);
 }
 
 export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<void> {
@@ -413,16 +447,14 @@ export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<vo
     : STORAGE_KEYS.POPUP_SESSION_DRAFT;
   const value = { ...draft, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
   await withOptimizerStorageLock(async () => {
-    await pruneDrafts(key, value);
-    await browser.storage.local.set({ [key]: value });
+    await writeWithDraftBudget(key, value, value);
   });
 }
 
 /** Keep draft growth from blocking selection/panel handoffs, including after an upgrade. */
 export async function setOptimizerHandoff(key: string, value: unknown): Promise<void> {
   await withOptimizerStorageLock(async () => {
-    await pruneDrafts();
-    await browser.storage.local.set({ [key]: value });
+    await writeWithDraftBudget(key, value);
   });
 }
 
