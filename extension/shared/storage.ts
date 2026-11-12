@@ -260,7 +260,12 @@ export async function setAudienceMode(mode: AudienceMode): Promise<void> {
 export async function getPopupSessionDraft(
   consumePopupHandoff = true,
 ): Promise<PopupSessionDraft | null> {
-  const data = await browser.storage.local.get(null);
+  const data = await readLocalEntries(
+    (key) =>
+      key.startsWith(POPUP_DRAFT_PREFIX) ||
+      key.startsWith(`${POPUP_HANDOFF_KEY}_`) ||
+      key === STORAGE_KEYS.POPUP_SESSION_DRAFT,
+  );
   if (
     consumePopupHandoff &&
     Object.keys(data).some((key) => key.startsWith(`${POPUP_HANDOFF_KEY}_`))

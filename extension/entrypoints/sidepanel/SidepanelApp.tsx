@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import browser from "webextension-polyfill";
 import { isPanelHandoff, panelHandoffPrefix, type PanelHandoff } from "@shared/panel-handoff";
 import { useT } from "@shared/i18n";
+import { readLocalEntries } from "@shared/storage";
 import { ensureBrowserSessionId } from "@shared/browser-target";
 import { App } from "../popup/App";
 
@@ -107,9 +108,9 @@ export function SidepanelApp() {
         const initialRevision = revision;
         let data: Record<string, unknown>;
         try {
-          data = await browser.storage.local.get(null);
+          data = await readLocalEntries((key) => key.startsWith(prefix));
         } catch {
-          data = await browser.storage.local.get(null);
+          data = await readLocalEntries((key) => key.startsWith(prefix));
         }
         const pending = Object.entries(data).filter(([key]) => key.startsWith(prefix));
         let acceptedKey: string | undefined;

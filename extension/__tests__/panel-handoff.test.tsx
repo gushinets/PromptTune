@@ -398,3 +398,42 @@ it.each(["previous-browser", undefined])(
     expect(host.textContent).not.toContain("Improved selection");
   },
 );
+
+it("loads a panel handoff without a full-store scan or unrelated payloads in its snapshot", async () => {
+  const data: Record<string, unknown> = {
+    audience_mode: "ai",
+    library: [
+      { id: "library-entry", createdAt: 1, original: "l".repeat(6 * 1024 * 1024), improved: "" },
+    ],
+    pending_library_saves: [{ original: "p".repeat(1024 * 1024) }],
+    optimizer_panel_handoff_7_selection: selected,
+    optimizer_panel_handoff_8_other: {
+      ...selected,
+      draft: { ...selected.draft, improved: "Other window" },
+    },
+  };
+  Object.assign(browser.storage.local, { getKeys: vi.fn(async () => Object.keys(data)) });
+  vi.mocked(browser.storage.local.get).mockImplementation(async (keys) => {
+    if (keys === null || keys === undefined)
+      throw new Error("Full-store scan during panel startup");
+    if (
+      Array.isArray(keys) &&
+      keys.some(
+        (key) =>
+          key === "library" ||
+          key === "pending_library_saves" ||
+          key.startsWith("optimizer_panel_handoff_8_"),
+      )
+    )
+      throw new Error("Unrelated payload in handoff snapshot");
+    return Object.fromEntries([keys].flat().map((key) => [key, data[key as string]]));
+  });
+  try {
+    await act(async () => root.render(<SidepanelApp />));
+    expect(host.textContent).toContain("Improved selection");
+    expect(host.textContent).not.toContain("Other window");
+    expect(browser.storage.local.get).toHaveBeenCalledWith(["optimizer_panel_handoff_7_selection"]);
+  } finally {
+    Reflect.deleteProperty(browser.storage.local, "getKeys");
+  }
+});

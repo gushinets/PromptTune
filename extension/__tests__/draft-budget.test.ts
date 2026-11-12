@@ -285,3 +285,37 @@ it.each(["new-browser", undefined])(
     expect(await getPopupSessionDraft()).toMatchObject({ original: "Normal restore" });
   },
 );
+
+it.each(["draft", "handoff"])(
+  "restores a %s without loading large unrelated storage entries",
+  async (path) => {
+    state.library = "l".repeat(6 * 1024 * 1024);
+    state.pending_library_saves = "p".repeat(1024 * 1024);
+    state.analytics_queue = ["unrelated"];
+    state.optimizer_draft_1 = { ...draft("1", "Saved draft"), updatedAt: Date.now() };
+    if (path === "handoff")
+      state.optimizer_popup_handoff_7 = {
+        windowId: 7,
+        browserSessionId: "test-session",
+        draft: draft("2", "Panel transfer"),
+        expiresAt: Date.now() + 300000,
+      };
+    Object.assign(browser.storage.local, { getKeys: vi.fn(async () => Object.keys(state)) });
+    vi.mocked(browser.storage.local.get).mockImplementation(async (keys) => {
+      if (
+        keys === null ||
+        keys === undefined ||
+        [keys]
+          .flat()
+          .some((key) =>
+            ["library", "pending_library_saves", "analytics_queue"].includes(key as string),
+          )
+      )
+        throw new Error("Unrelated payload was read during restore");
+      return Object.fromEntries([keys].flat().map((key) => [key, state[key as string]]));
+    });
+    await expect(getPopupSessionDraft()).resolves.toMatchObject({
+      original: path === "handoff" ? "Panel transfer" : "Saved draft",
+    });
+  },
+);
