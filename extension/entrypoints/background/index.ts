@@ -3,7 +3,7 @@ import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
-import { openOptimizerPanel } from "@shared/panel-handoff";
+import { openOptimizerPanel, closePanelForRollback } from "@shared/panel-handoff";
 import { IMPROVE_OWNER_PORT } from "@shared/messages";
 import type {
   AnalyticsEventName,
@@ -453,6 +453,11 @@ export default defineBackground(() => {
     const msg = raw as Message;
 
     switch (msg.type) {
+      case "CLOSE_PANEL_FOR_ROLLBACK": {
+        if (sender.url !== browser.runtime.getURL("sidepanel.html"))
+          return { closed: false, current: false };
+        return closePanelForRollback(msg.windowId, msg.requestId, msg.failedHandoffId);
+      }
       case "OPEN_OPTIMIZER_PANEL": {
         if (sender.url?.split("?")[0] !== browser.runtime.getURL("popup.html"))
           throw new Error("Invalid panel sender");

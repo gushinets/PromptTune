@@ -76,17 +76,71 @@ export function isPanelHandoff(value: unknown, browserSessionId: string): value 
   );
 }
 
+const PANEL_ROLLBACK_TTL_MS = 30_000;
+const openingAttempts = new Map<number, string>();
+const pendingRollbacks = new Map<
+  number,
+  {
+    requestId: string;
+    failedHandoffId: string;
+    expiresAt: number;
+    cleanup: () => void;
+  }
+>();
+
+/** Checked in the background after the panel's asynchronous acknowledgement. */
+export function isPanelRollbackCurrent(
+  windowId: number,
+  requestId?: string,
+  failedHandoffId?: string,
+): boolean {
+  const pending = pendingRollbacks.get(windowId);
+  return (
+    !!pending &&
+    pending.requestId === requestId &&
+    pending.failedHandoffId === failedHandoffId &&
+    pending.expiresAt > Date.now()
+  );
+}
+
+/** Validate and submit native close together, before another opening can supersede it. */
+export async function closePanelForRollback(
+  windowId: number,
+  requestId?: string,
+  failedHandoffId?: string,
+): Promise<{ closed: boolean; current: boolean }> {
+  if (!isPanelRollbackCurrent(windowId, requestId, failedHandoffId))
+    return { closed: false, current: false };
+  const panel = (
+    browser as typeof browser & {
+      sidePanel?: { close?: (options: { windowId: number }) => Promise<void> };
+    }
+  ).sidePanel;
+  try {
+    if (!panel?.close) return { closed: false, current: true };
+    await panel.close({ windowId });
+    return { closed: true, current: true };
+  } catch {
+    return { closed: false, current: true };
+  }
+}
+
 /** Keep a failed-transfer rollback pending until an older browser's panel subscribes. */
 export function requestPanelRollback(
   windowId: number,
   openedAfter: number,
   failedHandoffId: string,
 ): () => void {
+  pendingRollbacks.get(windowId)?.cleanup();
   const requestId = crypto.randomUUID();
+  const expiresAt = Date.now() + PANEL_ROLLBACK_TTL_MS;
   let active = true;
+  let listening = true;
   const cleanup = () => {
     active = false;
+    clearTimeout(timer);
     browser.runtime.onMessage.removeListener(onReady);
+    if (pendingRollbacks.get(windowId)?.requestId === requestId) pendingRollbacks.delete(windowId);
   };
   const sendClose = async () => {
     try {
@@ -114,10 +168,16 @@ export function requestPanelRollback(
       msg?.type === "PANEL_ROLLBACK_ACK" &&
       msg.windowId === windowId &&
       msg.requestId === requestId
-    )
-      cleanup();
-    if (active && msg?.type === "PANEL_READY" && msg.windowId === windowId) void sendClose();
+    ) {
+      // Stop retries, but retain validation until the receiver makes its decision.
+      listening = false;
+      browser.runtime.onMessage.removeListener(onReady);
+    }
+    if (active && listening && msg?.type === "PANEL_READY" && msg.windowId === windowId)
+      void sendClose();
   };
+  const timer = setTimeout(cleanup, PANEL_ROLLBACK_TTL_MS);
+  pendingRollbacks.set(windowId, { requestId, failedHandoffId, expiresAt, cleanup });
   browser.runtime.onMessage.addListener(onReady);
   void sendClose();
   return cleanup;
@@ -145,6 +205,8 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
   ).sidePanel;
   if (!sidePanel) throw new Error("Side panel unavailable");
   const id = crypto.randomUUID();
+  pendingRollbacks.get(message.windowId)?.cleanup();
+  openingAttempts.set(message.windowId, id);
   const openedAfter = Date.now();
   let sourceChanged = false;
   const onRemoved = (tabId: number) => {
@@ -168,6 +230,7 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
     if (failure) throw failure.error;
     const browserSessionId = await ensureBrowserSessionId();
     if (
+      openingAttempts.get(message.windowId) !== id ||
       sourceChanged ||
       (message.draft.sourceTabId !== undefined &&
         message.draft.sourceSessionId !== browserSessionId)
@@ -178,6 +241,7 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
       if (source.id !== message.tabId || source.windowId !== message.windowId || sourceChanged)
         throw new Error("Source tab no longer belongs to the target window");
     }
+    if (openingAttempts.get(message.windowId) !== id) throw new Error("Panel attempt superseded");
     await setOptimizerHandoff(panelHandoffKey(message.windowId, id), {
       id,
       browserSessionId,
@@ -188,9 +252,11 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
   } catch (error) {
     await intent;
     await clearPanelHandoffIntents([panelHandoffIntentKey(message.windowId, id)]);
-    if (opened) requestPanelRollback(message.windowId, openedAfter, id);
+    if (opened && openingAttempts.get(message.windowId) === id)
+      requestPanelRollback(message.windowId, openedAfter, id);
     throw error;
   } finally {
+    if (openingAttempts.get(message.windowId) === id) openingAttempts.delete(message.windowId);
     browser.tabs.onRemoved.removeListener(onRemoved);
     browser.tabs.onAttached.removeListener(onAttached);
   }

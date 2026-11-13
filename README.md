@@ -113,6 +113,10 @@ The panel retries a failed initial handoff read once, then offers a Retry action
 Transfer intent is recorded in browser-session storage before opening the panel.
 Abandoned intents expire after the five-minute handoff lifetime plus a one-minute
 publication margin; Retry can then continue with a fresh editor.
+Rollback requests expire after 30 seconds and are cancelled by a newer opening
+attempt in the same window. The background validates the request and submits
+native close together, so a delayed response cannot close the next panel.
+Browsers without native panel close keep the panel open with a failure notice.
 The background worker opens the panel and completes the handoff even if Chrome
 destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
 instead of opening a different draft. After ordinary startup read failures, a

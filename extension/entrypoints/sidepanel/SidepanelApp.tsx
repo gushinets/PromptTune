@@ -117,6 +117,7 @@ export function SidepanelApp() {
                   requestId: msg.requestId,
                 })
                 .catch(() => undefined);
+              if (!active) return { preserved: true };
               if (
                 typeof msg.openedAfter === "number" &&
                 mountedAt.current >= msg.openedAfter &&
@@ -124,18 +125,17 @@ export function SidepanelApp() {
                 (acceptedHandoffId.current === undefined ||
                   acceptedHandoffId.current === msg.failedHandoffId)
               ) {
-                const panel = (
-                  browser as typeof browser & {
-                    sidePanel?: { close?: (options: { windowId: number }) => Promise<void> };
-                  }
-                ).sidePanel;
-                try {
-                  if (!panel?.close) throw new Error("Close API unavailable");
-                  await panel.close({ windowId: window.id! });
-                } catch {
-                  globalThis.window.close();
-                }
-                return { closed: true };
+                const response = await browser.runtime
+                  .sendMessage({
+                    type: "CLOSE_PANEL_FOR_ROLLBACK",
+                    windowId: window.id,
+                    requestId: msg.requestId,
+                    failedHandoffId: msg.failedHandoffId,
+                  })
+                  .catch(() => undefined);
+                const result = response as { closed?: boolean; current?: boolean } | undefined;
+                if (result?.closed) return { closed: true };
+                if (result?.current === false) return { preserved: true };
               }
               setTransferWarning(true);
               return { preserved: true };
