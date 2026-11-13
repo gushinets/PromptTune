@@ -437,3 +437,35 @@ it("loads a panel handoff without a full-store scan or unrelated payloads in its
     Reflect.deleteProperty(browser.storage.local, "getKeys");
   }
 });
+
+it.each(["expired", "removed"])(
+  "does not mount an unrelated draft after failed reads and a %s transfer on Retry",
+  async (state) => {
+    vi.mocked(browser.storage.local.get)
+      .mockRejectedValueOnce(new Error("Read failed"))
+      .mockRejectedValueOnce(new Error("Retry read failed"));
+    await act(async () => root.render(<SidepanelApp />));
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      audience_mode: "ai",
+      library: [],
+      ...(state === "expired"
+        ? { optimizer_panel_handoff_7_old: { ...selected, expiresAt: Date.now() - 1 } }
+        : {}),
+      optimizer_draft_other: {
+        ...selected.draft,
+        original: "Unrelated B",
+        improved: "Unrelated B result",
+        draftSessionId: "other",
+        draftCreatedAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    });
+    await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(host.querySelector(".popup-container")).toBeNull();
+    expect(host.textContent).not.toContain("Unrelated B");
+    await change("optimizer_panel_handoff_7_recovered", selected);
+    expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+  },
+);

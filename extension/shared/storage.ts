@@ -259,6 +259,7 @@ export async function setAudienceMode(mode: AudienceMode): Promise<void> {
 
 export async function getPopupSessionDraft(
   consumePopupHandoff = true,
+  options: { independent?: boolean } = {},
 ): Promise<PopupSessionDraft | null> {
   const data = await readLocalEntries(
     (key) =>
@@ -294,6 +295,15 @@ export async function getPopupSessionDraft(
       if (preferred) return preferred;
     }
   }
+  // Generic restores open an independent editor; explicit one-shot handoffs above retain identity.
+  const restored = (draft: PopupSessionDraft): PopupSessionDraft =>
+    options.independent
+      ? {
+          ...draft,
+          draftSessionId: crypto.randomUUID(),
+          draftCreatedAt: Math.max(Date.now(), (draft.draftCreatedAt ?? 0) + 1),
+        }
+      : draft;
   const now = Date.now();
   const candidates = Object.entries(data)
     .filter(([key, value]) => {
@@ -336,7 +346,7 @@ export async function getPopupSessionDraft(
     }
 
     await withOptimizerStorageLock(() => migrateLegacyPopupDraft({ [key]: draft }));
-    return draft;
+    return restored(draft);
   }
 
   if (typeof draft.updatedAt !== "number" || !Number.isFinite(draft.updatedAt)) {
@@ -350,7 +360,7 @@ export async function getPopupSessionDraft(
   }
 
   const { updatedAt: _updatedAt, ...sessionDraft } = draft;
-  return sessionDraft;
+  return restored(sessionDraft);
 }
 
 /** Restore only the live draft addressed by a standalone optimizer URL. */

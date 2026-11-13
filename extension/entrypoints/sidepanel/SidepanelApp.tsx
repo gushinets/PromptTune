@@ -10,6 +10,7 @@ import { App } from "../popup/App";
 export function SidepanelApp() {
   const t = useT();
   const mountedAt = useRef(Date.now());
+  const recoveryRequired = useRef(false);
   const acceptedHandoffId = useRef<string | undefined>(undefined);
   const [transferWarning, setTransferWarning] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -34,6 +35,7 @@ export function SidepanelApp() {
         const accept = (key: string, value: unknown) => {
           if (!active || !isPanelHandoff(value, browserSessionId)) return;
           received = true;
+          recoveryRequired.current = false;
           acceptedHandoffId.current = value.id;
           setTransferWarning(false);
           setSession(value);
@@ -128,9 +130,15 @@ export function SidepanelApp() {
         // Unique keys let us retire this snapshot without deleting a concurrent transfer.
         const obsolete = pending.map(([key]) => key).filter((key) => key !== acceptedKey);
         if (obsolete.length) await browser.storage.local.remove(obsolete).catch(() => undefined);
-        if (active) setReady(true);
+        if (active) {
+          if (recoveryRequired.current && !received) setFailed(true);
+          else setReady(true);
+        }
       } catch {
-        if (active && !received) setFailed(true);
+        if (active && !received) {
+          recoveryRequired.current = true;
+          setFailed(true);
+        }
       }
     })();
     return () => {

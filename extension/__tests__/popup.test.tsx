@@ -680,6 +680,59 @@ describe("App", () => {
     },
   );
 
+  it("blocks the side-panel toggle until its transferred draft finishes restoring", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
+    let finishMode!: () => void;
+    vi.mocked(browser.storage.local.get).mockImplementation(async (key) => {
+      if (key === "audience_mode") {
+        await new Promise<void>((resolve) => {
+          finishMode = resolve;
+        });
+        return { audience_mode: "ai" };
+      }
+      return { library: [] };
+    });
+    const initialDraft = {
+      activeTab: "improve" as const,
+      original: "Transferred A",
+      improved: "Transferred result A",
+      changes: [],
+      goal: "general" as const,
+      lastRequestId: "a",
+      lastRequestContextKey: "ai|general|Transferred A",
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 1,
+    };
+    await act(async () => root.render(<App viewMode="sidepanel" initialDraft={initialDraft} />));
+    const toggle = container.querySelector<HTMLButtonElement>(".layout-toggle-btn")!;
+    try {
+      expect(toggle.disabled).toBe(true);
+      await act(async () => toggle.click());
+      expect(close).not.toHaveBeenCalled();
+      expect(
+        vi
+          .mocked(browser.storage.local.set)
+          .mock.calls.some(([values]) =>
+            Object.keys(values).some((key) => key.startsWith("optimizer_popup_handoff_")),
+          ),
+      ).toBe(false);
+    } finally {
+      await act(async () => finishMode());
+    }
+    expect(toggle.disabled).toBe(false);
+    await act(async () => toggle.click());
+    const handoff = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.flatMap(([values]) => Object.entries(values))
+      .find(([key]) => key.startsWith("optimizer_popup_handoff_"));
+    expect(handoff?.[1]).toMatchObject({
+      draft: { original: "Transferred A", improved: "Transferred result A" },
+    });
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it("allows submission again if opening the sidepanel fails", async () => {
     Object.assign(browser, {
       sidePanel: { open: vi.fn().mockRejectedValue(new Error("Open failed")) },

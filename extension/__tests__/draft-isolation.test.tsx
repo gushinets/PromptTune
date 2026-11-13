@@ -622,3 +622,70 @@ it.each(["missing", "expired"])(
     }
   },
 );
+
+it("rechecks the exact draft if another load consumes the selection between reads", async () => {
+  const search = "?selection=optimizer_selection_a&session=a";
+  state.optimizer_selection_a = {
+    text: "Concurrent selection",
+    draftSessionId: "a",
+    draftCreatedAt: 100,
+    expiresAt: Date.now() + 300000,
+  };
+  const read = vi.mocked(browser.storage.local.get).getMockImplementation()!;
+  let release!: () => void;
+  vi.mocked(browser.storage.local.get).mockImplementationOnce(async () => {
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return {};
+  });
+  const first = loadSelectionSession(search);
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  const other = await loadSelectionSession(search);
+  expect(other.initialSelection?.text).toBe("Concurrent selection");
+  expect(state.optimizer_selection_a).toBeUndefined();
+  release();
+  expect((await first).initialDraft).toMatchObject({
+    original: "Concurrent selection",
+    draftSessionId: "a",
+  });
+  vi.mocked(browser.storage.local.get).mockImplementation(read);
+});
+
+it.each(["popup", "sidepanel"] as const)(
+  "keeps alternating edits isolated when an independent %s restores a still-open session",
+  async (viewMode) => {
+    vi.spyOn(Date, "now").mockReturnValue(1000);
+    const first = mount();
+    await act(async () =>
+      first.root.render(
+        <App
+          initialSelection={{ text: "Selection A", draftSessionId: "a", draftCreatedAt: 1000 }}
+        />,
+      ),
+    );
+    const second = mount();
+    await act(async () => second.root.render(<App viewMode={viewMode} />));
+    const type = async (host: HTMLElement, value: string) =>
+      act(async () => {
+        const field = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          field,
+          value,
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    await type(second.host, "Prompt B");
+    await act(async () =>
+      first.host.querySelector<HTMLInputElement>('input[value="claude"]')!.click(),
+    );
+    await type(second.host, "Latest prompt B");
+    await type(first.host, "Edited A");
+    const reopened = mount();
+    await act(async () => reopened.root.render(<App />));
+    expect(reopened.host.querySelector<HTMLTextAreaElement>(".original-textarea")!.value).toBe(
+      "Latest prompt B",
+    );
+    expect(state.optimizer_draft_a).toMatchObject({ original: "Edited A" });
+  },
+);

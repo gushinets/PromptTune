@@ -334,7 +334,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           ? Promise.resolve(initialDraft)
           : isSelectionLaunch
             ? Promise.resolve(null)
-            : getPopupSessionDraft(viewMode === "popup"),
+            : getPopupSessionDraft(viewMode === "popup", { independent: true }),
     ])
       .then(([mode, draft]) => {
         const restoredMode = draft?.audienceMode ?? mode;
@@ -516,7 +516,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
-    if (activeRequestRef.current || layoutTransitionRef.current) return;
+    if (!sessionDraftLoaded || activeRequestRef.current || layoutTransitionRef.current) return;
     rollbackCleanupRef.current?.();
     rollbackCleanupRef.current = undefined;
     const transitionStartedAt = Date.now();
@@ -593,7 +593,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLayoutTransition(false);
       }
     }
-  }, [viewMode, targetTabId, targetSessionId, sessionDraft, t]);
+  }, [viewMode, targetTabId, targetSessionId, sessionDraft, sessionDraftLoaded, t]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
@@ -1235,7 +1235,12 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         <button
           type="button"
           className="layout-toggle-btn"
-          disabled={loading || layoutTransition || (viewMode === "popup" && layoutTargetLoading)}
+          disabled={
+            !sessionDraftLoaded ||
+            loading ||
+            layoutTransition ||
+            (viewMode === "popup" && layoutTargetLoading)
+          }
           title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           onClick={handleLayoutToggle}

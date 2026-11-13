@@ -86,7 +86,10 @@ The old result remains available to copy or save; New starts an unbound session
 when reopening from the toolbar. Independent optimizer sessions keep separate
 three-hour drafts, including each session’s audience mode and goal. Legacy goals
 are validated against the restored mode before submission. Reopening restores the most recently created live session;
-editing an older window or panel does not replace that choice. Drafts share a
+editing an older window or panel does not replace that choice. Generic toolbar
+or panel restores create independent session copies, so another live editor
+cannot overwrite their edits. Explicit URL resumes and surface handoffs keep the
+original session identity. Drafts share a
 1 MiB / 10-session budget; each save preserves the session being written and
 evicts the least recently updated older drafts after a successful write. Under
 quota pressure, failed replacement writes restore records removed for the retry. Selection and panel
@@ -105,8 +108,10 @@ even if another optimizer has a newer saved draft. Switching back from the panel
 stores a one-shot snapshot for the next toolbar popup in the same browser window
 (valid for five minutes).
 Other panels and explicit selection launches do not consume that snapshot.
-The panel retries a failed initial handoff read once, then offers a Retry action
-without showing an unrelated draft. An ended source session has its own Insert
+The panel retries a failed initial handoff read once, then offers a Retry action.
+If that transfer expires or disappears, Retry stays in recovery instead of
+opening a different draft. Surface switching stays disabled until draft restore
+finishes. An ended source session has its own Insert
 message explaining that Copy and New remain available.
 
 The initial selection draft is committed before its temporary payload is removed.

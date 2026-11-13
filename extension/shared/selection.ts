@@ -118,7 +118,10 @@ export async function loadSelectionSession(search: string): Promise<{
     return { initialDraft: draft };
   }
   const selection = await readSelection(search);
-  if (!selection) return {};
+  if (!selection) {
+    const committed = await getPopupSessionDraftById(id).catch(() => null);
+    return committed ? { initialDraft: committed } : {};
+  }
   const initialSelection = {
     ...selection,
     draftSessionId: id,
