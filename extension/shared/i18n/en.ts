@@ -167,6 +167,18 @@ export const en = {
     `Text is too long (maximum ${formatCharacterCount(max)} characters). Shorten it or split it into parts.`,
   errorLibraryStorageMessage:
     "Could not save the prompt on this device. Free up extension storage and try again." as string,
+  errorSidePanelMessage:
+    "Could not open the side panel. The source tab may have closed or the browser may not support it. Your prompt is still available here.",
+  privateSelectionUnavailable:
+    "Improving selected text from private browsing is not supported. Your selection has not been saved or sent to the optimizer.",
+  errorSelectionUnavailable:
+    "Could not load the selected text. Close this window and select the text again, or enter a new prompt here.",
+  errorSourceSessionEnded:
+    "The original browser session has ended. Use Copy or start a new prompt to insert into the current page.",
+  errorPanelTransferPreserved:
+    "The new prompt could not be transferred. This panel still shows your previous session; the new prompt remains in its optimizer window.",
+  errorPanelReadMessage:
+    "Could not load the transferred prompt. Retry to recover it before the transfer expires.",
   errorEmptyResponse: "The backend returned an empty improved prompt.",
 } as const;
 

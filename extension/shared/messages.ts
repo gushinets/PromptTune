@@ -5,6 +5,13 @@ export const IMPROVE_OWNER_PORT = "prompttune-improve-owner";
 
 export type Message =
   | {
+      type: "CLOSE_PANEL_FOR_ROLLBACK";
+      windowId: number;
+      requestId?: string;
+      failedHandoffId?: string;
+    }
+  | import("./panel-handoff").OpenOptimizerPanel
+  | {
       type: "IMPROVE_REQUEST";
       payload: {
         text: string;

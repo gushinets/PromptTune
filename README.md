@@ -67,6 +67,98 @@ generation, Edit original, New, Copy/Insert/Save, and library search/deletion. C
 that `GET /v1/limits` returns the previous quota after cancellation. Resize the
 sidebar with a long result and expand the changes list to check scrolling.
 
+#### Improve selected text
+
+Select text on a web page, right-click, and choose **Prompt Optimizer**.
+The extension opens its optimizer in a separate window with exactly that selection
+as the original prompt. Choose a mode on first use, then click Improve; opening
+from the menu does not submit a request automatically. Previous results and the
+library screen do not override the selection. Insert targets the originating tab
+on supported AI sites; Copy is available for other pages. Switching to the side
+panel transfers the current prompt/result and retains that source tab even when
+another tab becomes active. In the separate optimizer window, New clears the
+prompt session but keeps its originating browser target for Insert and switching
+to the side panel. That standalone target is saved separately from the current
+prompt binding, so New followed by a window reload retains it too. A normal
+toolbar popup still uses the active tab after starting a new prompt. Saved source bindings carry a nonce in `storage.session`;
+after a browser restart or extension reload they cannot resolve a reused tab ID.
+The old result remains available to copy or save; New starts an unbound session
+when reopening from the toolbar. Independent optimizer sessions keep separate
+three-hour drafts, including each session’s audience mode and goal. Legacy goals
+are validated against the restored mode before submission. Reopening restores the most recently created live session;
+editing an older window or panel does not replace that choice. Generic toolbar
+or panel restores create independent in-memory session copies. These copies
+are saved only after an edit, so repeated viewing does not fill the draft budget
+or evict older work, and another live editor cannot overwrite the copy’s edits. Explicit URL resumes and surface handoffs keep the
+original session identity. Drafts share a
+1 MiB / 10-session budget; each save preserves the session being written and
+evicts the least recently updated older drafts after a successful write. Under
+quota pressure, failed replacement writes restore records removed for the retry. Selection and panel
+handoff writes enforce this budget too, including after an upgrade, leaving room
+for the 6 MiB library, 1 MiB pending-save reservation and temporary handoffs.
+Valid legacy drafts without timestamps receive a timestamp before cleanup.
+Expired drafts, including the legacy single-draft key, are removed by
+startup/periodic cleanup. If the source tab closes, switching shows an error and
+leaves the prompt available in the optimizer window. A failed handoff write
+can close a panel only when it was created by that transition and still holds
+that exact handoff or has not accepted any handoff yet. An already-open panel or
+a panel that accepted another transfer is preserved with a notice; the new prompt
+remains in the optimizer window. Ordinary toolbar popups
+also send an explicit handoff, so switching surfaces retains their current session
+even if another optimizer has a newer saved draft. Switching back from the panel
+stores a one-shot snapshot for the next toolbar popup in the same browser window
+(valid for five minutes).
+Other panels and explicit selection launches do not consume that snapshot.
+The panel retries a failed initial handoff read once, then offers a Retry action.
+Transfer intent is recorded in browser-session storage before opening the panel.
+Abandoned intents expire after the five-minute handoff lifetime plus a one-minute
+publication margin; Retry can then continue with a fresh editor.
+Rollback requests expire after 30 seconds and are cancelled by a newer opening
+attempt in the same window. The background validates the request and submits
+native close together, so a delayed response cannot close the next panel.
+Browsers without native panel close (including Chrome 116–140) keep the panel
+open with a failure notice. They remain supported; rollback never uses an unsafe
+late `window.close()` fallback. A confirmed failed transfer retires only its own
+recovery intent; if nothing else is pending and no session was accepted, the
+preserved panel immediately shows a fresh editor with the failure notice.
+The background worker opens the panel and completes the handoff even if Chrome
+destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
+instead of opening a different draft. After ordinary startup read failures, a
+successful Retry without a transfer opens a fresh empty editor. Surface switching stays disabled until draft restore
+finishes. An ended source session has its own Insert
+message explaining that Copy and New remain available.
+
+The initial selection draft is committed before its temporary payload is removed.
+If that write fails, the payload remains recoverable until its five-minute expiry.
+A standalone optimizer URL retains its draft identity. Reloading restores only
+that live session, including edits and results; it never selects another window’s
+newer draft. Temporary popup/panel transfers carry the browser-session nonce in
+addition to the window ID, so restarting the browser cannot replay them into a
+window with a reused ID.
+
+If neither the addressed draft nor its selection payload can be recovered, the window
+shows an empty input and a recovery message instead of restoring another draft.
+The empty failed launch is not autosaved; entering a new prompt starts normal
+draft saving under the same URL session ID, so reloading recovers that replacement.
+While switching between popup and panel, draft-editing controls are locked until
+the transfer succeeds or fails. Cleanup reads only optimizer records when key enumeration is
+available, retaining a compatible fallback for older browsers.
+
+Private/incognito selections are explicitly unsupported: selecting the menu item
+opens an informational notice without storing or passing the selected text to the
+optimizer. The app's draft storage is shared, so private text must not enter that flow.
+Temporary selection and side-panel handoffs expire after five minutes. Expired or legacy entries
+are deleted on installation/update, browser startup, and a one-minute cleanup alarm;
+consumption still removes its own entry immediately. Browser suspension can delay
+the cleanup callback, and expired payloads are rejected even before cleanup runs.
+
+After installing an updated build, reload the extension to register the new menu
+and its `contextMenus` and `alarms` permissions. To check manually in Chrome/Edge and Firefox,
+select part of a paragraph on an ordinary page and in an editable field, including
+multiline text and emoji. Verify the original field, Improve, and Copy. On a
+supported AI site, also check Insert. Repeat with a saved result/library open and
+with two selections opened in quick succession.
+
 #### Run extension tests
 
 ```bash

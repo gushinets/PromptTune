@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
+import { resolveBrowserTarget, SourceSessionEndedError } from "@shared/browser-target";
 import { trackEvent } from "@shared/analytics";
 import type { AnalyticsSource } from "@shared/analytics-types";
 
 interface ActionBarProps {
   improved: string;
+  targetTabId?: number;
+  targetSessionId?: string;
   disabled: boolean;
   saveDisabled?: boolean;
   onSave: () => Promise<boolean>;
@@ -82,8 +85,11 @@ function InsertIcon({ className }: { className?: string }) {
   );
 }
 
+/** Keep Insert bound to a selected prompt's source tab; ordinary sessions use the active tab. */
 export function ActionBar({
   improved,
+  targetTabId,
+  targetSessionId,
   disabled,
   saveDisabled = false,
   onSave,
@@ -151,7 +157,7 @@ export function ActionBar({
   const handleInsert = async () => {
     setActionError(null);
     try {
-      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      const tab = await resolveBrowserTarget(targetTabId, targetSessionId);
       if (typeof tab?.id !== "number") throw new Error("No active tab");
       const response = await browser.tabs.sendMessage(tab.id, {
         type: "PASTE_TEXT",
@@ -173,8 +179,12 @@ export function ActionBar({
       }
       setInserted(true);
       later(() => setInserted(false));
-    } catch {
-      setActionError(t.errorNoEditableField);
+    } catch (error) {
+      setActionError(
+        error instanceof SourceSessionEndedError
+          ? t.errorSourceSessionEnded
+          : t.errorNoEditableField,
+      );
     }
   };
 

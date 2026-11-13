@@ -73,6 +73,7 @@ export function PromptForm({
           id={inputId}
           className="prompt-textarea original-textarea"
           value={original}
+          readOnly={loading}
           onChange={(event) => onOriginalChange(event.target.value)}
           placeholder={t.placeholderOriginal}
           aria-invalid={overLimit}

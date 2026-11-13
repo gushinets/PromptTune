@@ -45,6 +45,12 @@ vi.mock("webextension-polyfill", async () => {
   return {
     default: {
       storage: {
+        session: {
+          get: vi.fn().mockResolvedValue({ optimizer_browser_session: "test-session" }),
+          set: vi.fn().mockResolvedValue(undefined),
+          remove: vi.fn().mockResolvedValue(undefined),
+        },
+        onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
         local: {
           get: vi.fn().mockResolvedValue({}),
           set: vi.fn().mockResolvedValue(undefined),
@@ -52,6 +58,7 @@ vi.mock("webextension-polyfill", async () => {
         },
       },
       runtime: {
+        onStartup: { addListener: vi.fn() },
         onConnect: { addListener: vi.fn() },
         connect: vi.fn(() => {
           const { client, server } = createPortPair();
@@ -66,14 +73,27 @@ vi.mock("webextension-polyfill", async () => {
         sendMessage: vi.fn().mockResolvedValue(undefined),
         getManifest: vi.fn().mockReturnValue({ version: "0.1.0" }),
         getURL: vi.fn((path: string) => path),
-        onMessage: { addListener: vi.fn() },
+        onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
       },
       tabs: {
         create: vi.fn().mockResolvedValue({ id: 1 }),
+        get: vi.fn().mockResolvedValue({ id: 42, url: "https://example.com" }),
         query: vi.fn().mockResolvedValue([]),
         sendMessage: vi.fn().mockResolvedValue(undefined),
+        onAttached: { addListener: vi.fn(), removeListener: vi.fn() },
+        onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
         onActivated: { addListener: vi.fn(), removeListener: vi.fn() },
         onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
+      },
+      alarms: {
+        get: vi.fn().mockResolvedValue(undefined),
+        create: vi.fn().mockResolvedValue(undefined),
+        onAlarm: { addListener: vi.fn() },
+      },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+      windows: {
+        create: vi.fn().mockResolvedValue({ id: 2 }),
+        getCurrent: vi.fn().mockResolvedValue({ id: 7 }),
       },
       commands: {
         onCommand: { addListener: vi.fn() },
