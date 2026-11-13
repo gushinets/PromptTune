@@ -35,8 +35,8 @@ function emptyDraft(): PopupSessionDraft {
 export function SidepanelApp() {
   const t = useT();
   const mountedAt = useRef(Date.now());
-  const recoveryRequired = useRef(false);
-  const hadReadFailure = useRef(false);
+  const recoveryDeadline = useRef(0);
+  const hadStartupFailure = useRef(false);
   const knownIntents = useRef<string[]>([]);
   const [freshDraft, setFreshDraft] = useState<PopupSessionDraft>();
   const acceptedHandoffId = useRef<string | undefined>(undefined);
@@ -58,15 +58,21 @@ export function SidepanelApp() {
         if (window.id === undefined) throw new Error("Panel window unavailable");
         const browserSessionId = await ensureBrowserSessionId();
         if (!active) return;
-        knownIntents.current = await expectedPanelHandoffs(window.id);
-        if (knownIntents.current.length) recoveryRequired.current = true;
+        const intents = await expectedPanelHandoffs(window.id);
+        knownIntents.current = intents.map(({ key }) => key);
+        // An observed transfer must never fall back to another session, even if
+        // its deadline passes during the initial storage read.
+        if (intents.length) hadStartupFailure.current = true;
+        // Retain the deadline even if another surface removes the marker before Retry.
+        for (const intent of intents)
+          recoveryDeadline.current = Math.max(recoveryDeadline.current, intent.expiresAt);
         if (!active) return;
         const prefix = panelHandoffPrefix(window.id);
         let revision = 0;
         const accept = (key: string, value: unknown) => {
           if (!active || !isPanelHandoff(value, browserSessionId)) return;
           received = true;
-          recoveryRequired.current = false;
+          recoveryDeadline.current = 0;
           acceptedHandoffId.current = value.id;
           void clearPanelHandoffIntents([
             ...knownIntents.current,
@@ -168,15 +174,17 @@ export function SidepanelApp() {
         const obsolete = pending.map(([key]) => key).filter((key) => key !== acceptedKey);
         if (obsolete.length) await browser.storage.local.remove(obsolete).catch(() => undefined);
         if (active) {
-          if (recoveryRequired.current && !received) setFailed(true);
-          else {
-            if (hadReadFailure.current && !received) setFreshDraft(emptyDraft());
+          if (recoveryDeadline.current > Date.now() && !received) {
+            hadStartupFailure.current = true;
+            setFailed(true);
+          } else {
+            if (hadStartupFailure.current && !received) setFreshDraft(emptyDraft());
             setReady(true);
           }
         }
       } catch {
         if (active && !received) {
-          hadReadFailure.current = true;
+          hadStartupFailure.current = true;
           setFailed(true);
         }
       }

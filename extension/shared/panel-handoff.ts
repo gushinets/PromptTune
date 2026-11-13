@@ -14,17 +14,39 @@ export function panelHandoffKey(windowId: number, transferId: string): string {
 }
 
 const PANEL_INTENT_PREFIX = "optimizer_panel_intent_";
+// Allow a little extra time for a handoff still being published.
+const PANEL_INTENT_LIFETIME_MS = LIMITS.HANDOFF_TTL_MS + 60_000;
 export function panelHandoffIntentPrefix(windowId: number): string {
   return `${PANEL_INTENT_PREFIX}${windowId}_`;
 }
 
 /** Queue intent before open() without awaiting away its user gesture. */
 export function expectPanelHandoff(windowId: number, id: string): Promise<void> {
-  return browser.storage.session.set({ [panelHandoffIntentKey(windowId, id)]: true });
+  return browser.storage.session.set({
+    [panelHandoffIntentKey(windowId, id)]: { createdAt: Date.now() },
+  });
 }
-export async function expectedPanelHandoffs(windowId: number): Promise<string[]> {
+export async function expectedPanelHandoffs(
+  windowId: number,
+): Promise<Array<{ key: string; expiresAt: number }>> {
   const data = await browser.storage.session.get(null);
-  return Object.keys(data).filter((key) => key.startsWith(panelHandoffIntentPrefix(windowId)));
+  const now = Date.now();
+  const pending: Array<{ key: string; expiresAt: number }> = [];
+  const obsolete: string[] = [];
+  for (const [key, value] of Object.entries(data)) {
+    if (!key.startsWith(panelHandoffIntentPrefix(windowId))) continue;
+    const createdAt = (value as { createdAt?: unknown } | null)?.createdAt;
+    if (
+      typeof createdAt === "number" &&
+      Number.isFinite(createdAt) &&
+      createdAt <= now &&
+      createdAt + PANEL_INTENT_LIFETIME_MS > now
+    )
+      pending.push({ key, expiresAt: createdAt + PANEL_INTENT_LIFETIME_MS });
+    else obsolete.push(key);
+  }
+  await clearPanelHandoffIntents(obsolete);
+  return pending;
 }
 export async function clearPanelHandoffIntents(keys: string[]): Promise<void> {
   if (keys.length) await browser.storage.session.remove(keys).catch(() => undefined);

@@ -2,6 +2,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
+import { LIMITS } from "../shared/constants";
+import { expectPanelHandoff, expectedPanelHandoffs } from "../shared/panel-handoff";
 import { SidepanelApp } from "../entrypoints/sidepanel/SidepanelApp";
 
 let host: HTMLDivElement;
@@ -445,7 +447,7 @@ it.each(["expired", "removed"])(
   async (state) => {
     vi.mocked(browser.storage.session.get).mockResolvedValue({
       optimizer_browser_session: "test-session",
-      optimizer_panel_intent_7_expected: true,
+      optimizer_panel_intent_7_expected: { createdAt: Date.now() },
     });
     vi.mocked(browser.storage.local.get)
       .mockRejectedValueOnce(new Error("Read failed"))
@@ -519,4 +521,105 @@ it("keeps an existing editor when transfer intent is queued but the transfer nev
   });
   expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
   expect(host.textContent).not.toContain("Must not replace prior editor");
+});
+
+it("timestamps transfer intent before opening the panel", async () => {
+  const now = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(now);
+  await expectPanelHandoff(7, "new-transfer");
+  expect(browser.storage.session.set).toHaveBeenCalledWith({
+    "optimizer_panel_intent_7_new-transfer": { createdAt: now },
+  });
+});
+
+it("prunes abandoned intents after the handoff lifetime and grace while retaining live transfers", async () => {
+  const now = Date.now();
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+    optimizer_panel_intent_7_expired: { createdAt: now - LIMITS.HANDOFF_TTL_MS - 61000 },
+    optimizer_panel_intent_7_publishing: { createdAt: now - LIMITS.HANDOFF_TTL_MS - 30000 },
+    optimizer_panel_intent_7_fresh: { createdAt: now },
+    optimizer_panel_intent_7_legacy: true,
+    optimizer_panel_intent_7_invalid: { createdAt: "invalid" },
+    optimizer_panel_intent_8_expired: { createdAt: 0 },
+  });
+  const pending = await expectedPanelHandoffs(7);
+  expect(pending).toEqual([
+    { key: "optimizer_panel_intent_7_publishing", expiresAt: now + 30000 },
+    { key: "optimizer_panel_intent_7_fresh", expiresAt: now + LIMITS.HANDOFF_TTL_MS + 60000 },
+  ]);
+  expect(browser.storage.session.remove).toHaveBeenCalledWith([
+    "optimizer_panel_intent_7_expired",
+    "optimizer_panel_intent_7_legacy",
+    "optimizer_panel_intent_7_invalid",
+  ]);
+});
+
+it.each(["missing", "read-failed"])(
+  "lets Retry leave %s transfer recovery after its intent lifetime without restoring another draft",
+  async (failure) => {
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    vi.mocked(browser.storage.session.get).mockResolvedValue({
+      optimizer_browser_session: "test-session",
+      optimizer_panel_intent_7_abandoned: { createdAt: now },
+    });
+    if (failure === "read-failed")
+      vi.mocked(browser.storage.local.get)
+        .mockRejectedValueOnce(new Error("read failed"))
+        .mockRejectedValueOnce(new Error("retry read failed"));
+    await act(async () => root.render(<SidepanelApp />));
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      audience_mode: "ai",
+      library: [],
+      optimizer_draft_other: {
+        ...selected.draft,
+        original: "Other session B",
+        draftSessionId: "b",
+        draftCreatedAt: now,
+        updatedAt: now,
+      },
+    });
+    clock.mockReturnValue(now + LIMITS.HANDOFF_TTL_MS + 30000);
+    await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    vi.mocked(browser.storage.session.get).mockResolvedValue({
+      optimizer_browser_session: "test-session",
+    });
+    await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+    clock.mockReturnValue(now + LIMITS.HANDOFF_TTL_MS + 61000);
+    await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+    expect(host.querySelector(".popup-container")).not.toBeNull();
+    expect(host.querySelector<HTMLTextAreaElement>(".original-textarea")!.value).toBe("");
+    expect(host.textContent).not.toContain("Other session B");
+  },
+);
+
+it("starts fresh if an observed intent expires during the initial storage read", async () => {
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+    optimizer_panel_intent_7_slow: { createdAt: now },
+  });
+  vi.mocked(browser.storage.local.get).mockImplementation(async () => {
+    clock.mockReturnValue(now + LIMITS.HANDOFF_TTL_MS + 61000);
+    return {
+      audience_mode: "ai",
+      library: [],
+      optimizer_draft_other: {
+        ...selected.draft,
+        original: "Other session B",
+        draftSessionId: "b",
+        draftCreatedAt: now,
+        updatedAt: now,
+      },
+    };
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  expect(host.querySelector(".popup-container")).not.toBeNull();
+  expect(host.querySelector<HTMLTextAreaElement>(".original-textarea")?.value).toBe("");
+  expect(host.textContent).not.toContain("Other session B");
 });
