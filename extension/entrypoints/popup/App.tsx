@@ -1159,8 +1159,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                           improved={improved}
                           targetTabId={targetTabId}
                           targetSessionId={targetSessionId}
-                          disabled={!improved}
-                          saveDisabled={isOriginalOverLimit}
+                          disabled={!improved || layoutTransition}
+                          saveDisabled={isOriginalOverLimit || layoutTransition}
                           onSave={handleSave}
                           requestId={lastRequestId}
                           source={viewMode}
@@ -1168,7 +1168,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                           latencyMs={lastLatencyMs}
                         />
                         {FEATURES.OPEN_AND_PASTE && (
-                          <SiteIcons improved={improved} disabled={!improved} />
+                          <SiteIcons improved={improved} disabled={!improved || layoutTransition} />
                         )}
                       </>
                     }

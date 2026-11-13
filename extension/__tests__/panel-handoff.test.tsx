@@ -921,3 +921,49 @@ it("submits native rollback close before B opens even if the close response arri
     cleanup();
   }
 });
+
+it("keeps a usable failure notice when Chrome supports open but has no native panel close", async () => {
+  const { openOptimizerPanel, closePanelForRollback, requestPanelRollback } =
+    await import("../shared/panel-handoff");
+  const closeWindow = vi.spyOn(window, "close").mockImplementation(() => {});
+  const open = vi.fn().mockResolvedValue(undefined);
+  Object.assign(browser, { sidePanel: { open } });
+  vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 7 } as never);
+  vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error("Handoff write failed"));
+  await expect(
+    openOptimizerPanel({
+      type: "OPEN_OPTIMIZER_PANEL",
+      windowId: 7,
+      tabId: 42,
+      draft: selected.draft as never,
+    }),
+  ).rejects.toThrow("Handoff write failed");
+  expect(open).toHaveBeenCalledWith({ windowId: 7 });
+  const failed = vi
+    .mocked(browser.runtime.sendMessage)
+    .mock.calls.find(
+      ([message]) => (message as { type?: string }).type === "PANEL_HANDOFF_FAILED",
+    )![0];
+  await act(async () => root.render(<SidepanelApp />));
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    const msg = message as {
+      type?: string;
+      windowId: number;
+      requestId?: string;
+      failedHandoffId?: string;
+    };
+    if (msg.type === "CLOSE_PANEL_FOR_ROLLBACK")
+      return closePanelForRollback(msg.windowId, msg.requestId, msg.failedHandoffId);
+    return { ok: true };
+  });
+  const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  await act(async () => {
+    await listener(failed, {} as never, vi.fn());
+  });
+  expect(closeWindow).not.toHaveBeenCalled();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("previous session");
+  expect(host.querySelector(".popup-container")).not.toBeNull();
+  // Retire the unacknowledged test request using the same per-window replacement path.
+  const cleanup = requestPanelRollback(7, Date.now(), "test-cleanup");
+  cleanup();
+});

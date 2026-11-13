@@ -116,7 +116,9 @@ publication margin; Retry can then continue with a fresh editor.
 Rollback requests expire after 30 seconds and are cancelled by a newer opening
 attempt in the same window. The background validates the request and submits
 native close together, so a delayed response cannot close the next panel.
-Browsers without native panel close keep the panel open with a failure notice.
+Browsers without native panel close (including Chrome 116–140) keep the panel
+open with a failure notice. They remain supported; rollback never uses an unsafe
+late `window.close()` fallback.
 The background worker opens the panel and completes the handoff even if Chrome
 destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
 instead of opening a different draft. After ordinary startup read failures, a

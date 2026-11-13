@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { ApiError, apiClient } from "@shared/api-client";
-import { LIMITS } from "@shared/constants";
+import { FEATURES, LIMITS } from "@shared/constants";
 import { App } from "../entrypoints/popup/App";
 
 function flushEffects() {
@@ -623,9 +623,17 @@ describe("App", () => {
   );
 
   it.each(["popup", "sidepanel"] as const)(
-    "locks New and Edit original during a deferred %s result transfer",
+    "locks result editing and actions during a deferred %s result transfer",
     async (viewMode) => {
       const close = vi.spyOn(window, "close").mockImplementation(() => {});
+      const previousOpenAndPaste = FEATURES.OPEN_AND_PASTE;
+      Object.assign(FEATURES, { OPEN_AND_PASTE: true });
+      const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+      const savePrompt = vi
+        .spyOn(apiClient, "savePrompt")
+        .mockResolvedValue({ prompt_id: "saved" });
       let finish!: () => void;
       Object.assign(browser, {
         sidePanel: {
@@ -668,6 +676,24 @@ describe("App", () => {
         const startNew = container.querySelector<HTMLButtonElement>(".btn-new")!;
         expect(edit.disabled).toBe(true);
         expect(startNew.disabled).toBe(true);
+        const actions = [
+          ...container.querySelectorAll<HTMLButtonElement>(".action-bar button, .site-icon-btn"),
+        ];
+        expect(actions).toHaveLength(8);
+        expect(actions.every((button) => button.disabled)).toBe(true);
+        await act(async () => {
+          actions.forEach((button) => button.click());
+        });
+        expect(writeText).not.toHaveBeenCalled();
+        expect(savePrompt).not.toHaveBeenCalled();
+        expect(browser.tabs.sendMessage).not.toHaveBeenCalled();
+        expect(
+          vi
+            .mocked(browser.runtime.sendMessage)
+            .mock.calls.some(
+              ([message]) => (message as { type?: string }).type === "OPEN_AND_PASTE",
+            ),
+        ).toBe(false);
         await act(async () => {
           edit.click();
           startNew.click();
@@ -675,6 +701,9 @@ describe("App", () => {
         expect(container.querySelector(".result-screen")?.textContent).toContain("Result A");
       } finally {
         await act(async () => finish());
+        Object.assign(FEATURES, { OPEN_AND_PASTE: previousOpenAndPaste });
+        if (clipboardDescriptor) Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+        else Reflect.deleteProperty(navigator, "clipboard");
       }
       expect(close).toHaveBeenCalledOnce();
       const handoff = vi
