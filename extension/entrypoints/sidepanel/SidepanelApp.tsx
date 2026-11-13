@@ -37,7 +37,8 @@ export function SidepanelApp() {
   const mountedAt = useRef(Date.now());
   const recoveryDeadline = useRef(0);
   const hadStartupFailure = useRef(false);
-  const knownIntents = useRef<string[]>([]);
+  const knownIntents = useRef(new Map<string, number>());
+  const retiredHandoffs = useRef(new Set<string>());
   const [freshDraft, setFreshDraft] = useState<PopupSessionDraft>();
   const acceptedHandoffId = useRef<string | undefined>(undefined);
   const [transferWarning, setTransferWarning] = useState(false);
@@ -49,6 +50,7 @@ export function SidepanelApp() {
     setReady(false);
     setFailed(false);
     let received = false;
+    let preservedFreshEditor = false;
     let active = true;
     let unsubscribe = () => {};
     void (async () => {
@@ -59,26 +61,37 @@ export function SidepanelApp() {
         const browserSessionId = await ensureBrowserSessionId();
         if (!active) return;
         const intents = await expectedPanelHandoffs(window.id);
-        knownIntents.current = intents.map(({ key }) => key);
+        for (const [key, deadline] of knownIntents.current)
+          if (deadline <= Date.now()) knownIntents.current.delete(key);
+        for (const intent of intents) {
+          const retired = [...retiredHandoffs.current].some(
+            (id) => panelHandoffIntentKey(window.id!, id) === intent.key,
+          );
+          if (!retired) knownIntents.current.set(intent.key, intent.expiresAt);
+        }
         // An observed transfer must never fall back to another session, even if
         // its deadline passes during the initial storage read.
         if (intents.length) hadStartupFailure.current = true;
         // Retain the deadline even if another surface removes the marker before Retry.
-        for (const intent of intents)
-          recoveryDeadline.current = Math.max(recoveryDeadline.current, intent.expiresAt);
+        recoveryDeadline.current = Math.max(0, ...knownIntents.current.values());
         if (!active) return;
         const prefix = panelHandoffPrefix(window.id);
         let revision = 0;
         const accept = (key: string, value: unknown) => {
-          if (!active || !isPanelHandoff(value, browserSessionId)) return;
+          if (
+            !active ||
+            !isPanelHandoff(value, browserSessionId) ||
+            retiredHandoffs.current.has(value.id)
+          )
+            return;
           received = true;
           recoveryDeadline.current = 0;
           acceptedHandoffId.current = value.id;
           void clearPanelHandoffIntents([
-            ...knownIntents.current,
+            ...knownIntents.current.keys(),
             panelHandoffIntentKey(window.id!, value.id),
           ]);
-          knownIntents.current = [];
+          knownIntents.current.clear();
           setFreshDraft(undefined);
           setTransferWarning(false);
           setSession(value);
@@ -94,6 +107,7 @@ export function SidepanelApp() {
           for (const [key, change] of Object.entries(changes)) {
             if (!key.startsWith(prefix) || !isPanelHandoff(change.newValue, browserSessionId))
               continue;
+            if (retiredHandoffs.current.has(change.newValue.id)) continue;
             revision++;
             accept(key, change.newValue);
           }
@@ -135,7 +149,25 @@ export function SidepanelApp() {
                   .catch(() => undefined);
                 const result = response as { closed?: boolean; current?: boolean } | undefined;
                 if (result?.closed) return { closed: true };
-                if (result?.current === false) return { preserved: true };
+                if (!active || result?.current === false) return { preserved: true };
+                if (result?.current === true) {
+                  const key = panelHandoffIntentKey(window.id!, msg.failedHandoffId);
+                  retiredHandoffs.current.add(msg.failedHandoffId);
+                  if (knownIntents.current.delete(key)) {
+                    void clearPanelHandoffIntents([key]);
+                    recoveryDeadline.current = Math.max(0, ...knownIntents.current.values());
+                    if (
+                      acceptedHandoffId.current === undefined &&
+                      recoveryDeadline.current <= Date.now()
+                    ) {
+                      // Startup may still be reading; do not let its late result reset this editor.
+                      preservedFreshEditor = true;
+                      setFreshDraft(emptyDraft());
+                      setFailed(false);
+                      setReady(true);
+                    }
+                  }
+                }
               }
               setTransferWarning(true);
               return { preserved: true };
@@ -161,8 +193,10 @@ export function SidepanelApp() {
         let acceptedKey: string | undefined;
         if (revision === initialRevision) {
           const newest = pending
-            .filter((entry): entry is [string, PanelHandoff] =>
-              isPanelHandoff(entry[1], browserSessionId),
+            .filter(
+              (entry): entry is [string, PanelHandoff] =>
+                isPanelHandoff(entry[1], browserSessionId) &&
+                !retiredHandoffs.current.has(entry[1].id),
             )
             .sort((a, b) => b[1].expiresAt - a[1].expiresAt)[0];
           if (newest) {
@@ -178,12 +212,13 @@ export function SidepanelApp() {
             hadStartupFailure.current = true;
             setFailed(true);
           } else {
-            if (hadStartupFailure.current && !received) setFreshDraft(emptyDraft());
+            if (hadStartupFailure.current && !received && !preservedFreshEditor)
+              setFreshDraft(emptyDraft());
             setReady(true);
           }
         }
       } catch {
-        if (active && !received) {
+        if (active && !received && !preservedFreshEditor) {
           hadStartupFailure.current = true;
           setFailed(true);
         }

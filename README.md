@@ -118,7 +118,9 @@ attempt in the same window. The background validates the request and submits
 native close together, so a delayed response cannot close the next panel.
 Browsers without native panel close (including Chrome 116–140) keep the panel
 open with a failure notice. They remain supported; rollback never uses an unsafe
-late `window.close()` fallback.
+late `window.close()` fallback. A confirmed failed transfer retires only its own
+recovery intent; if nothing else is pending and no session was accepted, the
+preserved panel immediately shows a fresh editor with the failure notice.
 The background worker opens the panel and completes the handoff even if Chrome
 destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
 instead of opening a different draft. After ordinary startup read failures, a

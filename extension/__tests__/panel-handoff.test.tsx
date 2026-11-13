@@ -967,3 +967,136 @@ it("keeps a usable failure notice when Chrome supports open but has no native pa
   const cleanup = requestPanelRollback(7, Date.now(), "test-cleanup");
   cleanup();
 });
+
+it.each(["during-read", "read-failure", "after-read"])(
+  "opens a fresh preserved editor when an observed transfer fails %s without native close",
+  async (timing) => {
+    const { requestPanelRollback, closePanelForRollback } = await import("../shared/panel-handoff");
+    Object.assign(browser, { sidePanel: { open: vi.fn().mockResolvedValue(undefined) } });
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    const now = Date.now();
+    vi.mocked(browser.storage.session.get).mockResolvedValue({
+      optimizer_browser_session: "test-session",
+      optimizer_panel_intent_7_failedA: { createdAt: now },
+    });
+    const unrelated = {
+      audience_mode: "ai",
+      library: [],
+      optimizer_draft_other: {
+        ...selected.draft,
+        original: "Unrelated B",
+        draftSessionId: "b",
+        draftCreatedAt: now,
+        updatedAt: now,
+      },
+    };
+    vi.mocked(browser.storage.local.get).mockResolvedValue(unrelated);
+    let finishRead: ((value: Record<string, unknown>) => void) | undefined;
+    let failRead: ((error: Error) => void) | undefined;
+    if (timing !== "after-read")
+      vi.mocked(browser.storage.local.get).mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          finishRead = resolve;
+          failRead = reject;
+        }),
+      );
+    await act(async () => root.render(<SidepanelApp />));
+    const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+    const cleanup = requestPanelRollback(7, 0, "failedA");
+    const failed = vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.findLast(
+        ([message]) => (message as { type?: string }).type === "PANEL_HANDOFF_FAILED",
+      )![0];
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      const msg = message as {
+        type?: string;
+        windowId: number;
+        requestId?: string;
+        failedHandoffId?: string;
+      };
+      if (msg.type === "CLOSE_PANEL_FOR_ROLLBACK")
+        return closePanelForRollback(msg.windowId, msg.requestId, msg.failedHandoffId);
+      return { ok: true };
+    });
+    try {
+      await act(async () => {
+        await listener(failed, {} as never, vi.fn());
+      });
+      expect(close).not.toHaveBeenCalled();
+      expect(host.querySelector(".popup-container")).not.toBeNull();
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain("previous session");
+      const field = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+      expect(field.value).toBe("");
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          field,
+          "Recovery prompt",
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      if (timing === "read-failure") {
+        vi.mocked(browser.storage.local.get).mockRejectedValueOnce(new Error("Retry read failed"));
+        await act(async () => failRead!(new Error("Read failed")));
+      } else if (finishRead) await act(async () => finishRead!(unrelated));
+      expect(host.querySelector<HTMLTextAreaElement>(".original-textarea")!.value).toBe(
+        "Recovery prompt",
+      );
+      expect(host.querySelector('[role="alert"]')?.textContent).toContain("previous session");
+      expect(host.textContent).not.toContain("Unrelated B");
+    } finally {
+      cleanup();
+      if (finishRead) await act(async () => finishRead!(unrelated));
+    }
+  },
+);
+
+it("retires only failed A across Retry and continues waiting for B", async () => {
+  const { requestPanelRollback, closePanelForRollback } = await import("../shared/panel-handoff");
+  Object.assign(browser, { sidePanel: { open: vi.fn().mockResolvedValue(undefined) } });
+  const now = Date.now();
+  vi.mocked(browser.storage.session.get).mockResolvedValue({
+    optimizer_browser_session: "test-session",
+    optimizer_panel_intent_7_failedA: { createdAt: now },
+    optimizer_panel_intent_7_liveB: { createdAt: now },
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  const listener = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  const cleanup = requestPanelRollback(7, 0, "failedA");
+  const failed = vi
+    .mocked(browser.runtime.sendMessage)
+    .mock.calls.findLast(
+      ([message]) => (message as { type?: string }).type === "PANEL_HANDOFF_FAILED",
+    )![0];
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    const msg = message as {
+      type?: string;
+      windowId: number;
+      requestId?: string;
+      failedHandoffId?: string;
+    };
+    if (msg.type === "CLOSE_PANEL_FOR_ROLLBACK")
+      return closePanelForRollback(msg.windowId, msg.requestId, msg.failedHandoffId);
+    return { ok: true };
+  });
+  vi.mocked(browser.storage.session.remove).mockRejectedValueOnce(
+    new Error("Intent cleanup failed"),
+  );
+  try {
+    await act(async () => {
+      await listener(failed, {} as never, vi.fn());
+    });
+    expect(host.querySelector(".popup-container")).toBeNull();
+    await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+    await change("optimizer_panel_handoff_7_failedA", { ...selected, id: "failedA" });
+    expect(host.querySelector(".popup-container")).toBeNull();
+    await change("optimizer_panel_handoff_7_liveB", {
+      ...selected,
+      id: "liveB",
+      draft: { ...selected.draft, improved: "B result" },
+    });
+    expect(host.querySelector(".result-screen")?.textContent).toContain("B result");
+  } finally {
+    cleanup();
+  }
+});
