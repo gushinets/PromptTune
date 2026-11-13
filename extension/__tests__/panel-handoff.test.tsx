@@ -37,6 +37,8 @@ async function change(key: string, value: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.remove).mockResolvedValue(undefined);
+  vi.mocked(browser.storage.session.set).mockResolvedValue(undefined);
   vi.mocked(browser.storage.session.get).mockResolvedValue({
     optimizer_browser_session: "test-session",
   });
@@ -441,6 +443,10 @@ it("loads a panel handoff without a full-store scan or unrelated payloads in its
 it.each(["expired", "removed"])(
   "does not mount an unrelated draft after failed reads and a %s transfer on Retry",
   async (state) => {
+    vi.mocked(browser.storage.session.get).mockResolvedValue({
+      optimizer_browser_session: "test-session",
+      optimizer_panel_intent_7_expected: true,
+    });
     vi.mocked(browser.storage.local.get)
       .mockRejectedValueOnce(new Error("Read failed"))
       .mockRejectedValueOnce(new Error("Retry read failed"));
@@ -469,3 +475,48 @@ it.each(["expired", "removed"])(
     expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
   },
 );
+
+it("can retry an ordinary panel into a fresh editor without substituting another draft", async () => {
+  vi.mocked(browser.storage.local.get)
+    .mockRejectedValueOnce(new Error("read failed"))
+    .mockRejectedValueOnce(new Error("retry failed"));
+  await act(async () => root.render(<SidepanelApp />));
+  expect(host.querySelector('[role="alert"]')).not.toBeNull();
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    optimizer_draft_other: {
+      ...selected.draft,
+      original: "Other session B",
+      improved: "Other result B",
+      draftSessionId: "b",
+      draftCreatedAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+  });
+  await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+  expect(host.querySelector(".popup-container")).not.toBeNull();
+  expect(host.querySelector<HTMLTextAreaElement>(".original-textarea")!.value).toBe("");
+  expect(host.textContent).not.toContain("Other session B");
+});
+
+it("keeps an existing editor when transfer intent is queued but the transfer never commits", async () => {
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    optimizer_panel_handoff_7_initial: selected,
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  const incoming = {
+    ...selected,
+    id: "failed-open",
+    draft: { ...selected.draft, improved: "Must not replace prior editor" },
+  };
+  await act(async () => {
+    const listener = vi.mocked(browser.storage.onChanged.addListener).mock.calls.at(-1)![0];
+    listener({ optimizer_panel_intent_7_failed: { newValue: incoming } }, "session");
+    listener({ optimizer_panel_intent_7_failed: { newValue: undefined } }, "session");
+  });
+  expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+  expect(host.textContent).not.toContain("Must not replace prior editor");
+});

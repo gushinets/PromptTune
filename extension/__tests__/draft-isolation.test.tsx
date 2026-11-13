@@ -1,3 +1,4 @@
+import { openOptimizerPanel, type OpenOptimizerPanel } from "../shared/panel-handoff";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
@@ -11,6 +12,8 @@ const roots = new Set<Root>();
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.remove).mockResolvedValue(undefined);
+  vi.mocked(browser.storage.session.set).mockResolvedValue(undefined);
   vi.mocked(browser.storage.session.get).mockResolvedValue({
     optimizer_browser_session: "test-session",
   });
@@ -24,7 +27,11 @@ beforeEach(() => {
     for (const key of [keys].flat()) delete state[key];
   });
   vi.mocked(browser.tabs.query).mockResolvedValue([]);
-  vi.mocked(browser.runtime.sendMessage).mockResolvedValue({ ok: true });
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+    (msg as { type?: string }).type === "OPEN_OPTIMIZER_PANEL"
+      ? openOptimizerPanel(msg as OpenOptimizerPanel)
+      : { ok: true },
+  );
 });
 afterEach(async () => {
   await act(async () => {
@@ -689,3 +696,82 @@ it.each(["popup", "sidepanel"] as const)(
     expect(state.optimizer_draft_a).toMatchObject({ original: "Edited A" });
   },
 );
+
+it("does not persist duplicate drafts or evict older work when popups are only viewed", async () => {
+  for (const [id, text, born] of [
+    ["a", "Keep A", 100],
+    ["b", "Latest B", 200],
+  ] as const) {
+    const surface = mount();
+    await act(async () =>
+      surface.root.render(
+        <App initialSelection={{ text, draftSessionId: id, draftCreatedAt: born }} />,
+      ),
+    );
+    await act(async () => surface.root.unmount());
+    roots.delete(surface.root);
+  }
+  const before = Object.fromEntries(
+    Object.entries(state).filter(([key]) => key.startsWith("optimizer_draft_")),
+  );
+  for (let i = 0; i < 12; i++) {
+    const popup = mount();
+    await act(async () => popup.root.render(<App />));
+    expect(popup.host.querySelector<HTMLTextAreaElement>(".original-textarea")!.value).toBe(
+      "Latest B",
+    );
+    await act(async () => {
+      const tabs = popup.host.querySelectorAll<HTMLButtonElement>(".tab-bar button");
+      tabs[1].click();
+    });
+    await act(async () =>
+      popup.host.querySelectorAll<HTMLButtonElement>(".tab-bar button")[0].click(),
+    );
+    await act(async () => popup.root.unmount());
+    roots.delete(popup.root);
+  }
+  expect(
+    Object.fromEntries(Object.entries(state).filter(([key]) => key.startsWith("optimizer_draft_"))),
+  ).toEqual(before);
+});
+
+it("keeps an unedited independent copy lazy across an explicit panel handoff", async () => {
+  vi.spyOn(window, "close").mockImplementation(() => {});
+  vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 99, windowId: 7 }] as never);
+  Object.assign(browser, { sidePanel: { open: vi.fn().mockResolvedValue(undefined) } });
+  const original = mount();
+  await act(async () =>
+    original.root.render(
+      <App initialSelection={{ text: "Original A", draftSessionId: "a", draftCreatedAt: 100 }} />,
+    ),
+  );
+  const popup = mount();
+  await act(async () => popup.root.render(<App />));
+  await act(async () => popup.host.querySelector<HTMLButtonElement>(".layout-toggle-btn")!.click());
+  const transfer = Object.entries(state).find(([key]) =>
+    key.startsWith("optimizer_panel_handoff_"),
+  )?.[1] as { draft: PopupSessionDraft };
+  expect(transfer.draft.saveOnEditOnly).toBe(true);
+  const panel = mount();
+  await act(async () =>
+    panel.root.render(<App viewMode="sidepanel" initialDraft={transfer.draft} />),
+  );
+  expect(Object.keys(state).filter((key) => key.startsWith("optimizer_draft_"))).toEqual([
+    "optimizer_draft_a",
+  ]);
+  await act(async () => {
+    const field = panel.host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      field,
+      "Edited copy B",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(state.optimizer_draft_a).toMatchObject({ original: "Original A" });
+  expect(state[`optimizer_draft_${transfer.draft.draftSessionId}`]).toMatchObject({
+    original: "Edited copy B",
+  });
+  expect(
+    (state[`optimizer_draft_${transfer.draft.draftSessionId}`] as PopupSessionDraft).saveOnEditOnly,
+  ).toBeUndefined();
+});

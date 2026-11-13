@@ -22,6 +22,7 @@ export function popupHandoffKey(windowId: number): string {
 
 export interface PopupSessionDraft {
   audienceMode?: AudienceMode | null;
+  saveOnEditOnly?: boolean;
   draftSessionId?: string;
   draftCreatedAt?: number;
   sourceTabId?: number;
@@ -61,6 +62,7 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
 
   const draft = value as Record<string, unknown>;
   return (
+    (draft.saveOnEditOnly === undefined || typeof draft.saveOnEditOnly === "boolean") &&
     (draft.audienceMode === undefined ||
       draft.audienceMode === null ||
       draft.audienceMode === "ai" ||
@@ -301,6 +303,7 @@ export async function getPopupSessionDraft(
       ? {
           ...draft,
           draftSessionId: crypto.randomUUID(),
+          saveOnEditOnly: true,
           draftCreatedAt: Math.max(Date.now(), (draft.draftCreatedAt ?? 0) + 1),
         }
       : draft;

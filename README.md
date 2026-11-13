@@ -87,8 +87,9 @@ when reopening from the toolbar. Independent optimizer sessions keep separate
 three-hour drafts, including each session’s audience mode and goal. Legacy goals
 are validated against the restored mode before submission. Reopening restores the most recently created live session;
 editing an older window or panel does not replace that choice. Generic toolbar
-or panel restores create independent session copies, so another live editor
-cannot overwrite their edits. Explicit URL resumes and surface handoffs keep the
+or panel restores create independent in-memory session copies. These copies
+are saved only after an edit, so repeated viewing does not fill the draft budget
+or evict older work, and another live editor cannot overwrite the copy’s edits. Explicit URL resumes and surface handoffs keep the
 original session identity. Drafts share a
 1 MiB / 10-session budget; each save preserves the session being written and
 evicts the least recently updated older drafts after a successful write. Under
@@ -109,8 +110,11 @@ stores a one-shot snapshot for the next toolbar popup in the same browser window
 (valid for five minutes).
 Other panels and explicit selection launches do not consume that snapshot.
 The panel retries a failed initial handoff read once, then offers a Retry action.
-If that transfer expires or disappears, Retry stays in recovery instead of
-opening a different draft. Surface switching stays disabled until draft restore
+Transfer intent is recorded in browser-session storage before opening the panel.
+The background worker opens the panel and completes the handoff even if Chrome
+destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
+instead of opening a different draft. After ordinary startup read failures, a
+successful Retry without a transfer opens a fresh empty editor. Surface switching stays disabled until draft restore
 finishes. An ended source session has its own Insert
 message explaining that Copy and New remain available.
 

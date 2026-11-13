@@ -3,6 +3,7 @@ import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
+import { openOptimizerPanel } from "@shared/panel-handoff";
 import { IMPROVE_OWNER_PORT } from "@shared/messages";
 import type {
   AnalyticsEventName,
@@ -20,6 +21,8 @@ import {
   cleanupExpiredHandoffs,
   ensureSelectionCleanupAlarm,
 } from "@shared/selection";
+
+type MessageSender = browser.Runtime.MessageSender;
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_QUEUE_ITEMS = 500;
@@ -446,10 +449,16 @@ export default defineBackground(() => {
 
   void flushAnalytics();
 
-  browser.runtime.onMessage.addListener(async (raw: unknown) => {
+  browser.runtime.onMessage.addListener(async (raw: unknown, sender: MessageSender) => {
     const msg = raw as Message;
 
     switch (msg.type) {
+      case "OPEN_OPTIMIZER_PANEL": {
+        if (sender.url?.split("?")[0] !== browser.runtime.getURL("popup.html"))
+          throw new Error("Invalid panel sender");
+        return openOptimizerPanel(msg);
+      }
+
       case "TRACK_EVENT": {
         await track(msg.payload);
         return { ok: true };

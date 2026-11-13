@@ -1,3 +1,4 @@
+import { openOptimizerPanel, type OpenOptimizerPanel } from "../shared/panel-handoff";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -33,6 +34,8 @@ async function click(label: string) {
 }
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.mocked(browser.storage.session.set).mockResolvedValue(undefined);
+  vi.mocked(browser.storage.session.remove).mockResolvedValue(undefined);
   vi.mocked(browser.storage.session.get).mockResolvedValue({
     optimizer_browser_session: "test-session",
   });
@@ -395,9 +398,11 @@ it("keeps the normal browser target after New in a standalone selection window",
   } as never);
   vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
   vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) =>
-    (message as { type: string }).type === "IMPROVE_REQUEST"
-      ? { type: "IMPROVE_RESULT", payload: { request_id: "r", improved_text: "Result" } }
-      : { ok: true },
+    (message as { type: string }).type === "OPEN_OPTIMIZER_PANEL"
+      ? openOptimizerPanel(message as OpenOptimizerPanel)
+      : (message as { type: string }).type === "IMPROVE_REQUEST"
+        ? { type: "IMPROVE_RESULT", payload: { request_id: "r", improved_text: "Result" } }
+        : { ok: true },
   );
   root = createRoot(host);
   await act(async () =>

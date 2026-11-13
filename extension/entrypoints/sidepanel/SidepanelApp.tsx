@@ -1,16 +1,44 @@
 import { useEffect, useState, useRef } from "react";
 import browser from "webextension-polyfill";
-import { isPanelHandoff, panelHandoffPrefix, type PanelHandoff } from "@shared/panel-handoff";
+import {
+  isPanelHandoff,
+  panelHandoffPrefix,
+  expectedPanelHandoffs,
+  clearPanelHandoffIntents,
+  panelHandoffIntentKey,
+  type PanelHandoff,
+} from "@shared/panel-handoff";
 import { useT } from "@shared/i18n";
-import { readLocalEntries } from "@shared/storage";
+import { readLocalEntries, type PopupSessionDraft } from "@shared/storage";
 import { ensureBrowserSessionId } from "@shared/browser-target";
 import { App } from "../popup/App";
+
+function emptyDraft(): PopupSessionDraft {
+  return {
+    draftSessionId: crypto.randomUUID(),
+    draftCreatedAt: Date.now(),
+    saveOnEditOnly: true,
+    activeTab: "improve",
+    original: "",
+    improved: "",
+    changes: [],
+    goal: null,
+    lastRequestId: null,
+    lastRequestContextKey: null,
+    lastModel: null,
+    lastLatencyMs: null,
+    attemptN: 0,
+  };
+}
 
 /** Receive sessions for this window, including when its side panel is already open. */
 export function SidepanelApp() {
   const t = useT();
   const mountedAt = useRef(Date.now());
   const recoveryRequired = useRef(false);
+  const hadReadFailure = useRef(false);
+  const knownIntents = useRef<string[]>([]);
+  const [freshDraft, setFreshDraft] = useState<PopupSessionDraft>();
   const acceptedHandoffId = useRef<string | undefined>(undefined);
   const [transferWarning, setTransferWarning] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -30,6 +58,9 @@ export function SidepanelApp() {
         if (window.id === undefined) throw new Error("Panel window unavailable");
         const browserSessionId = await ensureBrowserSessionId();
         if (!active) return;
+        knownIntents.current = await expectedPanelHandoffs(window.id);
+        if (knownIntents.current.length) recoveryRequired.current = true;
+        if (!active) return;
         const prefix = panelHandoffPrefix(window.id);
         let revision = 0;
         const accept = (key: string, value: unknown) => {
@@ -37,6 +68,12 @@ export function SidepanelApp() {
           received = true;
           recoveryRequired.current = false;
           acceptedHandoffId.current = value.id;
+          void clearPanelHandoffIntents([
+            ...knownIntents.current,
+            panelHandoffIntentKey(window.id!, value.id),
+          ]);
+          knownIntents.current = [];
+          setFreshDraft(undefined);
           setTransferWarning(false);
           setSession(value);
           setFailed(false);
@@ -132,11 +169,14 @@ export function SidepanelApp() {
         if (obsolete.length) await browser.storage.local.remove(obsolete).catch(() => undefined);
         if (active) {
           if (recoveryRequired.current && !received) setFailed(true);
-          else setReady(true);
+          else {
+            if (hadReadFailure.current && !received) setFreshDraft(emptyDraft());
+            setReady(true);
+          }
         }
       } catch {
         if (active && !received) {
-          recoveryRequired.current = true;
+          hadReadFailure.current = true;
           setFailed(true);
         }
       }
@@ -162,7 +202,11 @@ export function SidepanelApp() {
           {t.errorPanelTransferPreserved}
         </aside>
       )}
-      <App key={session?.id ?? "draft"} viewMode="sidepanel" initialDraft={session?.draft} />
+      <App
+        key={session?.id ?? freshDraft?.draftSessionId ?? "draft"}
+        viewMode="sidepanel"
+        initialDraft={session?.draft ?? freshDraft}
+      />
     </>
   ) : null;
 }

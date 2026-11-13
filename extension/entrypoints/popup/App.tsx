@@ -19,10 +19,9 @@ import {
   getPopupSessionDraft,
   setAudienceMode,
   setPopupSessionDraft,
-  setOptimizerHandoff,
   preferPopupSessionDraft,
 } from "@shared/storage";
-import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS, LIMITS } from "@shared/constants";
+import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
 import {
   describeUnexpectedBackgroundResponse,
@@ -41,8 +40,7 @@ import type {
   OptimizerRequestContext,
 } from "@shared/types";
 
-import { resolveBrowserTarget, ensureBrowserSessionId } from "@shared/browser-target";
-import { panelHandoffKey, requestPanelRollback } from "@shared/panel-handoff";
+import { resolveBrowserTarget } from "@shared/browser-target";
 import { getSelectionSessionId, type PromptSelection } from "@shared/selection";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
@@ -135,6 +133,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     () => viewMode === "popup" && new URLSearchParams(window.location.search).has("selection"),
   );
   const selectionLaunchFailed = isSelectionLaunch && !initialSelection && !initialDraft;
+  const [saveOnEditOnly, setSaveOnEditOnly] = useState(initialDraft?.saveOnEditOnly ?? false);
   const maySaveSelectionDraftRef = useRef(!selectionLaunchFailed);
   const [draftSessionId, setDraftSessionId] = useState(
     () =>
@@ -270,8 +269,6 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     getAll().then((entries) => setLibraryCount(entries.length));
   }, []);
 
-  const rollbackCleanupRef = useRef<(() => void) | undefined>(undefined);
-  useEffect(() => () => rollbackCleanupRef.current?.(), []);
   const layoutTargetRef = useRef<
     { tab: browser.Tabs.Tab; id?: number; session?: string } | undefined
   >(undefined);
@@ -342,6 +339,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
         if (initialSelection || !draft) return;
 
+        setSaveOnEditOnly(draft.saveOnEditOnly ?? false);
         if (draft.draftSessionId) setDraftSessionId(draft.draftSessionId);
         if (typeof draft.draftCreatedAt === "number") setDraftCreatedAt(draft.draftCreatedAt);
         setSourceTabId(draft.sourceTabId);
@@ -439,6 +437,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       sourceSessionId,
       standaloneTarget,
       audienceMode,
+      ...(saveOnEditOnly ? { saveOnEditOnly: true } : {}),
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
       result_context: resultContext,
       activeTab,
@@ -459,6 +458,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       sourceSessionId,
       standaloneTarget,
       audienceMode,
+      saveOnEditOnly,
       improved,
       editingOriginal,
       resultContext,
@@ -475,14 +475,14 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   );
 
   useEffect(() => {
-    if (!sessionDraftLoaded) return;
+    if (!sessionDraftLoaded || saveOnEditOnly) return;
     // An unsuccessful selection launch must not become a newer blank restore candidate.
     if (!maySaveSelectionDraftRef.current) {
       if (!sessionDraft.original && !sessionDraft.improved) return;
       maySaveSelectionDraftRef.current = true;
     }
     void setPopupSessionDraft(sessionDraft).catch(() => undefined);
-  }, [sessionDraftLoaded, sessionDraft]);
+  }, [sessionDraftLoaded, sessionDraft, saveOnEditOnly]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -517,9 +517,6 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
     if (!sessionDraftLoaded || activeRequestRef.current || layoutTransitionRef.current) return;
-    rollbackCleanupRef.current?.();
-    rollbackCleanupRef.current = undefined;
-    const transitionStartedAt = Date.now();
     layoutTransitionRef.current = true;
     setLayoutTransition(true);
     let closing = false;
@@ -540,40 +537,14 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           }
         ).sidePanel;
         if (tab?.windowId != null && sidePanel) {
-          await sidePanel.open({ windowId: tab.windowId });
-          if (activeRequestRef.current) return;
-          const id = crypto.randomUUID();
-          try {
-            const browserSessionId = await ensureBrowserSessionId();
-            const current = layoutTargetRef.current;
-            if (
-              !current ||
-              current.tab.id !== tab.id ||
-              current.tab.windowId !== tab.windowId ||
-              current.id !== targetTabId ||
-              current.session !== targetSessionId
-            ) {
-              throw new Error("Source tab changed while opening the side panel");
-            }
-            await setOptimizerHandoff(panelHandoffKey(tab.windowId, id), {
-              id,
-              browserSessionId,
-              draft: {
-                ...sessionDraft,
-                sourceTabId: targetTabId,
-                sourceSessionId: targetSessionId,
-              },
-              expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
-            });
-          } catch (error) {
-            // Roll back the opened surface; keep this optimizer and its prompt available.
-            rollbackCleanupRef.current = requestPanelRollback(
-              tab.windowId,
-              transitionStartedAt,
-              id,
-            );
-            throw error;
-          }
+          const response = await browser.runtime.sendMessage({
+            type: "OPEN_OPTIMIZER_PANEL",
+            windowId: tab.windowId,
+            tabId: tab.id,
+            draft: { ...sessionDraft, sourceTabId: targetTabId, sourceSessionId: targetSessionId },
+          });
+          if (!(response as { ok?: boolean } | undefined)?.ok)
+            throw new Error("Panel transfer failed");
           window.close();
           closing = true;
         } else {
@@ -732,6 +703,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       await owner.ready;
       if (activeRequestRef.current !== requestKey) return;
       submitted = true;
+      setSaveOnEditOnly(false);
       setEditingOriginal(false);
       setImproved("");
       setChanges([]);
@@ -874,6 +846,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   const handleNew = useCallback(() => {
     if (layoutTransitionRef.current) return;
+    setSaveOnEditOnly(false);
     // The standalone window keeps its launch target; only the prompt binding is cleared.
     setSourceTabId(undefined);
     setSourceSessionId(undefined);
@@ -950,6 +923,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   const handleGoalChange = useCallback((nextGoal: ImproveGoal) => {
     if (layoutTransitionRef.current) return;
+    setSaveOnEditOnly(false);
     hasUserSelectedGoalRef.current = true;
     setGoal(nextGoal);
   }, []);
@@ -957,6 +931,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const handleModeSelection = useCallback(
     async (mode: AudienceMode) => {
       if (layoutTransitionRef.current || mode === audienceMode) return;
+      setSaveOnEditOnly(false);
       hasUserSelectedGoalRef.current = false;
       setAudienceModeState(mode);
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
@@ -1149,6 +1124,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {
                     if (layoutTransitionRef.current) return;
+                    setSaveOnEditOnly(false);
                     setOriginal(text);
                     setEditingOriginal(true);
                     if (error?.message === t.errorInputTooLong(promptInputMaxChars)) setError(null);

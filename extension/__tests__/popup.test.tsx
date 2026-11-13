@@ -1,3 +1,4 @@
+import { openOptimizerPanel, type OpenOptimizerPanel } from "../shared/panel-handoff";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -81,6 +82,8 @@ describe("App", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(browser.storage.session.remove).mockResolvedValue(undefined);
+    vi.mocked(browser.storage.session.set).mockResolvedValue(undefined);
     vi.mocked(browser.storage.session.get).mockResolvedValue({
       optimizer_browser_session: "test-session",
     });
@@ -99,6 +102,8 @@ describe("App", () => {
     vi.mocked(browser.tabs.query).mockResolvedValue([] as never);
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
       const typed = msg as { type?: string };
+      if (typed.type === "OPEN_OPTIMIZER_PANEL")
+        return openOptimizerPanel(msg as OpenOptimizerPanel);
       if (typed.type === "GET_LIMITS") {
         return {
           type: "LIMITS_RESULT",
@@ -534,7 +539,11 @@ describe("App", () => {
     });
     vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 1 }] as never);
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
-      (msg as { type?: string }).type === "IMPROVE_REQUEST" ? new Promise(() => {}) : { ok: true },
+      (msg as { type?: string }).type === "OPEN_OPTIMIZER_PANEL"
+        ? openOptimizerPanel(msg as OpenOptimizerPanel)
+        : (msg as { type?: string }).type === "IMPROVE_REQUEST"
+          ? new Promise(() => {})
+          : { ok: true },
     );
     await act(async () => {
       root.render(<App />);
@@ -825,6 +834,42 @@ describe("App", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("finishes the background handoff after Chrome unmounts the toolbar popup", async () => {
+    let finishOpen!: () => void;
+    Object.assign(browser, {
+      sidePanel: {
+        open: vi.fn(
+          () =>
+            new Promise<void>((resolve) => {
+              finishOpen = resolve;
+            }),
+        ),
+      },
+    });
+    vi.spyOn(window, "close").mockImplementation(() => {});
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 7 }] as never);
+    await act(async () => root.render(<App />));
+    await flushEffects();
+    await setOriginalPrompt(container, "Survive toolbar destruction");
+    await act(async () =>
+      (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click(),
+    );
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "OPEN_OPTIMIZER_PANEL",
+        draft: expect.objectContaining({ original: "Survive toolbar destruction" }),
+      }),
+    );
+    await act(async () => root.unmount());
+    await act(async () => finishOpen());
+    expect(
+      vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.flatMap(([values]) => Object.entries(values))
+        .find(([key]) => key.startsWith("optimizer_panel_handoff_7_"))?.[1],
+    ).toMatchObject({ draft: { original: "Survive toolbar destruction" } });
+  });
+
   it("shows a layout failure while the Library tab remains open", async () => {
     const open = vi.fn().mockRejectedValue(new Error("Panel unavailable"));
     Object.assign(browser, { sidePanel: { open } });
@@ -888,6 +933,9 @@ describe("App", () => {
     await act(async () => {
       (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
       expect(open).toHaveBeenCalledWith({ windowId: 7 });
+      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "OPEN_OPTIMIZER_PANEL" }),
+      );
     });
   });
 
