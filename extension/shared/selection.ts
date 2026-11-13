@@ -94,17 +94,24 @@ export async function readSelection(search: string): Promise<PromptSelection | u
   };
 }
 
+/** Stable identity shared by the URL loader and replacement-prompt recovery. */
+export function getSelectionSessionId(search: string): string | undefined {
+  const params = new URLSearchParams(search);
+  const key = params.get("selection");
+  if (!key?.startsWith(SELECTION_KEY_PREFIX)) return;
+  const id = key.slice(SELECTION_KEY_PREFIX.length);
+  if (!id || (params.has("session") && params.get("session") !== id)) return;
+  return id;
+}
+
 /** Keep the session identity after its one-shot selection payload has been consumed. */
 export async function loadSelectionSession(search: string): Promise<{
   initialSelection?: PromptSelection;
   initialDraft?: PopupSessionDraft;
 }> {
-  const params = new URLSearchParams(search);
-  const key = params.get("selection");
-  if (!key?.startsWith(SELECTION_KEY_PREFIX)) return {};
-  // Earlier optimizer URLs already encoded the draft identity in the selection key.
-  const id = key.slice(SELECTION_KEY_PREFIX.length);
-  if (!id || (params.has("session") && params.get("session") !== id)) return {};
+  const id = getSelectionSessionId(search);
+  if (!id) return {};
+  const key = `${SELECTION_KEY_PREFIX}${id}`;
   const draft = await getPopupSessionDraftById(id).catch(() => null);
   if (draft) {
     await browser.storage.local.remove(key).catch(() => undefined);

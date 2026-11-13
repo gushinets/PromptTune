@@ -585,3 +585,40 @@ it("retains the selection payload until a deferred initial draft write commits",
     original: "Deferred selection",
   });
 });
+
+it.each(["missing", "expired"])(
+  "restores a typed recovery prompt after a %s selection launch and reload",
+  async (failure) => {
+    const search = "?selection=optimizer_selection_failed-id&session=failed-id";
+    if (failure === "expired")
+      state["optimizer_selection_failed-id"] = { text: "Old selection", expiresAt: Date.now() - 1 };
+    const originalUrl = window.location.href;
+    window.history.replaceState(null, "", search);
+    try {
+      const props = await loadSelectionSession(search);
+      const first = mount();
+      await act(async () => first.root.render(<App {...props} />));
+      expect(first.host.textContent).toContain("select the text again");
+      await act(async () => {
+        const field = first.host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          field,
+          "Replacement prompt",
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(state["optimizer_draft_failed-id"]).toMatchObject({ original: "Replacement prompt" });
+      await act(async () => first.root.unmount());
+      roots.delete(first.root);
+      const restored = await loadSelectionSession(search);
+      const reloaded = mount();
+      await act(async () => reloaded.root.render(<App {...restored} />));
+      expect(reloaded.host.querySelector<HTMLTextAreaElement>(".original-textarea")!.value).toBe(
+        "Replacement prompt",
+      );
+      expect(reloaded.host.textContent).not.toContain("select the text again");
+    } finally {
+      window.history.replaceState(null, "", originalUrl);
+    }
+  },
+);

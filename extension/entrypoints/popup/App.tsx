@@ -43,7 +43,7 @@ import type {
 
 import { resolveBrowserTarget, ensureBrowserSessionId } from "@shared/browser-target";
 import { panelHandoffKey, requestPanelRollback } from "@shared/panel-handoff";
-import type { PromptSelection } from "@shared/selection";
+import { getSelectionSessionId, type PromptSelection } from "@shared/selection";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
@@ -137,7 +137,11 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const selectionLaunchFailed = isSelectionLaunch && !initialSelection && !initialDraft;
   const maySaveSelectionDraftRef = useRef(!selectionLaunchFailed);
   const [draftSessionId, setDraftSessionId] = useState(
-    () => initialSelection?.draftSessionId ?? initialDraft?.draftSessionId ?? crypto.randomUUID(),
+    () =>
+      initialSelection?.draftSessionId ??
+      initialDraft?.draftSessionId ??
+      (viewMode === "popup" ? getSelectionSessionId(window.location.search) : undefined) ??
+      crypto.randomUUID(),
   );
   const [draftCreatedAt, setDraftCreatedAt] = useState(
     () => initialSelection?.draftCreatedAt ?? initialDraft?.draftCreatedAt ?? Date.now(),
@@ -869,6 +873,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   }, [activeTab, loading, improved, editingOriginal, handleImprove]);
 
   const handleNew = useCallback(() => {
+    if (layoutTransitionRef.current) return;
     // The standalone window keeps its launch target; only the prompt binding is cleared.
     setSourceTabId(undefined);
     setSourceSessionId(undefined);
@@ -944,13 +949,14 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const handleDismissError = useCallback(() => setError(null), []);
 
   const handleGoalChange = useCallback((nextGoal: ImproveGoal) => {
+    if (layoutTransitionRef.current) return;
     hasUserSelectedGoalRef.current = true;
     setGoal(nextGoal);
   }, []);
 
   const handleModeSelection = useCallback(
     async (mode: AudienceMode) => {
-      if (mode === audienceMode) return;
+      if (layoutTransitionRef.current || mode === audienceMode) return;
       hasUserSelectedGoalRef.current = false;
       setAudienceModeState(mode);
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
@@ -1081,13 +1087,18 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       <nav className="tab-bar">
         <button
           className={`tab${activeTab === "improve" ? " active" : ""}`}
-          onClick={() => setActiveTab("improve")}
+          disabled={layoutTransition}
+          onClick={() => {
+            if (!layoutTransitionRef.current) setActiveTab("improve");
+          }}
         >
           {t.tabImprove}
         </button>
         <button
           className={`tab${activeTab === "library" ? " active" : ""}`}
+          disabled={layoutTransition}
           onClick={() => {
+            if (layoutTransitionRef.current) return;
             setActiveTab("library");
             refreshLibraryCount();
           }}
@@ -1137,6 +1148,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                   hidden={loading || Boolean(improved && !editingOriginal)}
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {
+                    if (layoutTransitionRef.current) return;
                     setOriginal(text);
                     setEditingOriginal(true);
                     if (error?.message === t.errorInputTooLong(promptInputMaxChars)) setError(null);
@@ -1156,7 +1168,9 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                     changes={changes}
                     goal={resultContext?.goal ?? goal}
                     hidden={loading || editingOriginal}
+                    disabled={layoutTransition}
                     onEdit={() => {
+                      if (layoutTransitionRef.current) return;
                       setEditingOriginal(true);
                     }}
                     onNew={handleNew}
@@ -1192,6 +1206,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                 <button
                   type="button"
                   className="mode-onboarding-card"
+                  disabled={layoutTransition}
                   data-mode="ai"
                   onClick={() => handleModeSelection("ai")}
                 >
@@ -1201,6 +1216,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                 <button
                   type="button"
                   className="mode-onboarding-card"
+                  disabled={layoutTransition}
                   data-mode="content"
                   onClick={() => handleModeSelection("content")}
                 >

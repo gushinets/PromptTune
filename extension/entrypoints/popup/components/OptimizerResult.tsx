@@ -13,6 +13,7 @@ interface ResultProps {
   onEdit: () => void;
   onNew: () => void;
   lengthWarning?: string;
+  disabled?: boolean;
 }
 export function OptimizerResult({
   improved,
@@ -23,6 +24,7 @@ export function OptimizerResult({
   onEdit,
   onNew,
   lengthWarning,
+  disabled = false,
 }: ResultProps) {
   const t = useT();
   const outputId = useId();
@@ -106,10 +108,10 @@ export function OptimizerResult({
         )}
       </div>
       <div className="result-navigation">
-        <button className="btn-edit" onClick={onEdit}>
+        <button className="btn-edit" disabled={disabled} onClick={onEdit}>
           {t.btnEditOriginal}
         </button>
-        <button className="btn-new" onClick={onNew}>
+        <button className="btn-new" disabled={disabled} onClick={onNew}>
           {t.btnNew}
         </button>
       </div>

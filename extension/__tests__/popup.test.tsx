@@ -559,6 +559,127 @@ describe("App", () => {
     expect(container.querySelector(".processing-screen")).toBeNull();
   });
 
+  it.each(["popup", "sidepanel"] as const)(
+    "locks input edits during a deferred %s surface transfer",
+    async (viewMode) => {
+      const close = vi.spyOn(window, "close").mockImplementation(() => {});
+      let finish!: () => void;
+      Object.assign(browser, {
+        sidePanel: {
+          open: vi.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                finish = resolve;
+              }),
+          ),
+        },
+      });
+      vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
+      vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 7 }] as never);
+      await act(async () => root.render(<App viewMode={viewMode} />));
+      await flushEffects();
+      await setOriginalPrompt(container, "Prompt A");
+      if (viewMode === "sidepanel")
+        vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+          if (Object.keys(values).some((key) => key.startsWith("optimizer_popup_handoff_")))
+            await new Promise<void>((resolve) => {
+              finish = resolve;
+            });
+        });
+      await act(async () =>
+        (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click(),
+      );
+      try {
+        const field = container.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+        expect(field.readOnly || field.disabled).toBe(true);
+        await setOriginalPrompt(container, "Prompt B");
+        expect(field.value).toBe("Prompt A");
+        expect((container.querySelector(".tab-bar button") as HTMLButtonElement).disabled).toBe(
+          true,
+        );
+      } finally {
+        await act(async () => finish());
+      }
+      expect(close).toHaveBeenCalledOnce();
+      const handoff = vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.flatMap(([values]) => Object.entries(values))
+        .find(([key]) =>
+          key.startsWith(
+            viewMode === "popup" ? "optimizer_panel_handoff_" : "optimizer_popup_handoff_",
+          ),
+        );
+      expect(handoff?.[1]).toMatchObject({ draft: { original: "Prompt A" } });
+    },
+  );
+
+  it.each(["popup", "sidepanel"] as const)(
+    "locks New and Edit original during a deferred %s result transfer",
+    async (viewMode) => {
+      const close = vi.spyOn(window, "close").mockImplementation(() => {});
+      let finish!: () => void;
+      Object.assign(browser, {
+        sidePanel: {
+          open: vi.fn(
+            () =>
+              new Promise<void>((resolve) => {
+                finish = resolve;
+              }),
+          ),
+        },
+      });
+      vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
+      vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 1, windowId: 7 }] as never);
+      const initialDraft = {
+        activeTab: "improve" as const,
+        original: "Prompt A",
+        improved: "Result A",
+        changes: [],
+        goal: "general" as const,
+        lastRequestId: "r",
+        lastRequestContextKey: "ai|general|Prompt A",
+        lastModel: null,
+        lastLatencyMs: null,
+        attemptN: 1,
+      };
+      await act(async () => root.render(<App viewMode={viewMode} initialDraft={initialDraft} />));
+      await flushEffects();
+      if (viewMode === "sidepanel")
+        vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+          if (Object.keys(values).some((key) => key.startsWith("optimizer_popup_handoff_")))
+            await new Promise<void>((resolve) => {
+              finish = resolve;
+            });
+        });
+      await act(async () =>
+        (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click(),
+      );
+      try {
+        const edit = container.querySelector<HTMLButtonElement>(".btn-edit")!;
+        const startNew = container.querySelector<HTMLButtonElement>(".btn-new")!;
+        expect(edit.disabled).toBe(true);
+        expect(startNew.disabled).toBe(true);
+        await act(async () => {
+          edit.click();
+          startNew.click();
+        });
+        expect(container.querySelector(".result-screen")?.textContent).toContain("Result A");
+      } finally {
+        await act(async () => finish());
+      }
+      expect(close).toHaveBeenCalledOnce();
+      const handoff = vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.flatMap(([values]) => Object.entries(values))
+        .find(([key]) =>
+          key.startsWith(
+            viewMode === "popup" ? "optimizer_panel_handoff_" : "optimizer_popup_handoff_",
+          ),
+        );
+      expect(handoff?.[1]).toMatchObject({ draft: { original: "Prompt A", improved: "Result A" } });
+    },
+  );
+
   it("allows submission again if opening the sidepanel fails", async () => {
     Object.assign(browser, {
       sidePanel: { open: vi.fn().mockRejectedValue(new Error("Open failed")) },
@@ -573,6 +694,9 @@ describe("App", () => {
       (container.querySelector(".layout-toggle-btn") as HTMLButtonElement).click();
     });
     expect(getImproveButton(container).disabled).toBe(false);
+    expect(container.querySelector<HTMLTextAreaElement>(".original-textarea")!.readOnly).toBe(
+      false,
+    );
     await act(async () => {
       getImproveButton(container).click();
     });

@@ -120,7 +120,9 @@ window with a reused ID.
 If neither the addressed draft nor its selection payload can be recovered, the window
 shows an empty input and a recovery message instead of restoring another draft.
 The empty failed launch is not autosaved; entering a new prompt starts normal
-draft saving. Cleanup reads only optimizer records when key enumeration is
+draft saving under the same URL session ID, so reloading recovers that replacement.
+While switching between popup and panel, draft-editing controls are locked until
+the transfer succeeds or fails. Cleanup reads only optimizer records when key enumeration is
 available, retaining a compatible fallback for older browsers.
 
 Private/incognito selections are explicitly unsupported: selecting the menu item
