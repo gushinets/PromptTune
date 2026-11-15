@@ -242,12 +242,18 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
         throw new Error("Source tab no longer belongs to the target window");
     }
     if (openingAttempts.get(message.windowId) !== id) throw new Error("Panel attempt superseded");
-    await setOptimizerHandoff(panelHandoffKey(message.windowId, id), {
+    const handoffKey = panelHandoffKey(message.windowId, id);
+    await setOptimizerHandoff(handoffKey, {
       id,
       browserSessionId,
       draft: message.draft,
       expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
     });
+    if (sourceChanged || openingAttempts.get(message.windowId) !== id) {
+      // Retire only this publication; a newer transfer owns a different key.
+      await browser.storage.local.remove(handoffKey).catch(() => undefined);
+      throw new Error("Source changed or panel attempt superseded during publication");
+    }
     return { ok: true };
   } catch (error) {
     await intent;

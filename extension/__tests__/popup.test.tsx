@@ -718,6 +718,66 @@ describe("App", () => {
     },
   );
 
+  it.each(["claude", "chatgpt"] as const)(
+    "waits for %s source detection before selection submission by click or shortcut",
+    async (site) => {
+      let finish!: (tab: { id: number; windowId: number; url: string }) => void;
+      vi.mocked(browser.tabs.get).mockReturnValue(
+        new Promise((resolve) => {
+          finish = resolve;
+        }) as never,
+      );
+      await act(async () =>
+        root.render(
+          <App
+            initialSelection={{
+              text: "Selected prompt",
+              sourceTabId: 42,
+              sourceSessionId: "test-session",
+            }}
+          />,
+        ),
+      );
+      await flushEffects();
+      try {
+        await act(async () => {
+          getImproveButton(container).click();
+          window.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }),
+          );
+        });
+        expect(
+          vi
+            .mocked(browser.runtime.sendMessage)
+            .mock.calls.some(
+              ([message]) => (message as { type?: string }).type === "IMPROVE_REQUEST",
+            ),
+        ).toBe(false);
+        expect(getImproveButton(container).disabled).toBe(true);
+      } finally {
+        await act(async () =>
+          finish({
+            id: 42,
+            windowId: 7,
+            url: site === "chatgpt" ? "https://chatgpt.com/" : "https://claude.ai/",
+          }),
+        );
+      }
+      expect(getImproveButton(container).disabled).toBe(false);
+      await act(async () => getImproveButton(container).click());
+      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "IMPROVE_REQUEST",
+          payload: expect.objectContaining({
+            text: "Selected prompt",
+            goal: site,
+            site: site === "chatgpt" ? "chatgpt.com" : "claude.ai",
+          }),
+        }),
+      );
+    },
+  );
+
   it("blocks the side-panel toggle until its transferred draft finishes restoring", async () => {
     const close = vi.spyOn(window, "close").mockImplementation(() => {});
     vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);

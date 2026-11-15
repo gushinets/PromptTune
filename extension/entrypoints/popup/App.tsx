@@ -659,7 +659,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
-    if (isOriginalOverLimit || activeRequestRef.current || layoutTransitionRef.current) return;
+    if (
+      !siteResolved ||
+      isOriginalOverLimit ||
+      activeRequestRef.current ||
+      layoutTransitionRef.current
+    )
+      return;
     const trimmed = original.trim();
     if (!trimmed) return;
     if (!audienceMode) return;
@@ -792,6 +798,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     original,
     improved,
     siteHostname,
+    siteResolved,
     t,
     viewMode,
   ]);
@@ -1120,6 +1127,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                   mode={audienceMode}
                   goal={goal}
                   loading={loading || layoutTransition}
+                  submitDisabled={!siteResolved}
                   hidden={loading || Boolean(improved && !editingOriginal)}
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {

@@ -1,6 +1,7 @@
 # PromptTune
 
-Browser extension for AI prompt improvement. Supports Chrome, Edge, and Firefox.
+Browser extension for AI prompt improvement. Supports Chrome, Edge, and Firefox 115+ (the first Firefox version with
+WebExtension `storage.session`).
 
 ## Project Structure
 

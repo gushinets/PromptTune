@@ -1100,3 +1100,73 @@ it("retires only failed A across Retry and continues waiting for B", async () =>
     cleanup();
   }
 });
+
+it.each(["removed", "moved", "superseded"])(
+  "retires publication A when its source is %s during the handoff write",
+  async (changeType) => {
+    const { openOptimizerPanel, requestPanelRollback } = await import("../shared/panel-handoff");
+    Object.assign(browser, { sidePanel: { open: vi.fn().mockResolvedValue(undefined) } });
+    vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 7 } as never);
+    let finishWrite!: () => void;
+    let wrote!: () => void;
+    const started = new Promise<void>((resolve) => {
+      wrote = resolve;
+    });
+    let firstKey = "";
+    vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+      const key = Object.keys(values).find((key) => key.startsWith("optimizer_panel_handoff_"));
+      if (key && !firstKey) {
+        firstKey = key;
+        wrote();
+        await new Promise<void>((resolve) => {
+          finishWrite = resolve;
+        });
+      }
+    });
+    const msg = {
+      type: "OPEN_OPTIMIZER_PANEL" as const,
+      windowId: 7,
+      tabId: 42,
+      draft: selected.draft as never,
+    };
+    const a = openOptimizerPanel(msg);
+    await started;
+    let b: Promise<unknown> | undefined;
+    if (changeType === "removed")
+      vi.mocked(browser.tabs.onRemoved.addListener).mock.calls.at(-1)![0](42, {
+        windowId: 7,
+        isWindowClosing: false,
+      });
+    else if (changeType === "moved")
+      vi.mocked(browser.tabs.onAttached.addListener).mock.calls.at(-1)![0](42, {
+        newWindowId: 8,
+        newPosition: 0,
+      });
+    else
+      b = openOptimizerPanel({
+        ...msg,
+        draft: { ...selected.draft, improved: "B result" } as never,
+      });
+    finishWrite();
+    await expect(a).rejects.toThrow();
+    if (b) await b;
+    expect(browser.storage.local.remove).toHaveBeenCalledWith(firstKey);
+    const failures = vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.filter(
+        ([message]) => (message as { type?: string }).type === "PANEL_HANDOFF_FAILED",
+      );
+    expect(failures).toHaveLength(changeType === "superseded" ? 0 : 1);
+    if (b) {
+      const last = vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.flatMap(([values]) => Object.entries(values))
+        .filter(([key]) => key.startsWith("optimizer_panel_handoff_"))
+        .at(-1)!;
+      expect(last[0]).not.toBe(firstKey);
+      expect(browser.storage.local.remove).not.toHaveBeenCalledWith(last[0]);
+    }
+    const cleanup = requestPanelRollback(7, Date.now(), "test-cleanup");
+    cleanup();
+  },
+);
