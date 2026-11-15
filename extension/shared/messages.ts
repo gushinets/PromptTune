@@ -4,6 +4,7 @@ import type { AnalyticsTrackPayload, AnalyticsTrackContext } from "./analytics-t
 export const IMPROVE_OWNER_PORT = "prompttune-improve-owner";
 
 export type Message =
+  | { type: "CONFIRM_PANEL_HANDOFF"; windowId: number; id: string }
   | {
       type: "CLOSE_PANEL_FOR_ROLLBACK";
       windowId: number;

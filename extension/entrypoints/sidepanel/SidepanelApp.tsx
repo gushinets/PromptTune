@@ -6,6 +6,7 @@ import {
   expectedPanelHandoffs,
   clearPanelHandoffIntents,
   panelHandoffIntentKey,
+  panelHandoffCommitKey,
   type PanelHandoff,
 } from "@shared/panel-handoff";
 import { useT } from "@shared/i18n";
@@ -83,7 +84,7 @@ export function SidepanelApp() {
             !isPanelHandoff(value, browserSessionId) ||
             retiredHandoffs.current.has(value.id)
           )
-            return;
+            return false;
           received = true;
           recoveryDeadline.current = 0;
           acceptedHandoffId.current = value.id;
@@ -98,6 +99,26 @@ export function SidepanelApp() {
           setFailed(false);
           setReady(true);
           void browser.storage.local.remove(key).catch(() => undefined);
+          if (value.requiresConfirmation)
+            void clearPanelHandoffIntents([panelHandoffCommitKey(window.id!, value.id)]);
+          return true;
+        };
+        let acceptanceQueue = Promise.resolve(false);
+        const receive = (key: string, value: PanelHandoff): Promise<boolean> => {
+          // Preserve publication order even when confirmation responses arrive at different times.
+          const next = acceptanceQueue.then(async () => {
+            if (!active) return false;
+            if (value.requiresConfirmation) {
+              hadStartupFailure.current = true;
+              const result = await browser.runtime
+                .sendMessage({ type: "CONFIRM_PANEL_HANDOFF", windowId: window.id, id: value.id })
+                .catch(() => undefined);
+              if (!(result as { committed?: boolean } | undefined)?.committed) return false;
+            }
+            return accept(key, value);
+          });
+          acceptanceQueue = next;
+          return next;
         };
         const onChanged = (
           changes: Record<string, browser.Storage.StorageChange>,
@@ -109,7 +130,7 @@ export function SidepanelApp() {
               continue;
             if (retiredHandoffs.current.has(change.newValue.id)) continue;
             revision++;
-            accept(key, change.newValue);
+            void receive(key, change.newValue);
           }
         };
         browser.storage.onChanged.addListener(onChanged);
@@ -200,8 +221,7 @@ export function SidepanelApp() {
             )
             .sort((a, b) => b[1].expiresAt - a[1].expiresAt)[0];
           if (newest) {
-            acceptedKey = newest[0];
-            accept(...newest);
+            if (await receive(...newest)) acceptedKey = newest[0];
           }
         }
         // Unique keys let us retire this snapshot without deleting a concurrent transfer.

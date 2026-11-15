@@ -778,6 +778,46 @@ describe("App", () => {
     },
   );
 
+  it("allows general optimization when the source closes before initial detection completes", async () => {
+    let finish!: (tab: { id: number; windowId: number; url: string }) => void;
+    vi.mocked(browser.tabs.get).mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }) as never,
+    );
+    await act(async () =>
+      root.render(
+        <App
+          initialSelection={{
+            text: "Keep selected text",
+            sourceTabId: 42,
+            sourceSessionId: "test-session",
+          }}
+        />,
+      ),
+    );
+    await flushEffects();
+    expect(getImproveButton(container).disabled).toBe(true);
+    const removed = vi.mocked(browser.tabs.onRemoved.addListener).mock.calls.at(-1)![0];
+    await act(async () => removed(42, { windowId: 7, isWindowClosing: false }));
+    await act(async () => finish({ id: 42, windowId: 7, url: "https://claude.ai/" }));
+    expect(getImproveButton(container).disabled).toBe(false);
+    expect((container.querySelector(".original-textarea") as HTMLTextAreaElement).value).toBe(
+      "Keep selected text",
+    );
+    await act(async () => getImproveButton(container).click());
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+        payload: expect.objectContaining({
+          text: "Keep selected text",
+          goal: "general",
+          site: undefined,
+        }),
+      }),
+    );
+  });
+
   it("blocks the side-panel toggle until its transferred draft finishes restoring", async () => {
     const close = vi.spyOn(window, "close").mockImplementation(() => {});
     vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);

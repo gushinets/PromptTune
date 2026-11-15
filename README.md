@@ -122,6 +122,10 @@ open with a failure notice. They remain supported; rollback never uses an unsafe
 late `window.close()` fallback. A confirmed failed transfer retires only its own
 recovery intent; if nothing else is pending and no session was accepted, the
 preserved panel immediately shows a fresh editor with the failure notice.
+New panel handoffs remain provisional until the background publisher checks the
+source tab and opening attempt after storage completes. The receiving panel
+waits for that confirmation before replacing its current editor. A short-lived
+receipt in browser-session storage also supports recovery after worker restarts.
 The background worker opens the panel and completes the handoff even if Chrome
 destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
 instead of opening a different draft. After ordinary startup read failures, a

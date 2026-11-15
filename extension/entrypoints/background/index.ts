@@ -3,7 +3,11 @@ import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
-import { openOptimizerPanel, closePanelForRollback } from "@shared/panel-handoff";
+import {
+  openOptimizerPanel,
+  closePanelForRollback,
+  confirmPanelHandoff,
+} from "@shared/panel-handoff";
 import { IMPROVE_OWNER_PORT } from "@shared/messages";
 import type {
   AnalyticsEventName,
@@ -453,6 +457,10 @@ export default defineBackground(() => {
     const msg = raw as Message;
 
     switch (msg.type) {
+      case "CONFIRM_PANEL_HANDOFF": {
+        if (sender.url !== browser.runtime.getURL("sidepanel.html")) return { committed: false };
+        return confirmPanelHandoff(msg.windowId, msg.id);
+      }
       case "CLOSE_PANEL_FOR_ROLLBACK": {
         if (sender.url !== browser.runtime.getURL("sidepanel.html"))
           return { closed: false, current: false };

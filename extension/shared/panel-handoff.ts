@@ -14,6 +14,33 @@ export function panelHandoffKey(windowId: number, transferId: string): string {
 }
 
 const PANEL_INTENT_PREFIX = "optimizer_panel_intent_";
+const PANEL_COMMIT_PREFIX = "optimizer_panel_commit_";
+const pendingPublications = new Map<string, Promise<boolean>>();
+
+export function panelHandoffCommitKey(windowId: number, id: string): string {
+  return `${PANEL_COMMIT_PREFIX}${windowId}_${id}`;
+}
+
+/** A storage event alone is provisional until the publisher finishes checking ownership. */
+export async function confirmPanelHandoff(
+  windowId: number,
+  id: string,
+): Promise<{ committed: boolean }> {
+  if (!Number.isInteger(windowId) || typeof id !== "string" || !id) return { committed: false };
+  const key = panelHandoffCommitKey(windowId, id);
+  const pending = pendingPublications.get(key);
+  if (pending) return { committed: await pending };
+  const browserSessionId = await ensureBrowserSessionId();
+  const data = await browser.storage.session.get(key);
+  const commit = data[key] as { browserSessionId?: unknown; expiresAt?: unknown } | undefined;
+  return {
+    committed:
+      commit?.browserSessionId === browserSessionId &&
+      typeof commit.expiresAt === "number" &&
+      Number.isFinite(commit.expiresAt) &&
+      commit.expiresAt > Date.now(),
+  };
+}
 // Allow a little extra time for a handoff still being published.
 const PANEL_INTENT_LIFETIME_MS = LIMITS.HANDOFF_TTL_MS + 60_000;
 export function panelHandoffIntentPrefix(windowId: number): string {
@@ -34,6 +61,12 @@ export async function expectedPanelHandoffs(
   const pending: Array<{ key: string; expiresAt: number }> = [];
   const obsolete: string[] = [];
   for (const [key, value] of Object.entries(data)) {
+    if (key.startsWith(`${PANEL_COMMIT_PREFIX}${windowId}_`)) {
+      const expiresAt = (value as { expiresAt?: unknown } | null)?.expiresAt;
+      if (typeof expiresAt !== "number" || !Number.isFinite(expiresAt) || expiresAt <= now)
+        obsolete.push(key);
+      continue;
+    }
     if (!key.startsWith(panelHandoffIntentPrefix(windowId))) continue;
     const createdAt = (value as { createdAt?: unknown } | null)?.createdAt;
     if (
@@ -57,6 +90,7 @@ export function panelHandoffIntentKey(windowId: number, id: string): string {
 
 export interface PanelHandoff {
   browserSessionId: string;
+  requiresConfirmation?: true;
   id: string;
   expiresAt: number;
   draft: PopupSessionDraft;
@@ -67,6 +101,7 @@ export function isPanelHandoff(value: unknown, browserSessionId: string): value 
   if (!value || typeof value !== "object") return false;
   const handoff = value as Partial<PanelHandoff>;
   return (
+    (handoff.requiresConfirmation === undefined || handoff.requiresConfirmation === true) &&
     handoff.browserSessionId === browserSessionId &&
     typeof handoff.id === "string" &&
     typeof handoff.expiresAt === "number" &&
@@ -205,6 +240,17 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
   ).sidePanel;
   if (!sidePanel) throw new Error("Side panel unavailable");
   const id = crypto.randomUUID();
+  const handoffKey = panelHandoffKey(message.windowId, id);
+  const commitKey = panelHandoffCommitKey(message.windowId, id);
+  let settlePublication!: (committed: boolean) => void;
+  pendingPublications.set(
+    commitKey,
+    new Promise((resolve) => {
+      settlePublication = resolve;
+    }),
+  );
+  let committed = false;
+  let publicationStarted = false;
   pendingRollbacks.get(message.windowId)?.cleanup();
   openingAttempts.set(message.windowId, id);
   const openedAfter = Date.now();
@@ -242,26 +288,34 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
         throw new Error("Source tab no longer belongs to the target window");
     }
     if (openingAttempts.get(message.windowId) !== id) throw new Error("Panel attempt superseded");
-    const handoffKey = panelHandoffKey(message.windowId, id);
+    publicationStarted = true;
+    const expiresAt = Date.now() + LIMITS.HANDOFF_TTL_MS;
     await setOptimizerHandoff(handoffKey, {
       id,
       browserSessionId,
+      requiresConfirmation: true,
       draft: message.draft,
-      expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+      expiresAt,
     });
     if (sourceChanged || openingAttempts.get(message.windowId) !== id) {
-      // Retire only this publication; a newer transfer owns a different key.
-      await browser.storage.local.remove(handoffKey).catch(() => undefined);
       throw new Error("Source changed or panel attempt superseded during publication");
     }
+    await browser.storage.session.set({ [commitKey]: { browserSessionId, expiresAt } });
+    if (sourceChanged || openingAttempts.get(message.windowId) !== id)
+      throw new Error("Source changed or panel attempt superseded during confirmation");
+    committed = true;
     return { ok: true };
   } catch (error) {
+    settlePublication(false);
     await intent;
-    await clearPanelHandoffIntents([panelHandoffIntentKey(message.windowId, id)]);
+    if (publicationStarted) await browser.storage.local.remove(handoffKey).catch(() => undefined);
+    await clearPanelHandoffIntents([panelHandoffIntentKey(message.windowId, id), commitKey]);
     if (opened && openingAttempts.get(message.windowId) === id)
       requestPanelRollback(message.windowId, openedAfter, id);
     throw error;
   } finally {
+    settlePublication(committed);
+    pendingPublications.delete(commitKey);
     if (openingAttempts.get(message.windowId) === id) openingAttempts.delete(message.windowId);
     browser.tabs.onRemoved.removeListener(onRemoved);
     browser.tabs.onAttached.removeListener(onAttached);

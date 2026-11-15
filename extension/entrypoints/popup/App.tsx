@@ -280,6 +280,9 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         contextRevisionRef.current++;
         layoutTargetRef.current = undefined;
         setLayoutTargetLoading(false);
+        setSiteHostname(undefined);
+        setDetectedAiGoal("general");
+        setSiteResolved(true);
       }
     };
     browser.tabs.onRemoved.addListener(onRemoved);
