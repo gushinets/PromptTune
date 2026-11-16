@@ -132,6 +132,9 @@ New panel handoffs remain provisional until the background publisher checks the
 source tab and opening attempt after storage completes. The receiving panel
 waits for that confirmation before replacing its current editor. A short-lived
 receipt in browser-session storage also supports recovery after worker restarts.
+An unavailable confirmation preserves the handoff payload and offers Retry. A
+live confirmation failure leaves the existing editor mounted, including unsaved
+input; a later confirmed transfer can still replace it.
 The background worker opens the panel and completes the handoff even if Chrome
 destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
 instead of opening a different draft. After ordinary startup read failures, a

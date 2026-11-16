@@ -47,8 +47,8 @@ export function SidepanelApp() {
   const [attempt, setAttempt] = useState(0);
   const [session, setSession] = useState<PanelHandoff>();
   const [ready, setReady] = useState(false);
+  const editorReady = useRef(false);
   useEffect(() => {
-    setReady(false);
     setFailed(false);
     let received = false;
     let preservedFreshEditor = false;
@@ -86,6 +86,8 @@ export function SidepanelApp() {
         if (!active) return;
         const prefix = panelHandoffPrefix(window.id);
         let revision = 0;
+        const confirmingKeys = new Set<string>();
+        const unavailableKeys = new Set<string>();
         const accept = (key: string, value: unknown) => {
           if (
             !active ||
@@ -94,6 +96,13 @@ export function SidepanelApp() {
           )
             return false;
           received = true;
+          // A newer confirmed publication supersedes older unavailable candidates.
+          for (const unavailableKey of unavailableKeys) {
+            if (unavailableKey !== key)
+              void browser.storage.local.remove(unavailableKey).catch(() => undefined);
+            confirmingKeys.delete(unavailableKey);
+          }
+          unavailableKeys.clear();
           recoveryDeadline.current = 0;
           acceptedHandoffId.current = value.id;
           void clearPanelHandoffIntents([
@@ -105,6 +114,7 @@ export function SidepanelApp() {
           setTransferWarning(false);
           setSession(value);
           setFailed(false);
+          editorReady.current = true;
           setReady(true);
           void browser.storage.local.remove(key).catch(() => undefined);
           if (value.requiresConfirmation)
@@ -113,19 +123,41 @@ export function SidepanelApp() {
         };
         let acceptanceQueue = Promise.resolve(false);
         const receive = (key: string, value: PanelHandoff): Promise<boolean> => {
-          // Preserve publication order even when confirmation responses arrive at different times.
+          // Protect the queued publication before startup snapshot cleanup can run.
+          if (value.requiresConfirmation) confirmingKeys.add(key);
           const next = acceptanceQueue.then(async () => {
             if (!active) return false;
-            if (value.requiresConfirmation) {
-              hadStartupFailure.current = true;
-              const result = await browser.runtime
-                .sendMessage({ type: "CONFIRM_PANEL_HANDOFF", windowId: window.id, id: value.id })
-                .catch(() => undefined);
-              if (!(result as { committed?: boolean } | undefined)?.committed) return false;
+            try {
+              if (value.requiresConfirmation) {
+                hadStartupFailure.current = true;
+                const result = await browser.runtime.sendMessage({
+                  type: "CONFIRM_PANEL_HANDOFF",
+                  windowId: window.id,
+                  id: value.id,
+                });
+                if (!active) return false;
+                const committed = (result as { committed?: unknown } | undefined)?.committed;
+                if (typeof committed !== "boolean")
+                  throw new Error("Handoff confirmation unavailable");
+                confirmingKeys.delete(key);
+                unavailableKeys.delete(key);
+                if (!committed) {
+                  void browser.storage.local.remove(key).catch(() => undefined);
+                  return false;
+                }
+              }
+              return accept(key, value);
+            } catch (error) {
+              if (active) {
+                unavailableKeys.add(key);
+                hadStartupFailure.current = true;
+                setFailed(true);
+              }
+              throw error;
             }
-            return accept(key, value);
           });
-          acceptanceQueue = next;
+          // A transient failure must not poison subsequent live publications.
+          acceptanceQueue = next.catch(() => false);
           return next;
         };
         const onChanged = (
@@ -138,7 +170,12 @@ export function SidepanelApp() {
               continue;
             if (retiredHandoffs.current.has(change.newValue.id)) continue;
             revision++;
-            void receive(key, change.newValue);
+            void receive(key, change.newValue)
+              .then((accepted) => {
+                if (active && !accepted && !editorReady.current && confirmingKeys.size === 0)
+                  setFailed(true);
+              })
+              .catch(() => undefined);
           }
         };
         browser.storage.onChanged.addListener(onChanged);
@@ -193,6 +230,7 @@ export function SidepanelApp() {
                       preservedFreshEditor = true;
                       setFreshDraft(emptyDraft());
                       setFailed(false);
+                      editorReady.current = true;
                       setReady(true);
                     }
                   }
@@ -233,15 +271,25 @@ export function SidepanelApp() {
           }
         }
         // Unique keys let us retire this snapshot without deleting a concurrent transfer.
-        const obsolete = pending.map(([key]) => key).filter((key) => key !== acceptedKey);
+        const obsolete = pending
+          .map(([key]) => key)
+          .filter((key) => key !== acceptedKey && !confirmingKeys.has(key));
         if (obsolete.length) await browser.storage.local.remove(obsolete).catch(() => undefined);
         if (active) {
-          if (recoveryDeadline.current > Date.now() && !received) {
+          if (confirmingKeys.size > 0) {
+            if (unavailableKeys.size > 0) setFailed(true);
+          } else if (recoveryDeadline.current > Date.now() && !received) {
             hadStartupFailure.current = true;
             setFailed(true);
           } else {
-            if (hadStartupFailure.current && !received && !preservedFreshEditor)
+            if (
+              hadStartupFailure.current &&
+              !received &&
+              !preservedFreshEditor &&
+              !editorReady.current
+            )
               setFreshDraft(emptyDraft());
+            editorReady.current = true;
             setReady(true);
           }
         }
@@ -257,7 +305,7 @@ export function SidepanelApp() {
       unsubscribe();
     };
   }, [attempt]);
-  if (failed)
+  if (failed && !ready)
     return (
       <main role="alert" className="mode-onboarding">
         <p>{t.errorPanelReadMessage}</p>
@@ -268,6 +316,14 @@ export function SidepanelApp() {
     );
   return ready ? (
     <>
+      {failed && (
+        <aside role="alert" className="mode-onboarding">
+          <p>{t.errorPanelReadMessage}</p>
+          <button className="btn-secondary" onClick={() => setAttempt((value) => value + 1)}>
+            {t.btnRetry}
+          </button>
+        </aside>
+      )}
       {transferWarning && (
         <aside role="alert" className="mode-onboarding">
           {t.errorPanelTransferPreserved}

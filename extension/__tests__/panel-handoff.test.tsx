@@ -1568,3 +1568,118 @@ it("restores the ordinary panel draft when the background has no pending opening
     "Ordinary restored prompt",
   );
 });
+
+it.each([
+  ["startup", "reject"],
+  ["startup", "missing-response"],
+  ["live", "reject"],
+  ["live", "missing-response"],
+] as const)(
+  "keeps an unavailable %s confirmation recoverable on Retry (%s)",
+  async (phase, failure) => {
+    const key = "optimizer_panel_handoff_7_retry-confirmation";
+    const receipt = panelHandoffCommitKey(7, selected.id);
+    await browser.storage.session.set({
+      [receipt]: { browserSessionId: "test-session", expiresAt: Date.now() + 300000 },
+    });
+    const data: Record<string, unknown> = { audience_mode: "ai", library: [] };
+    vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...data }));
+    vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+      Object.assign(data, values);
+    });
+    vi.mocked(browser.storage.local.remove).mockImplementation(async (keys) => {
+      for (const key of [keys].flat()) delete data[key];
+    });
+    if (phase === "live") {
+      await act(async () => root.render(<SidepanelApp />));
+      await act(async () => {
+        const field = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+          field,
+          "Preceding editor",
+        );
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+    const preceding = host.querySelector<HTMLTextAreaElement>(".original-textarea");
+    data[key] = { ...selected, requiresConfirmation: true };
+    const send = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+    let first = true;
+    let finish!: () => void;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      if ((message as { type?: string }).type === "CONFIRM_PANEL_HANDOFF") {
+        if (first) {
+          first = false;
+          if (failure === "missing-response") return undefined;
+          throw new Error("Receipt read unavailable");
+        }
+        return new Promise((resolve) => {
+          finish = () => {
+            resolve(send(message as never));
+          };
+        });
+      }
+      return send(message as never);
+    });
+    if (phase === "startup") await act(async () => root.render(<SidepanelApp />));
+    else await change(key, data[key]);
+    expect(data[key]).toBeDefined();
+    expect(browser.storage.local.remove).not.toHaveBeenCalledWith([key]);
+    const retry = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    );
+    expect(retry).toBeDefined();
+    if (phase === "live") {
+      expect(host.querySelector(".original-textarea")).toBe(preceding);
+      expect(preceding!.value).toBe("Preceding editor");
+    }
+    await act(async () => retry!.click());
+    expect(data[key]).toBeDefined();
+    if (phase === "live") expect(host.querySelector(".original-textarea")).toBe(preceding);
+    await act(async () => finish());
+    expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+    expect(data[key]).toBeUndefined();
+    expect(sessionState[receipt]).toBeUndefined();
+  },
+);
+
+it("accepts the next confirmed live transfer after a confirmation error", async () => {
+  const firstKey = "optimizer_panel_handoff_7_unavailableA";
+  const secondKey = "optimizer_panel_handoff_7_confirmedB";
+  const data: Record<string, unknown> = { audience_mode: "ai", library: [] };
+  vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...data }));
+  vi.mocked(browser.storage.local.remove).mockImplementation(async (keys) => {
+    for (const key of [keys].flat()) delete data[key];
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  const send = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    const msg = message as { type?: string; id?: string };
+    if (msg.type === "CONFIRM_PANEL_HANDOFF" && msg.id === "unavailableA")
+      throw new Error("Confirmation failed");
+    return send(message as never);
+  });
+  data[firstKey] = { ...selected, id: "unavailableA", requiresConfirmation: true };
+  await change(firstKey, data[firstKey]);
+  expect(
+    [...host.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
+  ).toBe(true);
+  await browser.storage.session.set({
+    [panelHandoffCommitKey(7, "confirmedB")]: {
+      browserSessionId: "test-session",
+      expiresAt: Date.now() + 300000,
+    },
+  });
+  data[secondKey] = {
+    ...selected,
+    id: "confirmedB",
+    requiresConfirmation: true,
+    draft: { ...selected.draft, improved: "B result" },
+  };
+  await change(secondKey, data[secondKey]);
+  expect(host.querySelector(".result-screen")?.textContent).toContain("B result");
+  expect(
+    [...host.querySelectorAll("button")].some((button) => button.textContent === "Retry"),
+  ).toBe(false);
+  expect(data[firstKey]).toBeUndefined();
+});
