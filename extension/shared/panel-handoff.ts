@@ -112,7 +112,7 @@ export function isPanelHandoff(value: unknown, browserSessionId: string): value 
 }
 
 const PANEL_ROLLBACK_TTL_MS = 30_000;
-const openingAttempts = new Map<number, string>();
+const openingAttempts = new Map<number, { id: string; expiresAt: number }>();
 const pendingRollbacks = new Map<
   number,
   {
@@ -122,6 +122,27 @@ const pendingRollbacks = new Map<
     cleanup: () => void;
   }
 >();
+
+/** Include opening attempts before their asynchronous intent write becomes visible. */
+export function pendingPanelHandoffs(windowId: number): Array<{ key: string; expiresAt: number }> {
+  if (!Number.isInteger(windowId)) return [];
+  const now = Date.now();
+  const opening = openingAttempts.get(windowId);
+  const rollback = pendingRollbacks.get(windowId);
+  const intents: Array<{ key: string; expiresAt: number }> = [];
+  if (opening && opening.expiresAt > now)
+    intents.push({
+      key: panelHandoffIntentKey(windowId, opening.id),
+      expiresAt: opening.expiresAt,
+    });
+  // A failed attempt may have finished before the panel subscribed to rollback messages.
+  if (rollback && rollback.expiresAt > now)
+    intents.push({
+      key: panelHandoffIntentKey(windowId, rollback.failedHandoffId),
+      expiresAt: rollback.expiresAt,
+    });
+  return intents;
+}
 
 /** Checked in the background after the panel's asynchronous acknowledgement. */
 export function isPanelRollbackCurrent(
@@ -252,8 +273,8 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
   let committed = false;
   let publicationStarted = false;
   pendingRollbacks.get(message.windowId)?.cleanup();
-  openingAttempts.set(message.windowId, id);
   const openedAfter = Date.now();
+  openingAttempts.set(message.windowId, { id, expiresAt: openedAfter + PANEL_INTENT_LIFETIME_MS });
   let sourceChanged = false;
   const onRemoved = (tabId: number) => {
     if (tabId === message.tabId) sourceChanged = true;
@@ -276,7 +297,7 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
     if (failure) throw failure.error;
     const browserSessionId = await ensureBrowserSessionId();
     if (
-      openingAttempts.get(message.windowId) !== id ||
+      openingAttempts.get(message.windowId)?.id !== id ||
       sourceChanged ||
       (message.draft.sourceTabId !== undefined &&
         message.draft.sourceSessionId !== browserSessionId)
@@ -287,7 +308,8 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
       if (source.id !== message.tabId || source.windowId !== message.windowId || sourceChanged)
         throw new Error("Source tab no longer belongs to the target window");
     }
-    if (openingAttempts.get(message.windowId) !== id) throw new Error("Panel attempt superseded");
+    if (openingAttempts.get(message.windowId)?.id !== id)
+      throw new Error("Panel attempt superseded");
     publicationStarted = true;
     const expiresAt = Date.now() + LIMITS.HANDOFF_TTL_MS;
     await setOptimizerHandoff(handoffKey, {
@@ -297,11 +319,11 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
       draft: message.draft,
       expiresAt,
     });
-    if (sourceChanged || openingAttempts.get(message.windowId) !== id) {
+    if (sourceChanged || openingAttempts.get(message.windowId)?.id !== id) {
       throw new Error("Source changed or panel attempt superseded during publication");
     }
     await browser.storage.session.set({ [commitKey]: { browserSessionId, expiresAt } });
-    if (sourceChanged || openingAttempts.get(message.windowId) !== id)
+    if (sourceChanged || openingAttempts.get(message.windowId)?.id !== id)
       throw new Error("Source changed or panel attempt superseded during confirmation");
     committed = true;
     return { ok: true };
@@ -310,13 +332,13 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
     await intent;
     if (publicationStarted) await browser.storage.local.remove(handoffKey).catch(() => undefined);
     await clearPanelHandoffIntents([panelHandoffIntentKey(message.windowId, id), commitKey]);
-    if (opened && openingAttempts.get(message.windowId) === id)
+    if (opened && openingAttempts.get(message.windowId)?.id === id)
       requestPanelRollback(message.windowId, openedAfter, id);
     throw error;
   } finally {
     settlePublication(committed);
     pendingPublications.delete(commitKey);
-    if (openingAttempts.get(message.windowId) === id) openingAttempts.delete(message.windowId);
+    if (openingAttempts.get(message.windowId)?.id === id) openingAttempts.delete(message.windowId);
     browser.tabs.onRemoved.removeListener(onRemoved);
     browser.tabs.onAttached.removeListener(onAttached);
   }

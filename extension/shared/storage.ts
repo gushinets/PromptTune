@@ -35,6 +35,7 @@ export interface PopupSessionDraft {
   improved: string;
   changes: string[];
   goal: ImproveGoal | null;
+  goalIsUserSelected?: boolean;
   lastRequestId: string | null;
   lastRequestContextKey: string | null;
   lastModel: string | null;
@@ -63,6 +64,7 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
   const draft = value as Record<string, unknown>;
   return (
     (draft.saveOnEditOnly === undefined || typeof draft.saveOnEditOnly === "boolean") &&
+    (draft.goalIsUserSelected === undefined || typeof draft.goalIsUserSelected === "boolean") &&
     (draft.audienceMode === undefined ||
       draft.audienceMode === null ||
       draft.audienceMode === "ai" ||

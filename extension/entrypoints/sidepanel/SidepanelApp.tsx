@@ -62,6 +62,14 @@ export function SidepanelApp() {
         const browserSessionId = await ensureBrowserSessionId();
         if (!active) return;
         const intents = await expectedPanelHandoffs(window.id);
+        // The native panel can mount before storage.session.set(intent) finishes.
+        // Query after the storage snapshot so a completed attempt is recovered by
+        // the later local read, and an active opening or rollback blocks restore.
+        const backgroundPending = (await browser.runtime.sendMessage({
+          type: "GET_PENDING_PANEL_HANDOFFS",
+          windowId: window.id,
+        })) as { intents?: Array<{ key: string; expiresAt: number }> } | undefined;
+        if (backgroundPending?.intents) intents.push(...backgroundPending.intents);
         for (const [key, deadline] of knownIntents.current)
           if (deadline <= Date.now()) knownIntents.current.delete(key);
         for (const intent of intents) {

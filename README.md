@@ -85,7 +85,11 @@ toolbar popup still uses the active tab after starting a new prompt. Saved sourc
 after a browser restart or extension reload they cannot resolve a reused tab ID.
 The old result remains available to copy or save; New starts an unbound session
 when reopening from the toolbar. Independent optimizer sessions keep separate
-three-hour drafts, including each session’s audience mode and goal. Legacy goals
+three-hour drafts, including each session’s audience mode, goal, and whether the
+goal was explicitly selected. Auto-detected goals follow source navigation after
+reload; explicit choices remain fixed. Legacy drafts retain their stored choice.
+Submission waits while a relevant source or active-tab context is refreshed;
+unrelated tab updates do not block it. Legacy goals
 are validated against the restored mode before submission. Reopening restores the most recently created live session;
 editing an older window or panel does not replace that choice. Generic toolbar
 or panel restores create independent in-memory session copies. These copies
@@ -112,6 +116,8 @@ stores a one-shot snapshot for the next toolbar popup in the same browser window
 Other panels and explicit selection launches do not consume that snapshot.
 The panel retries a failed initial handoff read once, then offers a Retry action.
 Transfer intent is recorded in browser-session storage before opening the panel.
+At startup the panel also queries the background’s in-flight opening/rollback
+registry, so a delayed intent write cannot expose an unrelated draft.
 Abandoned intents expire after the five-minute handoff lifetime plus a one-minute
 publication margin; Retry can then continue with a fresh editor.
 Rollback requests expire after 30 seconds and are cancelled by a newer opening
@@ -129,8 +135,8 @@ receipt in browser-session storage also supports recovery after worker restarts.
 The background worker opens the panel and completes the handoff even if Chrome
 destroys the calling toolbar popup. If an expected transfer expires or disappears, Retry stays in recovery
 instead of opening a different draft. After ordinary startup read failures, a
-successful Retry without a transfer opens a fresh empty editor. Surface switching stays disabled until draft restore
-finishes. An ended source session has its own Insert
+successful Retry without a transfer opens a fresh empty editor. Surface switching
+stays disabled until draft restore and any in-flight Save finish. An ended source session has its own Insert
 message explaining that Copy and New remain available.
 
 The initial selection draft is committed before its temporary payload is removed.

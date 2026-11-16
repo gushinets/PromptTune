@@ -818,6 +818,284 @@ describe("App", () => {
     );
   });
 
+  it.each(["popup", "sidepanel"] as const)(
+    "blocks %s submission while a relevant source navigation is being resolved",
+    async (viewMode) => {
+      vi.mocked(browser.tabs.get).mockResolvedValue({
+        id: 42,
+        windowId: 7,
+        url: "https://chatgpt.com/",
+      } as never);
+      await act(async () =>
+        root.render(
+          <App
+            viewMode={viewMode}
+            initialSelection={{
+              text: "Selected prompt",
+              sourceTabId: 42,
+              sourceSessionId: "test-session",
+            }}
+          />,
+        ),
+      );
+      const updated = vi.mocked(browser.tabs.onUpdated.addListener).mock.calls.at(-1)![0];
+      const reads = vi.mocked(browser.tabs.get).mock.calls.length;
+      await act(async () => updated(99, { url: "https://claude.ai/" }, { id: 99 } as never));
+      expect(browser.tabs.get).toHaveBeenCalledTimes(reads);
+      expect(getImproveButton(container).disabled).toBe(false);
+      let finish!: (tab: { id: number; windowId: number; url: string }) => void;
+      vi.mocked(browser.tabs.get).mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }) as never,
+      );
+      await act(async () => {
+        updated(42, { url: "https://claude.ai/" }, { id: 42, windowId: 7 } as never);
+        getImproveButton(container).click();
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }),
+        );
+      });
+      try {
+        await act(async () => {
+          getImproveButton(container).click();
+          window.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }),
+          );
+        });
+        expect(getImproveButton(container).disabled).toBe(true);
+        expect(
+          vi
+            .mocked(browser.runtime.sendMessage)
+            .mock.calls.some(([msg]) => (msg as { type?: string }).type === "IMPROVE_REQUEST"),
+        ).toBe(false);
+      } finally {
+        await act(async () => finish({ id: 42, windowId: 7, url: "https://claude.ai/" }));
+      }
+      await act(async () => getImproveButton(container).click());
+      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "IMPROVE_REQUEST",
+          payload: expect.objectContaining({ site: "claude.ai", goal: "claude" }),
+        }),
+      );
+    },
+  );
+
+  it.each(["popup", "sidepanel"] as const)(
+    "waits for Save before switching from %s",
+    async (viewMode) => {
+      const close = vi.spyOn(window, "close").mockImplementation(() => {});
+      const open = vi.fn().mockResolvedValue(undefined);
+      Object.assign(browser, { sidePanel: { open } });
+      vi.mocked(browser.tabs.query).mockResolvedValue([
+        { id: 1, windowId: 7, url: "https://chatgpt.com/" },
+      ] as never);
+      const draft = {
+        activeTab: "improve" as const,
+        original: "Prompt",
+        improved: "Result",
+        changes: [],
+        goal: "general" as const,
+        lastRequestId: "r",
+        lastRequestContextKey: "ai|general|Prompt",
+        lastModel: null,
+        lastLatencyMs: null,
+        attemptN: 1,
+      };
+      await act(async () => root.render(<App viewMode={viewMode} initialDraft={draft} />));
+      let finish!: (value: { prompt_id: string }) => void;
+      const saving = vi.spyOn(apiClient, "savePrompt").mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      await act(async () => {
+        findButton(container, "Save to Library").click();
+        // Also cover the handler guard before React paints the disabled toggle.
+        container.querySelector<HTMLButtonElement>(".layout-toggle-btn")!.click();
+      });
+      try {
+        expect(saving).toHaveBeenCalledOnce();
+        const toggle = container.querySelector<HTMLButtonElement>(".layout-toggle-btn")!;
+        expect(toggle.disabled).toBe(true);
+        await act(async () => {
+          toggle.click();
+          findButton(container, "Save to Library").click();
+        });
+        expect(open).not.toHaveBeenCalled();
+        expect(close).not.toHaveBeenCalled();
+        expect(saving).toHaveBeenCalledOnce();
+        expect(
+          vi
+            .mocked(browser.storage.local.set)
+            .mock.calls.some(([values]) =>
+              Object.keys(values).some((key) => key.startsWith("optimizer_popup_handoff_")),
+            ),
+        ).toBe(false);
+      } finally {
+        await act(async () => finish({ prompt_id: "saved" }));
+      }
+      expect(container.querySelector<HTMLButtonElement>(".layout-toggle-btn")!.disabled).toBe(
+        false,
+      );
+    },
+  );
+
+  it.each(["auto", "structured"] as const)(
+    "preserves %s goal provenance through reload and source navigation",
+    async (choice) => {
+      vi.mocked(browser.tabs.get).mockResolvedValue({
+        id: 42,
+        windowId: 7,
+        url: "https://chatgpt.com/",
+      } as never);
+      await act(async () =>
+        root.render(
+          <App
+            initialSelection={{
+              text: "Selected prompt",
+              sourceTabId: 42,
+              sourceSessionId: "test-session",
+            }}
+          />,
+        ),
+      );
+      if (choice !== "auto") await act(async () => selectGoal(container, choice));
+      const draft = vi
+        .mocked(browser.storage.local.set)
+        .mock.calls.flatMap(([values]) => Object.entries(values))
+        .filter(([key]) => key.startsWith("optimizer_draft_"))
+        .at(-1)![1] as import("../shared/storage").PopupSessionDraft;
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await act(async () => root.render(<App initialDraft={draft} />));
+      vi.mocked(browser.tabs.get).mockResolvedValue({
+        id: 42,
+        windowId: 7,
+        url: "https://claude.ai/",
+      } as never);
+      const updated = vi.mocked(browser.tabs.onUpdated.addListener).mock.calls.at(-1)![0];
+      await act(async () =>
+        updated(42, { url: "https://claude.ai/" }, { id: 42, windowId: 7 } as never),
+      );
+      expect(
+        (
+          container.querySelector(
+            `input[value="${choice === "auto" ? "claude" : choice}"]`,
+          ) as HTMLInputElement
+        ).checked,
+      ).toBe(true);
+      expect(draft).toHaveProperty("goalIsUserSelected", choice !== "auto");
+      await act(async () => getImproveButton(container).click());
+      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "IMPROVE_REQUEST",
+          payload: expect.objectContaining({
+            site: "claude.ai",
+            goal: choice === "auto" ? "claude" : choice,
+          }),
+        }),
+      );
+    },
+  );
+
+  it.each(["navigation", "activation"])(
+    "waits for sidepanel active-tab %s without reacting to another window",
+    async (trigger) => {
+      vi.mocked(browser.tabs.query).mockResolvedValue([
+        { id: 1, windowId: 7, url: "https://chatgpt.com/" },
+      ] as never);
+      await act(async () => root.render(<App viewMode="sidepanel" />));
+      await setOriginalPrompt(container, "Prompt");
+      const updated = vi.mocked(browser.tabs.onUpdated.addListener).mock.calls.at(-1)![0];
+      const activated = vi.mocked(browser.tabs.onActivated.addListener).mock.calls.at(-1)![0];
+      const reads = vi.mocked(browser.tabs.query).mock.calls.length;
+      await act(async () => {
+        updated(99, { url: "https://claude.ai/" }, { id: 99, windowId: 8 } as never);
+        activated({ tabId: 99, windowId: 8 });
+      });
+      expect(browser.tabs.query).toHaveBeenCalledTimes(reads);
+      expect(getImproveButton(container).disabled).toBe(false);
+      let finish!: (tabs: never) => void;
+      vi.mocked(browser.tabs.query).mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }) as never,
+      );
+      await act(async () => {
+        if (trigger === "navigation")
+          updated(1, { url: "https://claude.ai/" }, { id: 1, windowId: 7 } as never);
+        else activated({ tabId: 2, windowId: 7 });
+      });
+      expect(getImproveButton(container).disabled).toBe(true);
+      await act(async () =>
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true }),
+        ),
+      );
+      expect(
+        vi
+          .mocked(browser.runtime.sendMessage)
+          .mock.calls.some(([msg]) => (msg as { type?: string }).type === "IMPROVE_REQUEST"),
+      ).toBe(false);
+      await act(async () =>
+        finish([
+          { id: trigger === "navigation" ? 1 : 2, windowId: 7, url: "https://claude.ai/" },
+        ] as never),
+      );
+      await act(async () => getImproveButton(container).click());
+      expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "IMPROVE_REQUEST",
+          payload: expect.objectContaining({ goal: "claude", site: "claude.ai" }),
+        }),
+      );
+    },
+  );
+
+  it("re-resolves a newly active tab if it navigates before its first query returns", async () => {
+    vi.mocked(browser.tabs.query).mockResolvedValue([
+      { id: 1, windowId: 7, url: "https://chatgpt.com/" },
+    ] as never);
+    await act(async () => root.render(<App viewMode="sidepanel" />));
+    await setOriginalPrompt(container, "Prompt");
+    let finishOld!: (value: never) => void;
+    let finishNew!: (value: never) => void;
+    vi.mocked(browser.tabs.query)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishOld = resolve;
+        }) as never,
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishNew = resolve;
+        }) as never,
+      );
+    const activated = vi.mocked(browser.tabs.onActivated.addListener).mock.calls.at(-1)![0];
+    const updated = vi.mocked(browser.tabs.onUpdated.addListener).mock.calls.at(-1)![0];
+    await act(async () => activated({ tabId: 2, windowId: 7 }));
+    const reads = vi.mocked(browser.tabs.query).mock.calls.length;
+    await act(async () =>
+      updated(2, { url: "https://claude.ai/" }, { id: 2, windowId: 7, active: true } as never),
+    );
+    expect(browser.tabs.query).toHaveBeenCalledTimes(reads + 1);
+    await act(async () =>
+      finishOld([{ id: 2, windowId: 7, url: "https://chatgpt.com/" }] as never),
+    );
+    expect(getImproveButton(container).disabled).toBe(true);
+    await act(async () => finishNew([{ id: 2, windowId: 7, url: "https://claude.ai/" }] as never));
+    await act(async () => getImproveButton(container).click());
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+        payload: expect.objectContaining({ site: "claude.ai", goal: "claude" }),
+      }),
+    );
+  });
+
   it("blocks the side-panel toggle until its transferred draft finishes restoring", async () => {
     const close = vi.spyOn(window, "close").mockImplementation(() => {});
     vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);

@@ -7,6 +7,7 @@ import {
   openOptimizerPanel,
   closePanelForRollback,
   confirmPanelHandoff,
+  pendingPanelHandoffs,
 } from "@shared/panel-handoff";
 import { IMPROVE_OWNER_PORT } from "@shared/messages";
 import type {
@@ -457,6 +458,10 @@ export default defineBackground(() => {
     const msg = raw as Message;
 
     switch (msg.type) {
+      case "GET_PENDING_PANEL_HANDOFFS": {
+        if (sender.url !== browser.runtime.getURL("sidepanel.html")) return { intents: [] };
+        return { intents: pendingPanelHandoffs(msg.windowId) };
+      }
       case "CONFIRM_PANEL_HANDOFF": {
         if (sender.url !== browser.runtime.getURL("sidepanel.html")) return { committed: false };
         return confirmPanelHandoff(msg.windowId, msg.id);

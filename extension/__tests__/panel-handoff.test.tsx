@@ -1403,3 +1403,168 @@ it("does not accept a receipt before the publisher finishes its final ownership 
     cleanup();
   });
 });
+
+it.each(["success", "failure"])(
+  "blocks unrelated restore while an opening intent write is pending, then handles %s",
+  async (outcome) => {
+    const handoffs = await import("../shared/panel-handoff");
+    Object.assign(browser, { sidePanel: { open: vi.fn().mockResolvedValue(undefined) } });
+    vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 7 } as never);
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      audience_mode: "ai",
+      library: [],
+      optimizer_draft_other: {
+        ...selected.draft,
+        original: "Unrelated B",
+        draftSessionId: "b",
+        draftCreatedAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    });
+    vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+      const entry = Object.entries(values).find(([key]) =>
+        key.startsWith("optimizer_panel_handoff_"),
+      );
+      if (entry)
+        vi.mocked(browser.storage.onChanged.addListener).mock.calls.at(-1)![0](
+          { [entry[0]]: { newValue: entry[1] } },
+          "local",
+        );
+    });
+    let releaseIntent!: () => void;
+    vi.mocked(browser.storage.session.set).mockImplementation(async (values) => {
+      if (Object.keys(values).some((key) => key.startsWith("optimizer_panel_intent_"))) {
+        await new Promise<void>((resolve) => {
+          releaseIntent = resolve;
+        });
+        if (outcome === "failure") throw new Error("Intent write failed");
+      }
+      Object.assign(sessionState, values);
+    });
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      const msg = message as {
+        type: string;
+        windowId: number;
+        id: string;
+        requestId: string;
+        failedHandoffId: string;
+      };
+      if (msg.type === "GET_PENDING_PANEL_HANDOFFS")
+        return { intents: handoffs.pendingPanelHandoffs(msg.windowId) };
+      if (msg.type === "CONFIRM_PANEL_HANDOFF")
+        return handoffs.confirmPanelHandoff(msg.windowId, msg.id);
+      if (msg.type === "CLOSE_PANEL_FOR_ROLLBACK")
+        return handoffs.closePanelForRollback(msg.windowId, msg.requestId, msg.failedHandoffId);
+      if (msg.type === "PANEL_HANDOFF_FAILED") {
+        // The rollback retry listener is registered immediately after the panel receiver.
+        const panelListener = vi
+          .mocked(browser.runtime.onMessage.addListener)
+          .mock.calls.at(-2)![0];
+        return panelListener(message, {} as never, vi.fn());
+      }
+      return { ok: true };
+    });
+    const publication = handoffs.openOptimizerPanel({
+      type: "OPEN_OPTIMIZER_PANEL",
+      windowId: 7,
+      tabId: 42,
+      draft: selected.draft as never,
+    });
+    const settled = publication.catch((error: unknown) => error);
+    try {
+      await act(async () => root.render(<SidepanelApp />));
+      expect(host.querySelector(".popup-container")).toBeNull();
+      expect(host.querySelector(".original-textarea")).toBeNull();
+      await act(async () => {
+        releaseIntent();
+        await settled;
+      });
+      if (outcome === "success") {
+        expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+      } else {
+        expect(host.querySelector<HTMLTextAreaElement>(".original-textarea")?.value).toBe("");
+        expect(host.querySelector('[role="alert"]')?.textContent).toContain("previous session");
+      }
+      expect(host.textContent).not.toContain("Unrelated B");
+    } finally {
+      releaseIntent();
+      await act(async () => {
+        await settled;
+      });
+      await act(async () => {
+        const cleanup = handoffs.requestPanelRollback(7, Date.now(), "test-cleanup");
+        cleanup();
+      });
+    }
+  },
+);
+
+it("waits for an opening failure retained before the panel subscribed", async () => {
+  const handoffs = await import("../shared/panel-handoff");
+  Object.assign(browser, { sidePanel: { open: vi.fn().mockResolvedValue(undefined) } });
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    optimizer_draft_other: {
+      ...selected.draft,
+      original: "Unrelated B",
+      draftSessionId: "b",
+      draftCreatedAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+  });
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    const msg = message as {
+      type: string;
+      windowId: number;
+      requestId: string;
+      failedHandoffId: string;
+    };
+    if (msg.type === "GET_PENDING_PANEL_HANDOFFS")
+      return { intents: handoffs.pendingPanelHandoffs(msg.windowId) };
+    if (msg.type === "CLOSE_PANEL_FOR_ROLLBACK")
+      return handoffs.closePanelForRollback(msg.windowId, msg.requestId, msg.failedHandoffId);
+    return { ok: true };
+  });
+  const cleanup = handoffs.requestPanelRollback(7, 0, "failed-before-mount");
+  const failure = vi.mocked(browser.runtime.sendMessage).mock.calls.at(-1)![0];
+  try {
+    await act(async () => root.render(<SidepanelApp />));
+    expect(host.querySelector(".popup-container")).toBeNull();
+    const receiver = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+    await act(async () => {
+      await receiver(failure, {} as never, vi.fn());
+    });
+    expect(host.querySelector<HTMLTextAreaElement>(".original-textarea")?.value).toBe("");
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("previous session");
+    expect(host.textContent).not.toContain("Unrelated B");
+  } finally {
+    cleanup();
+  }
+});
+
+it("restores the ordinary panel draft when the background has no pending opening", async () => {
+  const { pendingPanelHandoffs } = await import("../shared/panel-handoff");
+  vi.mocked(browser.storage.local.get).mockResolvedValue({
+    audience_mode: "ai",
+    library: [],
+    optimizer_draft_other: {
+      ...selected.draft,
+      optimizer_screen: "input",
+      original: "Ordinary restored prompt",
+      draftSessionId: "ordinary",
+      draftCreatedAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+  });
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    const msg = message as { type: string; windowId: number };
+    return msg.type === "GET_PENDING_PANEL_HANDOFFS"
+      ? { intents: pendingPanelHandoffs(msg.windowId) }
+      : { ok: true };
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  expect(host.querySelector<HTMLTextAreaElement>(".original-textarea")?.value).toBe(
+    "Ordinary restored prompt",
+  );
+});
