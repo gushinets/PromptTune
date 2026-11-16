@@ -85,7 +85,6 @@ export function SidepanelApp() {
         recoveryDeadline.current = Math.max(0, ...knownIntents.current.values());
         if (!active) return;
         const prefix = panelHandoffPrefix(window.id);
-        let revision = 0;
         const confirmingKeys = new Set<string>();
         const unavailableKeys = new Set<string>();
         const accept = (key: string, value: unknown) => {
@@ -169,7 +168,6 @@ export function SidepanelApp() {
             if (!key.startsWith(prefix) || !isPanelHandoff(change.newValue, browserSessionId))
               continue;
             if (retiredHandoffs.current.has(change.newValue.id)) continue;
-            revision++;
             void receive(key, change.newValue)
               .then((accepted) => {
                 if (active && !accepted && !editorReady.current && confirmingKeys.size === 0)
@@ -249,7 +247,6 @@ export function SidepanelApp() {
         void browser.runtime
           .sendMessage({ type: "PANEL_READY", windowId: window.id })
           .catch(() => undefined);
-        const initialRevision = revision;
         let data: Record<string, unknown>;
         try {
           data = await readLocalEntries((key) => key.startsWith(prefix));
@@ -258,23 +255,34 @@ export function SidepanelApp() {
         }
         if (!active) return;
         const pending = Object.entries(data).filter(([key]) => key.startsWith(prefix));
+        const candidates = pending
+          .filter(
+            (entry): entry is [string, PanelHandoff] =>
+              isPanelHandoff(entry[1], browserSessionId) &&
+              !retiredHandoffs.current.has(entry[1].id),
+          )
+          .sort((a, b) => b[1].expiresAt - a[1].expiresAt);
         let acceptedKey: string | undefined;
-        if (revision === initialRevision) {
-          const newest = pending
-            .filter(
-              (entry): entry is [string, PanelHandoff] =>
-                isPanelHandoff(entry[1], browserSessionId) &&
-                !retiredHandoffs.current.has(entry[1].id),
-            )
-            .sort((a, b) => b[1].expiresAt - a[1].expiresAt)[0];
-          if (newest) {
-            if (await receive(...newest)) acceptedKey = newest[0];
-          }
+        while (true) {
+          // A provisional event supersedes the snapshot only after acceptance.
+          // Reconcile live events between snapshot candidates and before cleanup.
+          let settledQueue: Promise<boolean>;
+          do {
+            settledQueue = acceptanceQueue;
+            await settledQueue;
+            if (!active) return;
+          } while (settledQueue !== acceptanceQueue);
+          if (received || confirmingKeys.size > 0) break;
+          const candidate = candidates.shift();
+          if (!candidate) break;
+          if (await receive(...candidate)) acceptedKey = candidate[0];
         }
         // Retry can deactivate this attempt while confirmation is pending, too.
         if (!active) return;
+        const preserveSnapshot = !received && confirmingKeys.size > 0;
         // Unique keys let us retire this snapshot without deleting a concurrent transfer.
         const obsolete = pending
+          .filter(([, value]) => !preserveSnapshot || !isPanelHandoff(value, browserSessionId))
           .map(([key]) => key)
           .filter((key) => key !== acceptedKey && !confirmingKeys.has(key));
         if (obsolete.length) await browser.storage.local.remove(obsolete).catch(() => undefined);

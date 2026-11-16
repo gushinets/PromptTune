@@ -197,6 +197,117 @@ it("does not let cleanup deletion events discard a live handoff during startup",
   expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
 });
 
+it.each(["rejected", "accepted", "unavailable"])(
+  "reconciles a committed startup handoff after a newer live transfer is %s",
+  async (outcome) => {
+    const key = "optimizer_panel_handoff_7_committedA";
+    const data: Record<string, unknown> = {
+      audience_mode: "ai",
+      library: [],
+      [key]: { ...selected, requiresConfirmation: true },
+    };
+    await browser.storage.session.set({
+      [panelHandoffCommitKey(7, selected.id)]: {
+        browserSessionId: "test-session",
+        expiresAt: Date.now() + 300000,
+      },
+    });
+    let finishRead!: () => void;
+    let firstRead = true;
+    vi.mocked(browser.storage.local.get).mockImplementation(async (keys) => {
+      if (keys === null && firstRead) {
+        firstRead = false;
+        return new Promise((resolve) => (finishRead = () => resolve({ ...data })));
+      }
+      return { ...data };
+    });
+    vi.mocked(browser.storage.local.remove).mockImplementation(async (keys) => {
+      for (const key of [keys].flat()) delete data[key];
+    });
+    const send = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+    let finishConfirmation!: () => void;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      const msg = message as { type?: string; id?: string };
+      if (msg.type === "CONFIRM_PANEL_HANDOFF" && msg.id === "provisionalB")
+        return new Promise((resolve, reject) => {
+          finishConfirmation = () => {
+            if (outcome === "unavailable") reject(new Error("Confirmation unavailable"));
+            else resolve({ committed: outcome === "accepted" });
+          };
+        });
+      return send(message as never);
+    });
+    await act(async () => root.render(<SidepanelApp />));
+    await change("optimizer_panel_handoff_7_provisionalB", {
+      ...selected,
+      id: "provisionalB",
+      requiresConfirmation: true,
+      draft: { ...selected.draft, improved: "B result" },
+    });
+    await act(async () => finishRead());
+    expect(data[key]).toBeDefined();
+    expect(host.querySelector(".result-screen")).toBeNull();
+    await act(async () => finishConfirmation());
+    if (outcome === "unavailable") {
+      expect(data[key]).toBeDefined();
+      expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Retry")).toBe(
+        true,
+      );
+    } else {
+      expect(host.querySelector(".result-screen")?.textContent).toContain(
+        outcome === "accepted" ? "B result" : "Improved selection",
+      );
+    }
+  },
+);
+
+it("preserves a fallback snapshot when an intervening live confirmation is unavailable", async () => {
+  const key = "optimizer_panel_handoff_7_committedA";
+  const liveKey = "optimizer_panel_handoff_7_unavailableB";
+  const data: Record<string, unknown> = {
+    audience_mode: "ai",
+    library: [],
+    [key]: { ...selected, requiresConfirmation: true },
+    optimizer_panel_handoff_7_rejectedX: {
+      ...selected,
+      id: "rejectedX",
+      requiresConfirmation: true,
+      expiresAt: selected.expiresAt + 1,
+    },
+  };
+  await browser.storage.session.set({
+    [panelHandoffCommitKey(7, selected.id)]: {
+      browserSessionId: "test-session",
+      expiresAt: Date.now() + 300000,
+    },
+  });
+  vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...data }));
+  vi.mocked(browser.storage.local.remove).mockImplementation(async (keys) => {
+    for (const key of [keys].flat()) delete data[key];
+  });
+  const send = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+  let rejectSnapshot!: () => void;
+  let failLive!: () => void;
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    const msg = message as { type?: string; id?: string };
+    if (msg.type === "CONFIRM_PANEL_HANDOFF" && msg.id === "rejectedX")
+      return new Promise((resolve) => (rejectSnapshot = () => resolve({ committed: false })));
+    if (msg.type === "CONFIRM_PANEL_HANDOFF" && msg.id === "unavailableB")
+      return new Promise((_, reject) => (failLive = () => reject(new Error("Unavailable"))));
+    return send(message as never);
+  });
+  await act(async () => root.render(<SidepanelApp />));
+  data[liveKey] = { ...selected, id: "unavailableB", requiresConfirmation: true };
+  await change(liveKey, data[liveKey]);
+  await act(async () => rejectSnapshot());
+  expect(data[key]).toBeDefined();
+  await act(async () => failLive());
+  expect(data[key]).toBeDefined();
+  expect(data[liveKey]).toBeDefined();
+  expect(host.querySelector(".result-screen")).toBeNull();
+  expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Retry")).toBe(true);
+});
+
 it("retries the initial read to recover a handoff written before subscription", async () => {
   vi.mocked(browser.storage.local.get).mockRejectedValueOnce(new Error("temporary read failure"));
   vi.mocked(browser.storage.local.get).mockResolvedValue({
