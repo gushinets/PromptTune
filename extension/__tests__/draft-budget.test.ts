@@ -260,7 +260,10 @@ it("restores a validated popup handoff even when consuming its key fails", async
 
 it("keeps a committed handoff successful when draft cleanup fails, then retries eviction on the next save", async () => {
   for (let i = 1; i <= 10; i++) await setPopupSessionDraft(draft(String(i)));
-  state.optimizer_draft_0 = { ...draft("0"), updatedAt: Date.now() - 1 };
+  const oldestUpdatedAt = Math.min(
+    ...Object.values(state).map((value) => (value as { updatedAt: number }).updatedAt),
+  );
+  state.optimizer_draft_0 = { ...draft("0"), updatedAt: oldestUpdatedAt - 1 };
   vi.mocked(browser.storage.local.remove).mockRejectedValueOnce(new Error("Cleanup failed"));
   await expect(
     setOptimizerHandoff("optimizer_selection_a", { text: "Committed selection" }),

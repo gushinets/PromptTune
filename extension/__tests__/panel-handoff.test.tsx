@@ -1569,6 +1569,56 @@ it("restores the ordinary panel draft when the background has no pending opening
   );
 });
 
+it("does not let an inactive startup read delete a new handoff after Retry", async () => {
+  const key = "optimizer_panel_handoff_7_after-retry";
+  const data: Record<string, unknown> = { audience_mode: "ai", library: [] };
+  let finishOldRead!: () => void;
+  let finishRetryRead!: () => void;
+  const getKeys = vi
+    .fn()
+    .mockImplementationOnce(
+      () => new Promise<string[]>((resolve) => (finishOldRead = () => resolve(Object.keys(data)))),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<string[]>((resolve) => (finishRetryRead = () => resolve(Object.keys(data)))),
+    )
+    .mockImplementation(async () => Object.keys(data));
+  Object.assign(browser.storage.local, { getKeys });
+  vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...data }));
+  vi.mocked(browser.storage.local.remove).mockImplementation(async (keys) => {
+    for (const key of [keys].flat()) delete data[key];
+  });
+  const send = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+    if ((message as { type?: string }).type === "CONFIRM_PANEL_HANDOFF")
+      throw new Error("Confirmation temporarily unavailable");
+    return send(message as never);
+  });
+  try {
+    await act(async () => root.render(<SidepanelApp />));
+    expect(finishOldRead).toBeDefined();
+    await change("optimizer_panel_handoff_7_failed", {
+      ...selected,
+      id: "failed",
+      requiresConfirmation: true,
+    });
+    const retry = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    );
+    await act(async () => retry!.click());
+    expect(finishRetryRead).toBeDefined();
+    // Publication happens after the old listener was removed and before the new read resolves.
+    data[key] = selected;
+    await act(async () => finishOldRead());
+    expect(data[key]).toBeDefined();
+    await act(async () => finishRetryRead());
+    expect(host.querySelector(".result-screen")?.textContent).toContain("Improved selection");
+  } finally {
+    Reflect.deleteProperty(browser.storage.local, "getKeys");
+  }
+});
+
 it.each([
   ["startup", "reject"],
   ["startup", "missing-response"],

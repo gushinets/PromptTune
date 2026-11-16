@@ -256,6 +256,7 @@ export function SidepanelApp() {
         } catch {
           data = await readLocalEntries((key) => key.startsWith(prefix));
         }
+        if (!active) return;
         const pending = Object.entries(data).filter(([key]) => key.startsWith(prefix));
         let acceptedKey: string | undefined;
         if (revision === initialRevision) {
@@ -270,6 +271,8 @@ export function SidepanelApp() {
             if (await receive(...newest)) acceptedKey = newest[0];
           }
         }
+        // Retry can deactivate this attempt while confirmation is pending, too.
+        if (!active) return;
         // Unique keys let us retire this snapshot without deleting a concurrent transfer.
         const obsolete = pending
           .map(([key]) => key)
