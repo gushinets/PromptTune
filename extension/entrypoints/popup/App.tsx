@@ -348,7 +348,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   useEffect(() => {
     Promise.all([
-      getAudienceMode(),
+      // The global preference must not block restoration of a transferred draft.
+      getAudienceMode().catch(() => null),
       initialSelection
         ? Promise.resolve(null)
         : initialDraft

@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { App } from "../entrypoints/popup/App";
+import type { PopupSessionDraft } from "../shared/storage";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -70,6 +71,57 @@ afterEach(async () => {
   host.remove();
   vi.restoreAllMocks();
 });
+
+it.each(["popup", "sidepanel"] as const)(
+  "restores and saves a transferred draft despite an audience-mode read failure (%s)",
+  async (viewMode) => {
+    const draft: PopupSessionDraft = {
+      draftSessionId: "transferred-result",
+      draftCreatedAt: Date.now(),
+      sourceTabId: 42,
+      sourceSessionId: "test-session",
+      audienceMode: "ai",
+      optimizer_screen: "result",
+      result_context: { mode: "ai", goal: "general" },
+      activeTab: "improve",
+      original: "Transferred original",
+      improved: "Transferred result",
+      changes: ["Preserved change"],
+      goal: "general",
+      goalIsUserSelected: true,
+      lastRequestId: "transferred-request",
+      lastRequestContextKey: "ai|general|Transferred original",
+      lastModel: "test-model",
+      lastLatencyMs: 123,
+      attemptN: 2,
+    };
+    const key = "optimizer_draft_transferred-result";
+    const state: Record<string, unknown> = {
+      audience_mode: "ai",
+      library: [],
+      [key]: { ...draft, updatedAt: Date.now() },
+    };
+    vi.mocked(browser.storage.local.get).mockImplementation(async (keys) => {
+      if (keys === "audience_mode") throw new Error("Mode read unavailable");
+      return { ...state };
+    });
+    vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
+      Object.assign(state, values);
+    });
+    await act(async () => {
+      root.render(<App key="transferred" viewMode={viewMode} initialDraft={draft} />);
+    });
+    expect(host.querySelector(".result-screen")?.textContent).toContain("Transferred result");
+    expect(host.textContent).toContain("Preserved change");
+    expect(state[key]).toMatchObject(draft);
+    const writes = vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.map(([values]) => values[key])
+      .filter(Boolean);
+    expect(writes.length).toBeGreaterThan(0);
+    for (const written of writes) expect(written).toMatchObject(draft);
+  },
+);
 
 it("shows input, processing and result screens with edit and new actions", async () => {
   let finish!: (value: unknown) => void;
