@@ -173,6 +173,14 @@ multiline text and emoji. Verify the original field, Improve, and Copy. On a
 supported AI site, also check Insert. Repeat with a saved result/library open and
 with two selections opened in quick succession.
 
+For Firefox, install the packaged build persistently in a dedicated test profile
+(a temporary `about:debugging` installation is removed on restart). Verify the
+selection menu, fully quit Firefox, reopen the same profile, and verify that
+**Prompt Optimizer** still appears once and opens the exact selected text.
+Repeat after disabling and re-enabling the extension. Firefox MV2 uses a
+persistent background page, so its menu is registered on each background load;
+install/update registration shares the same guard to avoid duplicate creation.
+
 #### Run extension tests
 
 ```bash

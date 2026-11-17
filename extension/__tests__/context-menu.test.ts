@@ -17,7 +17,30 @@ beforeEach(async () => {
   const { default: main } = await import("../entrypoints/background/index");
   (main as unknown as () => void)();
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+it("registers the menu on every Firefox persistent background load without install-event duplicates", async () => {
+  vi.stubEnv("FIREFOX", "true");
+  const { default: main } = await import("../entrypoints/background/index");
+  vi.mocked(browser.contextMenus.create).mockClear();
+  for (let boot = 1; boot <= 2; boot++) {
+    (main as unknown as () => void)();
+    expect(browser.contextMenus.create).toHaveBeenCalledTimes(boot);
+    expect(browser.contextMenus.create).toHaveBeenLastCalledWith({
+      id: "optimize-selection",
+      title: "Prompt Optimizer",
+      contexts: ["selection"],
+    });
+    const installed = vi.mocked(browser.runtime.onInstalled.addListener).mock.calls.at(-1)![0];
+    await installed({ reason: "update" } as never);
+    expect(browser.contextMenus.create).toHaveBeenCalledTimes(boot);
+  }
+});
+it("does not recreate the Chrome menu on background worker startup", () => {
+  expect(browser.contextMenus.create).not.toHaveBeenCalled();
+});
 it.each(["install", "update"])("registers the selection-only menu on %s", async (reason) => {
   const installed = vi.mocked(browser.runtime.onInstalled.addListener).mock.calls.at(-1)![0];
   await installed({ reason } as never);

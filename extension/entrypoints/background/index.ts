@@ -421,12 +421,21 @@ export default defineBackground(() => {
     if (alarm.name === SELECTION_CLEANUP_ALARM) await cleanupSelections();
   });
 
-  browser.runtime.onInstalled.addListener(async (details) => {
+  let selectionMenuRegistered = false;
+  const registerSelectionMenu = () => {
+    if (selectionMenuRegistered) return;
     browser.contextMenus.create({
       id: SELECTION_MENU_ID,
       title: "Prompt Optimizer",
       contexts: ["selection"],
     });
+    selectionMenuRegistered = true;
+  };
+  // Firefox MV2's persistent background does not retain menus across restarts.
+  if (import.meta.env.FIREFOX) registerSelectionMenu();
+
+  browser.runtime.onInstalled.addListener(async (details) => {
+    registerSelectionMenu();
     await cleanupSelections();
     if (details.reason !== "install") return;
 
