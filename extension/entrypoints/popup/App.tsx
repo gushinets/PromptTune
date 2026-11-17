@@ -10,6 +10,7 @@ import { Library } from "./components/Library";
 import { ErrorToast } from "./components/ErrorToast";
 import { RatingBar } from "./components/RatingBar";
 import {
+  type PopupSessionDraft,
   getAll,
   LibraryStorageError,
   save,
@@ -18,6 +19,7 @@ import {
   getPopupSessionDraft,
   setAudienceMode,
   setPopupSessionDraft,
+  preferPopupSessionDraft,
 } from "@shared/storage";
 import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
@@ -37,6 +39,9 @@ import type {
   PromptInputLimit,
   OptimizerRequestContext,
 } from "@shared/types";
+
+import { resolveBrowserTarget } from "@shared/browser-target";
+import { getSelectionSessionId, type PromptSelection } from "@shared/selection";
 
 const RATE_LIMIT_TOOLTIP_ID = "rate-limit-tooltip";
 const SUPPORTED_AI_SITE_HOSTS = ["chatgpt.com", "claude.ai", "perplexity.ai"] as const;
@@ -117,12 +122,55 @@ function LayoutSidebarRightIcon({
 interface AppProps {
   /** Whether the App is rendered inside the Chrome side panel. Defaults to false (popup). */
   viewMode?: ViewMode;
+  initialSelection?: PromptSelection;
+  initialDraft?: PopupSessionDraft;
 }
 
-export function App({ viewMode = "popup" }: AppProps) {
+/** Shared optimizer UI; a selected session keeps its source tab across surface changes. */
+export function App({ viewMode = "popup", initialSelection, initialDraft }: AppProps) {
   const t = useT();
+  const [isSelectionLaunch] = useState(
+    () => viewMode === "popup" && new URLSearchParams(window.location.search).has("selection"),
+  );
+  const selectionLaunchFailed = isSelectionLaunch && !initialSelection && !initialDraft;
+  const [saveOnEditOnly, setSaveOnEditOnly] = useState(initialDraft?.saveOnEditOnly ?? false);
+  const maySaveSelectionDraftRef = useRef(!selectionLaunchFailed);
+  const [draftSessionId, setDraftSessionId] = useState(
+    () =>
+      initialSelection?.draftSessionId ??
+      initialDraft?.draftSessionId ??
+      (viewMode === "popup" ? getSelectionSessionId(window.location.search) : undefined) ??
+      crypto.randomUUID(),
+  );
+  const [draftCreatedAt, setDraftCreatedAt] = useState(
+    () => initialSelection?.draftCreatedAt ?? initialDraft?.draftCreatedAt ?? Date.now(),
+  );
   const [activeTab, setActiveTab] = useState<TabId>("improve");
-  const [original, setOriginal] = useState("");
+  const [original, setOriginal] = useState(initialSelection?.text ?? "");
+  const [sourceTabId, setSourceTabId] = useState(
+    initialSelection?.sourceTabId ?? initialDraft?.sourceTabId,
+  );
+  const [sourceSessionId, setSourceSessionId] = useState(
+    initialSelection?.sourceSessionId ?? initialDraft?.sourceSessionId,
+  );
+  // A standalone window's target survives New independently of the current prompt binding.
+  const [standaloneTarget, setStandaloneTarget] = useState<PopupSessionDraft["standaloneTarget"]>(
+    () =>
+      initialSelection?.sourceTabId !== undefined
+        ? { tabId: initialSelection.sourceTabId, sessionId: initialSelection.sourceSessionId }
+        : (initialDraft?.standaloneTarget ??
+          (isSelectionLaunch && initialDraft?.sourceTabId !== undefined
+            ? { tabId: initialDraft.sourceTabId, sessionId: initialDraft.sourceSessionId }
+            : undefined)),
+  );
+  const isStandaloneWindow = isSelectionLaunch || initialSelection !== undefined;
+  const targetTabId = sourceTabId ?? (isStandaloneWindow ? standaloneTarget?.tabId : undefined);
+  const targetSessionId =
+    sourceTabId !== undefined
+      ? sourceSessionId
+      : isStandaloneWindow
+        ? standaloneTarget?.sessionId
+        : undefined;
   const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
   );
@@ -130,6 +178,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   const hasAuthoritativeInputLimitRef = useRef(false);
   const inputLimitRevisionRef = useRef(0);
   const saveInFlightRef = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -186,7 +235,6 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [changes, setChanges] = useState<string[]>([]);
   const [audienceMode, setAudienceModeState] = useState<AudienceMode | null>(null);
   const [modeReady, setModeReady] = useState(false);
-  const [detectedAiGoal, setDetectedAiGoal] = useState<AiImproveGoal>("general");
   const [goal, setGoal] = useState<ImproveGoal>("general");
   const [processingContext, setProcessingContext] = useState<OptimizerRequestContext | null>(null);
   const [resultContext, setResultContext] = useState<OptimizerRequestContext | null>(null);
@@ -196,55 +244,141 @@ export function App({ viewMode = "popup" }: AppProps) {
   const [editingOriginal, setEditingOriginal] = useState(false);
   const activeRequestRef = useRef<string | null>(null);
   const activeOwnerRef = useRef<ImproveOwner | null>(null);
-  const [error, setError] = useState<ErrorInfo | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(() =>
+    selectionLaunchFailed ? { type: "generic", message: t.errorSelectionUnavailable } : null,
+  );
   const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
   const [limitsLoaded, setLimitsLoaded] = useState(false);
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showProComingSoon, setShowProComingSoon] = useState(false);
-  const [siteHostname, setSiteHostname] = useState<string | undefined>(undefined);
-  const [siteResolved, setSiteResolved] = useState(false);
+  const [siteContext, setSiteContext] = useState<{
+    hostname?: string;
+    goal: AiImproveGoal;
+    resolved: boolean;
+    revision: number;
+  }>({ goal: "general", resolved: false, revision: 0 });
+  const { hostname: siteHostname, goal: detectedAiGoal, resolved: siteResolved } = siteContext;
+  const [layoutTargetLoading, setLayoutTargetLoading] = useState(true);
   const [lastRequestId, setLastRequestId] = useState<string | null>(null);
   const [lastRequestContextKey, setLastRequestContextKey] = useState<string | null>(null);
   const [lastModel, setLastModel] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
   const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
-  const hasUserSelectedGoalRef = useRef(false);
+  const [goalIsUserSelected, setGoalIsUserSelected] = useState(false);
   const hasTrackedPopupOpenedRef = useRef(false);
 
   const refreshLibraryCount = useCallback(() => {
     getAll().then((entries) => setLibraryCount(entries.length));
   }, []);
 
+  const layoutTargetRef = useRef<
+    { tab: browser.Tabs.Tab; id?: number; session?: string } | undefined
+  >(undefined);
+  const contextRevisionRef = useRef(0);
+  const siteContextPendingRef = useRef(true);
+  const pendingActiveTabRef = useRef<{ tabId: number; windowId: number } | undefined>(undefined);
+  const sourceContextReady =
+    siteResolved &&
+    (!audienceMode ||
+      goalIsUserSelected ||
+      goal === defaultGoalForMode(audienceMode, detectedAiGoal));
+
+  useEffect(() => {
+    const onRemoved = (tabId: number) => {
+      if (
+        layoutTargetRef.current?.tab.id === tabId ||
+        tabId === targetTabId ||
+        pendingActiveTabRef.current?.tabId === tabId
+      ) {
+        const revision = ++contextRevisionRef.current;
+        siteContextPendingRef.current = true;
+        pendingActiveTabRef.current = undefined;
+        layoutTargetRef.current = undefined;
+        setLayoutTargetLoading(false);
+        setSiteContext({ hostname: undefined, goal: "general", resolved: true, revision });
+      }
+    };
+    browser.tabs.onRemoved.addListener(onRemoved);
+    return () => browser.tabs.onRemoved.removeListener(onRemoved);
+  }, [targetTabId]);
+
   const refreshActiveTabContext = useCallback(() => {
-    browser.tabs
-      .query({ active: true, currentWindow: true })
+    if (!sessionDraftLoaded) return;
+    const revision = ++contextRevisionRef.current;
+    siteContextPendingRef.current = true;
+    setSiteContext((previous) => ({ ...previous, resolved: false, revision }));
+    const cached = layoutTargetRef.current;
+    setLayoutTargetLoading(
+      !cached || cached.id !== targetTabId || cached.session !== targetSessionId,
+    );
+    const tabs = resolveBrowserTarget(targetTabId, targetSessionId).then((tab) =>
+      tab ? [tab] : [],
+    );
+    tabs
       .then((tabs) => {
+        if (revision !== contextRevisionRef.current) return;
+        layoutTargetRef.current = tabs[0]
+          ? { tab: tabs[0], id: targetTabId, session: targetSessionId }
+          : undefined;
+        setLayoutTargetLoading(false);
         const tabUrl = tabs[0]?.url;
-        setSiteHostname(getSupportedSiteHostname(tabUrl));
-        setDetectedAiGoal(detectAiGoalFromUrl(tabUrl));
-        setSiteResolved(true);
+        pendingActiveTabRef.current = undefined;
+        setSiteContext({
+          hostname: getSupportedSiteHostname(tabUrl),
+          goal: detectAiGoalFromUrl(tabUrl),
+          resolved: true,
+          revision,
+        });
       })
       .catch(() => {
-        setSiteHostname(undefined);
-        setDetectedAiGoal("general");
-        setSiteResolved(true);
+        if (revision !== contextRevisionRef.current) return;
+        layoutTargetRef.current = undefined;
+        setLayoutTargetLoading(false);
+        pendingActiveTabRef.current = undefined;
+        setSiteContext({ hostname: undefined, goal: "general", resolved: true, revision });
       });
-  }, []);
+  }, [targetTabId, targetSessionId, sessionDraftLoaded]);
 
   useEffect(() => {
     refreshLibraryCount();
   }, [refreshLibraryCount]);
 
   useEffect(() => {
-    Promise.all([getAudienceMode(), getPopupSessionDraft()])
+    Promise.all([
+      // The global preference must not block restoration of a transferred draft.
+      getAudienceMode().catch(() => null),
+      initialSelection
+        ? Promise.resolve(null)
+        : initialDraft
+          ? Promise.resolve(initialDraft)
+          : isSelectionLaunch
+            ? Promise.resolve(null)
+            : getPopupSessionDraft(viewMode === "popup", { independent: true }),
+    ])
       .then(([mode, draft]) => {
-        setAudienceModeState(mode);
+        const resultMode =
+          draft && isOptimizerRequestContext(draft.result_context)
+            ? draft.result_context.mode
+            : null;
+        const restoredMode = draft?.audienceMode ?? mode ?? resultMode;
+        setAudienceModeState(restoredMode);
 
-        if (!draft) return;
+        if (initialSelection || !draft) return;
 
+        setSaveOnEditOnly(draft.saveOnEditOnly ?? false);
+        if (draft.draftSessionId) setDraftSessionId(draft.draftSessionId);
+        if (typeof draft.draftCreatedAt === "number") setDraftCreatedAt(draft.draftCreatedAt);
+        setSourceTabId(draft.sourceTabId);
+        setSourceSessionId(draft.sourceSessionId);
+        setStandaloneTarget(
+          draft.standaloneTarget ??
+            (isSelectionLaunch && draft.sourceTabId !== undefined
+              ? { tabId: draft.sourceTabId, sessionId: draft.sourceSessionId }
+              : undefined),
+        );
         setActiveTab(draft.activeTab);
         setOriginal(draft.original);
         setImproved(draft.improved);
@@ -252,7 +386,7 @@ export function App({ viewMode = "popup" }: AppProps) {
         const legacyContext = { mode: requestMode, goal: requestGoal };
         const fallbackContext = isOptimizerRequestContext(legacyContext)
           ? legacyContext
-          : { mode, goal: draft.goal };
+          : { mode: restoredMode, goal: draft.goal };
         setResultContext(
           isOptimizerRequestContext(draft.result_context)
             ? draft.result_context
@@ -268,8 +402,9 @@ export function App({ viewMode = "popup" }: AppProps) {
         setLastLatencyMs(draft.lastLatencyMs);
         setAttemptN(draft.attemptN);
 
-        if (draft.goal) {
-          hasUserSelectedGoalRef.current = true;
+        if (draft.goal && isOptimizerRequestContext({ mode: restoredMode, goal: draft.goal })) {
+          // Legacy drafts do not distinguish explicit choices from detected defaults.
+          setGoalIsUserSelected(draft.goalIsUserSelected ?? true);
           setGoal(draft.goal);
         }
       })
@@ -277,21 +412,51 @@ export function App({ viewMode = "popup" }: AppProps) {
         setSessionDraftLoaded(true);
         setModeReady(true);
       });
-  }, []);
+  }, [initialSelection, initialDraft, viewMode, isSelectionLaunch]);
 
   useEffect(() => {
+    if (!sessionDraftLoaded) return;
     refreshActiveTabContext();
 
-    if (viewMode !== "sidepanel") return;
+    if (viewMode !== "sidepanel" && targetTabId === undefined) return;
 
-    browser.tabs.onActivated.addListener(refreshActiveTabContext);
-    browser.tabs.onUpdated.addListener(refreshActiveTabContext);
+    const onActivated = (info: { tabId: number; windowId: number }) => {
+      if (targetTabId !== undefined) return;
+      const windowId = layoutTargetRef.current?.tab.windowId;
+      if (windowId !== undefined && info.windowId !== windowId) return;
+      pendingActiveTabRef.current = info;
+      refreshActiveTabContext();
+    };
+    const onUpdated = (tabId: number, _info: unknown, tab: browser.Tabs.Tab) => {
+      const activeTab = layoutTargetRef.current?.tab;
+      const pendingTab = pendingActiveTabRef.current;
+      const expectedId = targetTabId ?? pendingTab?.tabId ?? activeTab?.id;
+      if (expectedId !== undefined ? tabId !== expectedId : !tab.active) return;
+      refreshActiveTabContext();
+    };
+    browser.tabs.onActivated.addListener(onActivated);
+    browser.tabs.onUpdated.addListener(onUpdated);
+    const onAttached = (tabId: number, info: browser.Tabs.OnAttachedAttachInfoType) => {
+      const cached = layoutTargetRef.current;
+      if (
+        tabId !== targetTabId &&
+        tabId !== cached?.tab.id &&
+        tabId !== pendingActiveTabRef.current?.tabId
+      )
+        return;
+      if (cached?.tab.id === tabId) {
+        layoutTargetRef.current = { ...cached, tab: { ...cached.tab, windowId: info.newWindowId } };
+      }
+      refreshActiveTabContext();
+    };
+    browser.tabs.onAttached.addListener(onAttached);
 
     return () => {
-      browser.tabs.onActivated.removeListener(refreshActiveTabContext);
-      browser.tabs.onUpdated.removeListener(refreshActiveTabContext);
+      browser.tabs.onActivated.removeListener(onActivated);
+      browser.tabs.onUpdated.removeListener(onUpdated);
+      browser.tabs.onAttached.removeListener(onAttached);
     };
-  }, [refreshActiveTabContext, viewMode]);
+  }, [refreshActiveTabContext, viewMode, sessionDraftLoaded, targetTabId]);
 
   useEffect(() => {
     if (!siteResolved || hasTrackedPopupOpenedRef.current) return;
@@ -310,14 +475,24 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   useEffect(() => {
     if (!modeReady || !audienceMode) return;
-    if (hasUserSelectedGoalRef.current) return;
+    if (goalIsUserSelected) return;
     setGoal(defaultGoalForMode(audienceMode, detectedAiGoal));
-  }, [audienceMode, detectedAiGoal, modeReady]);
+  }, [audienceMode, detectedAiGoal, modeReady, goalIsUserSelected]);
 
   useEffect(() => {
-    if (!sessionDraftLoaded) return;
+    if (sourceContextReady && siteContext.revision === contextRevisionRef.current)
+      siteContextPendingRef.current = false;
+  }, [sourceContextReady, siteContext.revision]);
 
-    void setPopupSessionDraft({
+  const sessionDraft = useMemo<PopupSessionDraft>(
+    () => ({
+      draftSessionId,
+      draftCreatedAt,
+      sourceTabId,
+      sourceSessionId,
+      standaloneTarget,
+      audienceMode,
+      ...(saveOnEditOnly ? { saveOnEditOnly: true } : {}),
       optimizer_screen: improved && !editingOriginal ? "result" : "input",
       result_context: resultContext,
       activeTab,
@@ -325,27 +500,46 @@ export function App({ viewMode = "popup" }: AppProps) {
       improved,
       changes,
       goal,
+      goalIsUserSelected,
       lastRequestId,
       lastRequestContextKey,
       lastModel,
       lastLatencyMs,
       attemptN,
-    }).catch(() => undefined);
-  }, [
-    activeTab,
-    attemptN,
-    changes,
-    goal,
-    improved,
-    editingOriginal,
-    resultContext,
-    lastLatencyMs,
-    lastModel,
-    lastRequestContextKey,
-    lastRequestId,
-    original,
-    sessionDraftLoaded,
-  ]);
+    }),
+    [
+      draftSessionId,
+      draftCreatedAt,
+      sourceTabId,
+      sourceSessionId,
+      standaloneTarget,
+      audienceMode,
+      saveOnEditOnly,
+      improved,
+      editingOriginal,
+      resultContext,
+      activeTab,
+      original,
+      changes,
+      goal,
+      goalIsUserSelected,
+      lastRequestId,
+      lastRequestContextKey,
+      lastModel,
+      lastLatencyMs,
+      attemptN,
+    ],
+  );
+
+  useEffect(() => {
+    if (!sessionDraftLoaded || saveOnEditOnly) return;
+    // An unsuccessful selection launch must not become a newer blank restore candidate.
+    if (!maySaveSelectionDraftRef.current) {
+      if (!sessionDraft.original && !sessionDraft.improved) return;
+      maySaveSelectionDraftRef.current = true;
+    }
+    void setPopupSessionDraft(sessionDraft).catch(() => undefined);
+  }, [sessionDraftLoaded, sessionDraft, saveOnEditOnly]);
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
@@ -379,40 +573,61 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Layout toggle ────────────────────────────────────────────────────────────
   const handleLayoutToggle = useCallback(async () => {
-    if (activeRequestRef.current || layoutTransitionRef.current) return;
+    if (
+      !sessionDraftLoaded ||
+      activeRequestRef.current ||
+      saveInFlightRef.current ||
+      layoutTransitionRef.current
+    )
+      return;
     layoutTransitionRef.current = true;
     setLayoutTransition(true);
     let closing = false;
     try {
       if (viewMode === "popup") {
-        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        // Resolve/validate ahead of the click so open() retains the user gesture.
+        const cached = layoutTargetRef.current;
+        const tab =
+          cached?.id === targetTabId && cached?.session === targetSessionId
+            ? cached?.tab
+            : undefined;
         if (activeRequestRef.current) return;
         const sidePanel = (
           browser as typeof browser & {
-            sidePanel?: { open: (options: { windowId: number }) => Promise<void> };
+            sidePanel?: {
+              open: (options: { windowId: number }) => Promise<void>;
+            };
           }
         ).sidePanel;
         if (tab?.windowId != null && sidePanel) {
-          await sidePanel.open({ windowId: tab.windowId });
-          if (activeRequestRef.current) return;
+          const response = await browser.runtime.sendMessage({
+            type: "OPEN_OPTIMIZER_PANEL",
+            windowId: tab.windowId,
+            tabId: tab.id,
+            draft: { ...sessionDraft, sourceTabId: targetTabId, sourceSessionId: targetSessionId },
+          });
+          if (!(response as { ok?: boolean } | undefined)?.ok)
+            throw new Error("Panel transfer failed");
           window.close();
           closing = true;
+        } else {
+          throw new Error("Side panel unavailable");
         }
       } else {
-        // Cannot open popup programmatically — just close sidebar
-        // User needs to click the extension icon to open popup
+        // The next toolbar popup explicitly resumes this panel, even if another session is newer.
+        await preferPopupSessionDraft(sessionDraft);
         window.close();
         closing = true;
       }
     } catch {
-      // fail silently
+      setError({ type: "generic", message: t.errorSidePanelMessage });
     } finally {
       if (!closing) {
         layoutTransitionRef.current = false;
         setLayoutTransition(false);
       }
     }
-  }, [viewMode]);
+  }, [viewMode, targetTabId, targetSessionId, sessionDraft, sessionDraftLoaded, t]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
@@ -507,7 +722,14 @@ export function App({ viewMode = "popup" }: AppProps) {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleImprove = useCallback(async () => {
-    if (isOriginalOverLimit || activeRequestRef.current || layoutTransitionRef.current) return;
+    if (
+      siteContextPendingRef.current ||
+      !sourceContextReady ||
+      isOriginalOverLimit ||
+      activeRequestRef.current ||
+      layoutTransitionRef.current
+    )
+      return;
     const trimmed = original.trim();
     if (!trimmed) return;
     if (!audienceMode) return;
@@ -551,6 +773,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       await owner.ready;
       if (activeRequestRef.current !== requestKey) return;
       submitted = true;
+      setSaveOnEditOnly(false);
       setEditingOriginal(false);
       setImproved("");
       setChanges([]);
@@ -639,6 +862,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     original,
     improved,
     siteHostname,
+    sourceContextReady,
     t,
     viewMode,
   ]);
@@ -692,6 +916,11 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, [activeTab, loading, improved, editingOriginal, handleImprove]);
 
   const handleNew = useCallback(() => {
+    if (layoutTransitionRef.current) return;
+    setSaveOnEditOnly(false);
+    // The standalone window keeps its launch target; only the prompt binding is cleared.
+    setSourceTabId(undefined);
+    setSourceSessionId(undefined);
     setOriginal("");
     setImproved("");
     setResultContext(null);
@@ -706,7 +935,7 @@ export function App({ viewMode = "popup" }: AppProps) {
   }, []);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
-    if (isOriginalOverLimit || saveInFlightRef.current) return false;
+    if (isOriginalOverLimit || saveInFlightRef.current || layoutTransitionRef.current) return false;
     const requestParts = lastRequestContextKey?.split("|");
     const submittedOriginal =
       requestParts && isOptimizerRequestContext({ mode: requestParts[0], goal: requestParts[1] })
@@ -716,6 +945,7 @@ export function App({ viewMode = "popup" }: AppProps) {
     const improvedTrimmed = improved.trim();
     if (!originalTrimmed || !improvedTrimmed) return false;
     saveInFlightRef.current = true;
+    setSaving(true);
     try {
       await save(
         { original: originalTrimmed, improved: improvedTrimmed },
@@ -749,6 +979,7 @@ export function App({ viewMode = "popup" }: AppProps) {
       return false;
     } finally {
       saveInFlightRef.current = false;
+      setSaving(false);
     }
   }, [
     original,
@@ -764,14 +995,17 @@ export function App({ viewMode = "popup" }: AppProps) {
   const handleDismissError = useCallback(() => setError(null), []);
 
   const handleGoalChange = useCallback((nextGoal: ImproveGoal) => {
-    hasUserSelectedGoalRef.current = true;
+    if (layoutTransitionRef.current) return;
+    setSaveOnEditOnly(false);
+    setGoalIsUserSelected(true);
     setGoal(nextGoal);
   }, []);
 
   const handleModeSelection = useCallback(
     async (mode: AudienceMode) => {
-      if (mode === audienceMode) return;
-      hasUserSelectedGoalRef.current = false;
+      if (layoutTransitionRef.current || mode === audienceMode) return;
+      setSaveOnEditOnly(false);
+      setGoalIsUserSelected(false);
       setAudienceModeState(mode);
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
       setEditingOriginal(true);
@@ -901,13 +1135,18 @@ export function App({ viewMode = "popup" }: AppProps) {
       <nav className="tab-bar">
         <button
           className={`tab${activeTab === "improve" ? " active" : ""}`}
-          onClick={() => setActiveTab("improve")}
+          disabled={layoutTransition}
+          onClick={() => {
+            if (!layoutTransitionRef.current) setActiveTab("improve");
+          }}
         >
           {t.tabImprove}
         </button>
         <button
           className={`tab${activeTab === "library" ? " active" : ""}`}
+          disabled={layoutTransition}
           onClick={() => {
+            if (layoutTransitionRef.current) return;
             setActiveTab("library");
             refreshLibraryCount();
           }}
@@ -918,15 +1157,17 @@ export function App({ viewMode = "popup" }: AppProps) {
       </nav>
 
       <div className="tab-content">
+        {error && (
+          <ErrorToast
+            error={error}
+            onDismiss={handleDismissError}
+            onRetry={
+              activeTab === "improve" && error.type === "network" ? handleImprove : undefined
+            }
+          />
+        )}
         {activeTab === "improve" ? (
           <>
-            {error && (
-              <ErrorToast
-                error={error}
-                onDismiss={handleDismissError}
-                onRetry={error.type === "network" ? handleImprove : undefined}
-              />
-            )}
             {isExhausted && (
               <div className="upgrade-banner">
                 <p>{t.exhaustedTitle}</p>
@@ -952,9 +1193,12 @@ export function App({ viewMode = "popup" }: AppProps) {
                   mode={audienceMode}
                   goal={goal}
                   loading={loading || layoutTransition}
+                  submitDisabled={!sourceContextReady}
                   hidden={loading || Boolean(improved && !editingOriginal)}
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {
+                    if (layoutTransitionRef.current) return;
+                    setSaveOnEditOnly(false);
                     setOriginal(text);
                     setEditingOriginal(true);
                     if (error?.message === t.errorInputTooLong(promptInputMaxChars)) setError(null);
@@ -974,7 +1218,9 @@ export function App({ viewMode = "popup" }: AppProps) {
                     changes={changes}
                     goal={resultContext?.goal ?? goal}
                     hidden={loading || editingOriginal}
+                    disabled={layoutTransition}
                     onEdit={() => {
+                      if (layoutTransitionRef.current) return;
                       setEditingOriginal(true);
                     }}
                     onNew={handleNew}
@@ -985,8 +1231,10 @@ export function App({ viewMode = "popup" }: AppProps) {
                       <>
                         <ActionBar
                           improved={improved}
-                          disabled={!improved}
-                          saveDisabled={isOriginalOverLimit}
+                          targetTabId={targetTabId}
+                          targetSessionId={targetSessionId}
+                          disabled={!improved || layoutTransition}
+                          saveDisabled={isOriginalOverLimit || layoutTransition}
                           onSave={handleSave}
                           requestId={lastRequestId}
                           source={viewMode}
@@ -994,7 +1242,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                           latencyMs={lastLatencyMs}
                         />
                         {FEATURES.OPEN_AND_PASTE && (
-                          <SiteIcons improved={improved} disabled={!improved} />
+                          <SiteIcons improved={improved} disabled={!improved || layoutTransition} />
                         )}
                       </>
                     }
@@ -1008,6 +1256,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                 <button
                   type="button"
                   className="mode-onboarding-card"
+                  disabled={layoutTransition}
                   data-mode="ai"
                   onClick={() => handleModeSelection("ai")}
                 >
@@ -1017,6 +1266,7 @@ export function App({ viewMode = "popup" }: AppProps) {
                 <button
                   type="button"
                   className="mode-onboarding-card"
+                  disabled={layoutTransition}
                   data-mode="content"
                   onClick={() => handleModeSelection("content")}
                 >
@@ -1035,7 +1285,13 @@ export function App({ viewMode = "popup" }: AppProps) {
         <button
           type="button"
           className="layout-toggle-btn"
-          disabled={loading || layoutTransition}
+          disabled={
+            !sessionDraftLoaded ||
+            loading ||
+            saving ||
+            layoutTransition ||
+            (viewMode === "popup" && layoutTargetLoading)
+          }
           title={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           aria-label={viewMode === "popup" ? t.switchToSidebar : t.switchToPopup}
           onClick={handleLayoutToggle}

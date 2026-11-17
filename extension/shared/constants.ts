@@ -51,9 +51,12 @@ export const STORAGE_KEYS = {
 } as const;
 
 export const LIMITS = {
+  HANDOFF_TTL_MS: 5 * 60 * 1000,
   MAX_LIBRARY_ENTRIES: 200,
   MAX_PENDING_LIBRARY_BYTES: 1024 * 1024,
   MAX_LIBRARY_BYTES: 6 * 1024 * 1024, // Leave room for drafts, analytics and settings.
+  MAX_POPUP_DRAFT_BYTES: 1024 * 1024,
+  MAX_POPUP_DRAFTS: 10,
   POPUP_SESSION_TTL_MS: 3 * 60 * 60 * 1000,
 } as const;
 

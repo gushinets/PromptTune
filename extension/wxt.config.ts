@@ -33,7 +33,7 @@ export default defineConfig({
       "48": "icon-48.png",
       "128": "icon-128.png",
     },
-    permissions: ["storage", "activeTab", "sidePanel"],
+    permissions: ["storage", "activeTab", "sidePanel", "contextMenus", "alarms"],
     host_permissions: [
       getApiHostPermission(),
       "https://chatgpt.com/*",
@@ -58,6 +58,7 @@ export default defineConfig({
       ? {
           browser_specific_settings: {
             gecko: {
+              strict_min_version: "115.0",
               data_collection_permissions: {
                 optional: ["technicalAndInteraction"],
               },

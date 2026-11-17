@@ -3,6 +3,12 @@ import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
+import {
+  openOptimizerPanel,
+  closePanelForRollback,
+  confirmPanelHandoff,
+  pendingPanelHandoffs,
+} from "@shared/panel-handoff";
 import { IMPROVE_OWNER_PORT } from "@shared/messages";
 import type {
   AnalyticsEventName,
@@ -12,6 +18,16 @@ import type {
   AnalyticsSource,
   AnalyticsTrackPayload,
 } from "@shared/analytics-types";
+
+import {
+  openSelection,
+  SELECTION_MENU_ID,
+  SELECTION_CLEANUP_ALARM,
+  cleanupExpiredHandoffs,
+  ensureSelectionCleanupAlarm,
+} from "@shared/selection";
+
+type MessageSender = browser.Runtime.MessageSender;
 
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 const MAX_QUEUE_ITEMS = 500;
@@ -391,7 +407,36 @@ export default defineBackground(() => {
     }
   }
 
+  const cleanupSelections = async () => {
+    try {
+      await ensureSelectionCleanupAlarm();
+      await cleanupExpiredHandoffs();
+    } catch {
+      // Retain the scheduled alarm so transient storage failures can be retried.
+    }
+  };
+  void ensureSelectionCleanupAlarm().catch(() => undefined);
+  browser.runtime.onStartup.addListener(cleanupSelections);
+  browser.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name === SELECTION_CLEANUP_ALARM) await cleanupSelections();
+  });
+
+  let selectionMenuRegistered = false;
+  const registerSelectionMenu = () => {
+    if (selectionMenuRegistered) return;
+    browser.contextMenus.create({
+      id: SELECTION_MENU_ID,
+      title: "Prompt Optimizer",
+      contexts: ["selection"],
+    });
+    selectionMenuRegistered = true;
+  };
+  // Firefox MV2's persistent background does not retain menus across restarts.
+  if (import.meta.env.FIREFOX) registerSelectionMenu();
+
   browser.runtime.onInstalled.addListener(async (details) => {
+    registerSelectionMenu();
+    await cleanupSelections();
     if (details.reason !== "install") return;
 
     const installAt = new Date().toISOString();
@@ -407,12 +452,40 @@ export default defineBackground(() => {
     }
   });
 
+  browser.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (info.menuItemId !== SELECTION_MENU_ID || !info.selectionText?.trim()) return;
+    try {
+      await openSelection(info.selectionText, tab?.id, tab?.incognito ?? false);
+    } catch (error) {
+      console.error("Could not open Prompt Optimizer", error);
+    }
+  });
+
   void flushAnalytics();
 
-  browser.runtime.onMessage.addListener(async (raw: unknown) => {
+  browser.runtime.onMessage.addListener(async (raw: unknown, sender: MessageSender) => {
     const msg = raw as Message;
 
     switch (msg.type) {
+      case "GET_PENDING_PANEL_HANDOFFS": {
+        if (sender.url !== browser.runtime.getURL("sidepanel.html")) return { intents: [] };
+        return { intents: pendingPanelHandoffs(msg.windowId) };
+      }
+      case "CONFIRM_PANEL_HANDOFF": {
+        if (sender.url !== browser.runtime.getURL("sidepanel.html")) return { committed: false };
+        return confirmPanelHandoff(msg.windowId, msg.id);
+      }
+      case "CLOSE_PANEL_FOR_ROLLBACK": {
+        if (sender.url !== browser.runtime.getURL("sidepanel.html"))
+          return { closed: false, current: false };
+        return closePanelForRollback(msg.windowId, msg.requestId, msg.failedHandoffId);
+      }
+      case "OPEN_OPTIMIZER_PANEL": {
+        if (sender.url?.split("?")[0] !== browser.runtime.getURL("popup.html"))
+          throw new Error("Invalid panel sender");
+        return openOptimizerPanel(msg);
+      }
+
       case "TRACK_EVENT": {
         await track(msg.payload);
         return { ok: true };

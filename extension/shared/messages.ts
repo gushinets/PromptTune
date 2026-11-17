@@ -4,6 +4,15 @@ import type { AnalyticsTrackPayload, AnalyticsTrackContext } from "./analytics-t
 export const IMPROVE_OWNER_PORT = "prompttune-improve-owner";
 
 export type Message =
+  | { type: "GET_PENDING_PANEL_HANDOFFS"; windowId: number }
+  | { type: "CONFIRM_PANEL_HANDOFF"; windowId: number; id: string }
+  | {
+      type: "CLOSE_PANEL_FOR_ROLLBACK";
+      windowId: number;
+      requestId?: string;
+      failedHandoffId?: string;
+    }
+  | import("./panel-handoff").OpenOptimizerPanel
   | {
       type: "IMPROVE_REQUEST";
       payload: {

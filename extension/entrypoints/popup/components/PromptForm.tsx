@@ -10,6 +10,7 @@ interface PromptFormProps {
   mode: AudienceMode;
   goal: ImproveGoal;
   loading: boolean;
+  submitDisabled?: boolean;
   hidden?: boolean;
   onGoalChange: (goal: ImproveGoal) => void;
   onOriginalChange: (text: string) => void;
@@ -22,6 +23,7 @@ export function PromptForm({
   mode,
   goal,
   loading,
+  submitDisabled = false,
   hidden,
   onGoalChange,
   onOriginalChange,
@@ -73,6 +75,7 @@ export function PromptForm({
           id={inputId}
           className="prompt-textarea original-textarea"
           value={original}
+          readOnly={loading}
           onChange={(event) => onOriginalChange(event.target.value)}
           placeholder={t.placeholderOriginal}
           aria-invalid={overLimit}
@@ -93,7 +96,7 @@ export function PromptForm({
         <button
           className="btn-improve"
           onClick={onImprove}
-          disabled={overLimit || !original.trim() || loading}
+          disabled={overLimit || !original.trim() || loading || submitDisabled}
         >
           {t.btnImprove}
         </button>

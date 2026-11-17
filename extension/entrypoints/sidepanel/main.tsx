@@ -1,11 +1,11 @@
 import { createRoot } from "react-dom/client";
 import { I18nProvider } from "@shared/i18n";
-import { App } from "../popup/App";
+import { SidepanelApp } from "./SidepanelApp";
 import "../popup/App.css";
 
 const root = document.getElementById("root")!;
 createRoot(root).render(
   <I18nProvider>
-    <App viewMode="sidepanel" />
+    <SidepanelApp />
   </I18nProvider>,
 );
