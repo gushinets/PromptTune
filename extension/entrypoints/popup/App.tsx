@@ -359,7 +359,11 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
             : getPopupSessionDraft(viewMode === "popup", { independent: true }),
     ])
       .then(([mode, draft]) => {
-        const restoredMode = draft?.audienceMode ?? mode;
+        const resultMode =
+          draft && isOptimizerRequestContext(draft.result_context)
+            ? draft.result_context.mode
+            : null;
+        const restoredMode = draft?.audienceMode ?? mode ?? resultMode;
         setAudienceModeState(restoredMode);
 
         if (initialSelection || !draft) return;

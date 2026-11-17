@@ -72,9 +72,14 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-it.each(["popup", "sidepanel"] as const)(
-  "restores and saves a transferred draft despite an audience-mode read failure (%s)",
-  async (viewMode) => {
+it.each([
+  ["popup", "explicit"],
+  ["sidepanel", "explicit"],
+  ["popup", "legacy"],
+  ["sidepanel", "legacy"],
+] as const)(
+  "restores and saves a transferred draft despite an audience-mode read failure (%s, %s mode)",
+  async (viewMode, modeSource) => {
     const draft: PopupSessionDraft = {
       draftSessionId: "transferred-result",
       draftCreatedAt: Date.now(),
@@ -95,6 +100,7 @@ it.each(["popup", "sidepanel"] as const)(
       lastLatencyMs: 123,
       attemptN: 2,
     };
+    if (modeSource === "legacy") delete draft.audienceMode;
     const key = "optimizer_draft_transferred-result";
     const state: Record<string, unknown> = {
       audience_mode: "ai",
@@ -113,13 +119,13 @@ it.each(["popup", "sidepanel"] as const)(
     });
     expect(host.querySelector(".result-screen")?.textContent).toContain("Transferred result");
     expect(host.textContent).toContain("Preserved change");
-    expect(state[key]).toMatchObject(draft);
+    expect(state[key]).toMatchObject({ ...draft, audienceMode: "ai" });
     const writes = vi
       .mocked(browser.storage.local.set)
       .mock.calls.map(([values]) => values[key])
       .filter(Boolean);
     expect(writes.length).toBeGreaterThan(0);
-    for (const written of writes) expect(written).toMatchObject(draft);
+    for (const written of writes) expect(written).toMatchObject({ ...draft, audienceMode: "ai" });
   },
 );
 
