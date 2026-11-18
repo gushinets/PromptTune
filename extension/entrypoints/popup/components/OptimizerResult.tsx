@@ -29,6 +29,7 @@ export function OptimizerResult({
   const t = useT();
   const outputId = useId();
   const output = useRef<HTMLTextAreaElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
   const details = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState(false);
   const localized = useMemo(
@@ -37,23 +38,45 @@ export function OptimizerResult({
     [changes],
   );
   useEffect(() => {
-    if (hidden || !output.current) return;
+    if (hidden || !output.current || !scroll.current) return;
     const field = output.current;
+    const container = scroll.current;
+    const pixels = (value: string) => Number.parseFloat(value) || 0;
     const resize = () => {
+      // Keep the actions beside the visible text. Explanations use the shared
+      // scroller, as in the mockup, without taking height away from the result.
+      let reserved = 0;
+      for (let sibling = field.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
+        if (sibling.tagName === "DETAILS") continue;
+        const style = getComputedStyle(sibling);
+        reserved +=
+          sibling.getBoundingClientRect().height +
+          pixels(style.marginTop) +
+          pixels(style.marginBottom);
+      }
+      const top =
+        field.getBoundingClientRect().top -
+        container.getBoundingClientRect().top +
+        container.scrollTop -
+        container.clientTop;
+      const available =
+        container.clientHeight - top - reserved - pixels(getComputedStyle(container).paddingBottom);
+      const style = getComputedStyle(field);
+      const borders = pixels(style.borderTopWidth) + pixels(style.borderBottomWidth);
       field.style.height = "auto";
-      field.style.height = `${Math.min(200, Math.max(120, field.scrollHeight))}px`;
+      field.style.height = `${Math.max(120, Math.min(available, field.scrollHeight + borders))}px`;
     };
     resize();
     if (typeof ResizeObserver === "undefined") return;
-    let width = field.clientWidth;
     const observer = new ResizeObserver(() => {
-      if (field.clientWidth === width) return;
-      width = field.clientWidth;
       resize();
     });
-    observer.observe(field);
+    observer.observe(container);
+    for (let sibling = field.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
+      if (sibling.tagName !== "DETAILS") observer.observe(sibling);
+    }
     return () => observer.disconnect();
-  }, [improved, hidden]);
+  }, [improved, hidden, lengthWarning, localized.length]);
   useEffect(() => {
     if (expanded) details.current?.scrollIntoView?.({ block: "nearest" });
   }, [expanded]);
@@ -62,7 +85,7 @@ export function OptimizerResult({
       <div className="result-meta">
         <span className="goal-badge">{goalLabel(t, goal)}</span>
       </div>
-      <div className="result-scroll">
+      <div className="result-scroll" ref={scroll}>
         <label htmlFor={outputId} className="section-label">
           {t.labelImprovedPrompt}
         </label>

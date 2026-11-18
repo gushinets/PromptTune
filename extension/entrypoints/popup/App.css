@@ -572,7 +572,6 @@ textarea.improved-textarea {
   font: 400 12.5px/1.6 var(--font-sans);
   overflow-y: auto;
   min-height: 120px;
-  max-height: 200px;
 }
 .action-bar {
   display: grid;
