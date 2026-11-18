@@ -560,8 +560,9 @@ textarea::placeholder {
   flex: 1;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  scroll-padding-block: 6px;
   min-height: 0;
-  padding: 12px 8px 0;
+  padding: 12px 8px 6px;
 }
 .result-scroll > .section-label {
   margin-bottom: 6px;
@@ -908,6 +909,17 @@ textarea.improved-textarea {
   padding: 10px;
   margin: 10px 8px 0;
   flex-shrink: 0;
+}
+.action-error-toast {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  pointer-events: none;
+}
+.action-error-toast .error-toast {
+  background: var(--bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
 }
 .error-toast-icon {
   width: 17px;

@@ -1,8 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { locale, useT } from "@shared/i18n";
 import { goalLabel } from "@shared/goal-options";
 import { CHANGE_LINE_TRANSLATIONS_RU } from "@shared/change-translations";
 import type { ImproveGoal } from "@shared/types";
+import { ErrorToast } from "./ErrorToast";
 
 interface ResultProps {
   improved: string;
@@ -32,6 +34,7 @@ export function OptimizerResult({
   const scroll = useRef<HTMLDivElement>(null);
   const details = useRef<HTMLDetailsElement>(null);
   const [expanded, setExpanded] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const localized = useMemo(
     () =>
       changes.map((line) => (locale === "ru" ? (CHANGE_LINE_TRANSLATIONS_RU[line] ?? line) : line)),
@@ -45,6 +48,15 @@ export function OptimizerResult({
     let previousFeedback: Element | null = null;
     let previousFeedbackText: string | null = null;
     const resize = () => {
+      const visibleTop = container.getBoundingClientRect().top + container.clientTop;
+      const visibleBottom = visibleTop + container.clientHeight;
+      const anchor = details.current?.open
+        ? Array.from(details.current.querySelectorAll("summary, li")).find((element) => {
+            const bounds = element.getBoundingClientRect();
+            return bounds.bottom > visibleTop && bounds.top < visibleBottom;
+          })
+        : undefined;
+      const anchorTop = anchor?.getBoundingClientRect().top;
       // Keep the actions beside the visible text. Explanations use the shared
       // scroller, as in the mockup, without taking height away from the result.
       let reserved = 0;
@@ -69,17 +81,43 @@ export function OptimizerResult({
       field.style.height = "auto";
       field.style.height = `${Math.max(120, Math.min(available, field.scrollHeight + borders))}px`;
       container.scrollTop = scrollTop;
+      if (anchor && anchorTop !== undefined) {
+        container.scrollTop += anchor.getBoundingClientRect().top - anchorTop;
+      }
       const feedback = container.querySelector('.action-feedback[role="alert"]');
       if (
         feedback &&
         (feedback !== previousFeedback || feedback.textContent !== previousFeedbackText)
       ) {
         const bounds = feedback.getBoundingClientRect();
-        const visibleTop = container.getBoundingClientRect().top + container.clientTop;
-        const visibleBottom = visibleTop + container.clientHeight;
-        if (bounds.bottom > visibleBottom) container.scrollTop += bounds.bottom - visibleBottom;
-        else if (bounds.top < visibleTop) container.scrollTop += bounds.top - visibleTop;
+        const focused = document.activeElement;
+        const focusedAction =
+          focused instanceof HTMLElement &&
+          container.contains(focused) &&
+          focused.closest(".action-bar")
+            ? focused
+            : null;
+        const focusBounds = focusedAction?.getBoundingClientRect();
+        const revealTop = Math.min(bounds.top, focusBounds ? focusBounds.top - 5 : bounds.top);
+        const revealBottom = Math.max(
+          bounds.bottom,
+          focusBounds ? focusBounds.bottom + 5 : bounds.bottom,
+        );
+        if (focusBounds && revealBottom - revealTop > container.clientHeight) {
+          // A short viewport cannot show both. Keep keyboard focus visible and
+          // show the error above the scroller without changing its layout.
+          setActionNotice(feedback.textContent);
+          if (focusBounds.bottom + 5 > visibleBottom)
+            container.scrollTop += focusBounds.bottom + 5 - visibleBottom;
+          else if (focusBounds.top - 5 < visibleTop)
+            container.scrollTop += focusBounds.top - 5 - visibleTop;
+        } else {
+          setActionNotice(null);
+          if (revealBottom > visibleBottom) container.scrollTop += revealBottom - visibleBottom;
+          else if (revealTop < visibleTop) container.scrollTop += revealTop - visibleTop;
+        }
       }
+      if (!feedback) setActionNotice(null);
       previousFeedback = feedback;
       previousFeedbackText = feedback?.textContent ?? null;
     };
@@ -88,11 +126,18 @@ export function OptimizerResult({
     const observer = new ResizeObserver(() => {
       resize();
     });
+    const mutations = new MutationObserver(resize);
     observer.observe(container);
     for (let sibling = field.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
-      if (sibling.tagName !== "DETAILS") observer.observe(sibling);
+      if (sibling.tagName !== "DETAILS") {
+        observer.observe(sibling);
+        mutations.observe(sibling, { childList: true, characterData: true, subtree: true });
+      }
     }
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      mutations.disconnect();
+    };
   }, [improved, hidden, lengthWarning, localized.length]);
   useEffect(() => {
     if (expanded) details.current?.scrollIntoView?.({ block: "nearest" });
@@ -155,6 +200,17 @@ export function OptimizerResult({
           {t.btnNew}
         </button>
       </div>
+      {!hidden &&
+        actionNotice &&
+        createPortal(
+          <div className="action-error-toast">
+            <ErrorToast
+              error={{ type: "generic", message: actionNotice }}
+              onDismiss={() => setActionNotice(null)}
+            />
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }
