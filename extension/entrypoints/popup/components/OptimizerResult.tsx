@@ -126,18 +126,20 @@ export function OptimizerResult({
         container.scrollTop = targetScrollTop;
       }
       const feedback = container.querySelector('.action-feedback[role="alert"]');
+      const focused = document.activeElement;
+      const focusedAction =
+        focused instanceof HTMLElement &&
+        container.contains(focused) &&
+        focused.closest(".action-bar")
+          ? focused
+          : null;
       if (
         feedback &&
-        (feedback !== previousFeedback || feedback.textContent !== previousFeedbackText)
+        (feedback !== previousFeedback ||
+          feedback.textContent !== previousFeedbackText ||
+          (viewportChanged && focusedAction))
       ) {
         const bounds = feedback.getBoundingClientRect();
-        const focused = document.activeElement;
-        const focusedAction =
-          focused instanceof HTMLElement &&
-          container.contains(focused) &&
-          focused.closest(".action-bar")
-            ? focused
-            : null;
         const focusBounds = focusedAction?.getBoundingClientRect();
         const revealTop = Math.min(bounds.top, focusBounds ? focusBounds.top - 5 : bounds.top);
         const revealBottom = Math.max(

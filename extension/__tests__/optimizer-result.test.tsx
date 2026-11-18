@@ -341,9 +341,14 @@ it("keeps the first visible explanation at the same offset when result height ch
   }
 });
 
-it.each([0, 10])(
-  "keeps the focused action and its outline visible when an error needs a toast (top=%ipx)",
-  async (focusTop) => {
+it.each([
+  [0, 100],
+  [10, 100],
+  [10, 200],
+])(
+  "keeps the focused action and its outline visible when an error needs a toast (top=%ipx, initial height=%ipx)",
+  async (focusTop, initialHeight) => {
+    let viewportHeight = initialHeight;
     let resize: ResizeObserverCallback | undefined;
     vi.stubGlobal(
       "ResizeObserver",
@@ -359,7 +364,7 @@ it.each([0, 10])(
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
       this: HTMLElement,
     ) {
-      return this.classList.contains("result-scroll") ? 100 : 0;
+      return this.classList.contains("result-scroll") ? viewportHeight : 0;
     });
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement,
@@ -423,6 +428,13 @@ it.each([0, 10])(
       await act(async () => {
         resize?.([], {} as ResizeObserver);
       });
+      if (initialHeight > 100) {
+        expect(document.querySelector(".action-error-toast")).toBeNull();
+        viewportHeight = 100;
+        await act(async () => {
+          resize?.([], {} as ResizeObserver);
+        });
+      }
       expect(document.activeElement).toBe(button);
       expect(container.scrollTop).toBe(focusTop === 0 ? 45 : 50);
       expect(document.querySelector(".action-error-toast .error-toast-message")?.textContent).toBe(
@@ -438,6 +450,14 @@ it.each([0, 10])(
       await act(async () => {
         headerControl.focus();
       });
+      expect(document.activeElement).toBe(headerControl);
+      expect(document.querySelector(".action-error-toast")).toBeNull();
+      const readingPosition = container.scrollTop;
+      viewportHeight = 80;
+      await act(async () => {
+        resize?.([], {} as ResizeObserver);
+      });
+      expect(container.scrollTop).toBe(readingPosition);
       expect(document.activeElement).toBe(headerControl);
       expect(document.querySelector(".action-error-toast")).toBeNull();
     } finally {
