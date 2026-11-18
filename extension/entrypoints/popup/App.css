@@ -307,7 +307,7 @@ summary:focus-visible,
 }
 .goal-pill {
   height: 30px;
-  padding: 0 5px;
+  padding: 0 3px;
   border-radius: 9px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
@@ -1059,6 +1059,9 @@ textarea.improved-textarea {
   }
   .goal-pill {
     font-size: 11px;
+  }
+  .goal-pills {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 300px) {
