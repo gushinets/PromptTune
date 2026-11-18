@@ -142,6 +142,21 @@ export function OptimizerResult({
   useEffect(() => {
     if (expanded) details.current?.scrollIntoView?.({ block: "nearest" });
   }, [expanded]);
+  useEffect(() => {
+    if (hidden || !actionNotice) return;
+    const dismissOnFocusLeave = (event: FocusEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        (target.closest(".action-error-toast") ||
+          scroll.current?.querySelector(".action-bar")?.contains(target))
+      )
+        return;
+      setActionNotice(null);
+    };
+    document.addEventListener("focusin", dismissOnFocusLeave);
+    return () => document.removeEventListener("focusin", dismissOnFocusLeave);
+  }, [actionNotice, hidden]);
   return (
     <section className="result-screen" hidden={hidden}>
       <div className="result-meta">
@@ -205,6 +220,7 @@ export function OptimizerResult({
         createPortal(
           <div className="action-error-toast">
             <ErrorToast
+              announce={false}
               error={{ type: "generic", message: actionNotice }}
               onDismiss={() => setActionNotice(null)}
             />

@@ -6,6 +6,7 @@ interface ErrorToastProps {
   error: ErrorInfo;
   onDismiss: () => void;
   onRetry?: () => void;
+  announce?: boolean;
 }
 
 function AlertCircleIcon({ className }: { className?: string }) {
@@ -80,7 +81,7 @@ const ERROR_CONFIG: Record<
   generic: { className: "error-generic", type: "generic", Icon: AlertCircleIcon },
 };
 
-export function ErrorToast({ error, onDismiss, onRetry }: ErrorToastProps) {
+export function ErrorToast({ error, onDismiss, onRetry, announce = true }: ErrorToastProps) {
   const t = useT();
   const config = ERROR_CONFIG[error.type];
   const Icon = config.Icon;
@@ -93,7 +94,7 @@ export function ErrorToast({ error, onDismiss, onRetry }: ErrorToastProps) {
   }[error.type];
 
   return (
-    <div className={`error-toast ${config.className}`} role="alert">
+    <div className={`error-toast ${config.className}`} role={announce ? "alert" : undefined}>
       <Icon className="error-toast-icon" />
       <div className="error-toast-content">
         <div className="error-toast-title">{title}</div>

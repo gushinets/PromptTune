@@ -375,6 +375,9 @@ it.each([0, 10])(
     });
     const host = document.createElement("div");
     document.body.append(host);
+    const headerControl = document.createElement("button");
+    headerControl.textContent = "Library";
+    document.body.prepend(headerControl);
     const root = createRoot(host);
     try {
       await act(async () => {
@@ -417,11 +420,18 @@ it.each([0, 10])(
       expect(document.querySelector(".action-error-toast .error-toast-message")?.textContent).toBe(
         "Save failed",
       );
+      expect.soft(document.querySelectorAll('[role="alert"]')).toHaveLength(1);
+      await act(async () => {
+        headerControl.focus();
+      });
+      expect(document.activeElement).toBe(headerControl);
+      expect(document.querySelector(".action-error-toast")).toBeNull();
     } finally {
       await act(async () => {
         root.unmount();
       });
       host.remove();
+      headerControl.remove();
     }
   },
 );
