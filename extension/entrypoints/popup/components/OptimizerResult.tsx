@@ -33,6 +33,7 @@ export function OptimizerResult({
   const output = useRef<HTMLTextAreaElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const details = useRef<HTMLDetailsElement>(null);
+  const readingSpace = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const localized = useMemo(
@@ -44,24 +45,45 @@ export function OptimizerResult({
     if (hidden || !output.current || !scroll.current) return;
     const field = output.current;
     const container = scroll.current;
+    if (readingSpace.current) readingSpace.current.style.height = "0px";
     const pixels = (value: string) => Number.parseFloat(value) || 0;
     let previousFeedback: Element | null = null;
     let previousFeedbackText: string | null = null;
+    let viewportWidth = container.clientWidth;
+    let viewportHeight = container.clientHeight;
+    let readingAnchor: { element: Element; offset: number } | null = null;
+    const captureReadingAnchor = () => {
+      if (!details.current?.open) return null;
+      const visibleTop = container.getBoundingClientRect().top + container.clientTop;
+      const visibleBottom = visibleTop + container.clientHeight;
+      const element = Array.from(details.current.querySelectorAll("summary, li")).find((item) => {
+        const bounds = item.getBoundingClientRect();
+        return bounds.bottom > visibleTop && bounds.top < visibleBottom;
+      });
+      return element ? { element, offset: element.getBoundingClientRect().top - visibleTop } : null;
+    };
+    const rememberReadingAnchor = () => {
+      // Ignore scroll events caused by a viewport resize: Chromium may have
+      // already clamped scrollTop, before ResizeObserver can restore the reader.
+      if (container.clientWidth === viewportWidth && container.clientHeight === viewportHeight) {
+        readingAnchor = captureReadingAnchor();
+        if (!readingAnchor && readingSpace.current) readingSpace.current.style.height = "0px";
+      }
+    };
     const resize = () => {
       const visibleTop = container.getBoundingClientRect().top + container.clientTop;
       const visibleBottom = visibleTop + container.clientHeight;
-      const anchor = details.current?.open
-        ? Array.from(details.current.querySelectorAll("summary, li")).find((element) => {
-            const bounds = element.getBoundingClientRect();
-            return bounds.bottom > visibleTop && bounds.top < visibleBottom;
-          })
-        : undefined;
-      const anchorTop = anchor?.getBoundingClientRect().top;
+      const viewportChanged =
+        container.clientWidth !== viewportWidth || container.clientHeight !== viewportHeight;
+      const anchor =
+        details.current?.open && viewportChanged && readingAnchor?.element.isConnected
+          ? readingAnchor
+          : captureReadingAnchor();
       // Keep the actions beside the visible text. Explanations use the shared
       // scroller, as in the mockup, without taking height away from the result.
       let reserved = 0;
       for (let sibling = field.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
-        if (sibling.tagName === "DETAILS") continue;
+        if (sibling.tagName === "DETAILS" || sibling === readingSpace.current) continue;
         const style = getComputedStyle(sibling);
         reserved +=
           sibling.getBoundingClientRect().height +
@@ -81,8 +103,27 @@ export function OptimizerResult({
       field.style.height = "auto";
       field.style.height = `${Math.max(120, Math.min(available, field.scrollHeight + borders))}px`;
       container.scrollTop = scrollTop;
-      if (anchor && anchorTop !== undefined) {
-        container.scrollTop += anchor.getBoundingClientRect().top - anchorTop;
+      if (anchor) {
+        const targetScrollTop =
+          container.scrollTop +
+          anchor.element.getBoundingClientRect().top -
+          visibleTop -
+          anchor.offset;
+        if (readingSpace.current) {
+          // scrollHeight is never smaller than clientHeight. Measure the
+          // content bottom directly so short explanations retain their offset too.
+          const naturalMaximum =
+            readingSpace.current.getBoundingClientRect().top -
+            container.getBoundingClientRect().top +
+            container.scrollTop -
+            container.clientTop +
+            pixels(getComputedStyle(container).paddingBottom) -
+            container.clientHeight;
+          // Growing the viewport can otherwise make the saved reading offset
+          // unreachable, even after the textarea reaches its final height.
+          readingSpace.current.style.height = `${Math.ceil(Math.max(0, targetScrollTop - naturalMaximum))}px`;
+        }
+        container.scrollTop = targetScrollTop;
       }
       const feedback = container.querySelector('.action-feedback[role="alert"]');
       if (
@@ -120,16 +161,20 @@ export function OptimizerResult({
       if (!feedback) setActionNotice(null);
       previousFeedback = feedback;
       previousFeedbackText = feedback?.textContent ?? null;
+      viewportWidth = container.clientWidth;
+      viewportHeight = container.clientHeight;
+      readingAnchor = captureReadingAnchor();
     };
     resize();
     if (typeof ResizeObserver === "undefined") return;
+    container.addEventListener("scroll", rememberReadingAnchor, { passive: true });
     const observer = new ResizeObserver(() => {
       resize();
     });
     const mutations = new MutationObserver(resize);
     observer.observe(container);
     for (let sibling = field.nextElementSibling; sibling; sibling = sibling.nextElementSibling) {
-      if (sibling.tagName !== "DETAILS") {
+      if (sibling.tagName !== "DETAILS" && sibling !== readingSpace.current) {
         observer.observe(sibling);
         mutations.observe(sibling, { childList: true, characterData: true, subtree: true });
       }
@@ -137,10 +182,12 @@ export function OptimizerResult({
     return () => {
       observer.disconnect();
       mutations.disconnect();
+      container.removeEventListener("scroll", rememberReadingAnchor);
     };
   }, [improved, hidden, lengthWarning, localized.length]);
   useEffect(() => {
     if (expanded) details.current?.scrollIntoView?.({ block: "nearest" });
+    else if (readingSpace.current) readingSpace.current.style.height = "0px";
   }, [expanded]);
   useEffect(() => {
     if (hidden || !actionNotice) return;
@@ -206,6 +253,7 @@ export function OptimizerResult({
             </ol>
           </details>
         )}
+        <div ref={readingSpace} aria-hidden="true" />
       </div>
       <div className="result-navigation">
         <button className="btn-edit" disabled={disabled} onClick={onEdit}>

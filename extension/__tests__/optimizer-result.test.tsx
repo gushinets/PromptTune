@@ -307,6 +307,7 @@ it("keeps the first visible explanation at the same offset when result height ch
     const container = host.querySelector(".result-scroll")!;
     host.querySelector("details")!.open = true;
     container.scrollTop = 498;
+    container.dispatchEvent(new Event("scroll"));
     const explanation = host.querySelector("li")!;
     expect(explanation.getBoundingClientRect().top).toBe(10);
     viewportHeight = 280;
@@ -315,6 +316,19 @@ it("keeps the first visible explanation at the same offset when result height ch
     });
     expect(explanation.getBoundingClientRect().top).toBe(10);
     viewportHeight = 480;
+    await act(async () => {
+      if (observed.has(container)) resize?.([], {} as ResizeObserver);
+    });
+    expect(explanation.getBoundingClientRect().top).toBe(10);
+    // Chromium can clamp the old offset before delivering ResizeObserver.
+    viewportHeight = 650;
+    container.scrollTop = 350;
+    container.dispatchEvent(new Event("scroll"));
+    await act(async () => {
+      if (observed.has(container)) resize?.([], {} as ResizeObserver);
+    });
+    expect(explanation.getBoundingClientRect().top).toBe(10);
+    viewportHeight = 280;
     await act(async () => {
       if (observed.has(container)) resize?.([], {} as ResizeObserver);
     });
@@ -435,3 +449,107 @@ it.each([0, 10])(
     }
   },
 );
+
+it("keeps a short explanation anchored when growth makes all natural content fit", async () => {
+  let viewportHeight = 250;
+  let resize: ResizeObserverCallback | undefined;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        resize = callback;
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockReturnValue(120);
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("result-scroll") ? viewportHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const space = this.querySelector<HTMLDivElement>(':scope > div[aria-hidden="true"]');
+    return this.classList.contains("result-scroll")
+      ? Math.max(viewportHeight, 400 + (Number.parseFloat(space?.style.height ?? "0") || 0))
+      : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const offset = this.closest(".result-scroll")?.scrollTop ?? 0;
+    const top =
+      this.tagName === "SUMMARY"
+        ? 150 - offset
+        : this.tagName === "LI"
+          ? 200 - offset
+          : this.getAttribute("aria-hidden") === "true" && this.tagName === "DIV"
+            ? 400 - offset
+            : this.tagName === "TEXTAREA"
+              ? -offset
+              : 0;
+    const height = this.tagName === "SUMMARY" ? 20 : this.tagName === "LI" ? 100 : 0;
+    return {
+      top,
+      bottom: top + height,
+      left: 0,
+      right: 320,
+      x: 0,
+      y: top,
+      width: 320,
+      height,
+      toJSON() {},
+    };
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <OptimizerResult
+          improved="Short output"
+          changes={["Explanation"]}
+          goal="general"
+          hidden={false}
+          actions={
+            <div className="action-bar">
+              <button>Copy</button>
+            </div>
+          }
+          onEdit={() => {}}
+          onNew={() => {}}
+        />,
+      );
+    });
+    const container = host.querySelector<HTMLElement>(".result-scroll")!;
+    let scrollOffset = 0;
+    Object.defineProperty(container, "scrollTop", {
+      configurable: true,
+      get: () => scrollOffset,
+      set: (value: number) => {
+        scrollOffset = Math.max(0, Math.min(value, container.scrollHeight - viewportHeight));
+      },
+    });
+    host.querySelector("details")!.open = true;
+    container.scrollTop = 150;
+    container.dispatchEvent(new Event("scroll"));
+    expect(host.querySelector("li")!.getBoundingClientRect().top).toBe(50);
+    viewportHeight = 650;
+    container.scrollTop = 0;
+    container.dispatchEvent(new Event("scroll"));
+    await act(async () => {
+      resize?.([], {} as ResizeObserver);
+    });
+    expect(host.querySelector("li")!.getBoundingClientRect().top).toBe(50);
+    expect(container.scrollTop).toBe(150);
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
