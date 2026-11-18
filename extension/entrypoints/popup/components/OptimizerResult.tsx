@@ -42,6 +42,8 @@ export function OptimizerResult({
     const field = output.current;
     const container = scroll.current;
     const pixels = (value: string) => Number.parseFloat(value) || 0;
+    let previousFeedback: Element | null = null;
+    let previousFeedbackText: string | null = null;
     const resize = () => {
       // Keep the actions beside the visible text. Explanations use the shared
       // scroller, as in the mockup, without taking height away from the result.
@@ -63,8 +65,23 @@ export function OptimizerResult({
         container.clientHeight - top - reserved - pixels(getComputedStyle(container).paddingBottom);
       const style = getComputedStyle(field);
       const borders = pixels(style.borderTopWidth) + pixels(style.borderBottomWidth);
+      const scrollTop = container.scrollTop;
       field.style.height = "auto";
       field.style.height = `${Math.max(120, Math.min(available, field.scrollHeight + borders))}px`;
+      container.scrollTop = scrollTop;
+      const feedback = container.querySelector('.action-feedback[role="alert"]');
+      if (
+        feedback &&
+        (feedback !== previousFeedback || feedback.textContent !== previousFeedbackText)
+      ) {
+        const bounds = feedback.getBoundingClientRect();
+        const visibleTop = container.getBoundingClientRect().top + container.clientTop;
+        const visibleBottom = visibleTop + container.clientHeight;
+        if (bounds.bottom > visibleBottom) container.scrollTop += bounds.bottom - visibleBottom;
+        else if (bounds.top < visibleTop) container.scrollTop += bounds.top - visibleTop;
+      }
+      previousFeedback = feedback;
+      previousFeedbackText = feedback?.textContent ?? null;
     };
     resize();
     if (typeof ResizeObserver === "undefined") return;

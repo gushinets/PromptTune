@@ -33,7 +33,13 @@ it.each([304, 30000])(
         disconnect() {}
       },
     );
-    vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockReturnValue(contentHeight);
+    vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockImplementation(function (
+      this: HTMLTextAreaElement,
+    ) {
+      // A layout read after shrinking the field can clamp the outer scroll offset.
+      if (this.style.height === "auto") this.closest(".result-scroll")!.scrollTop = 0;
+      return contentHeight;
+    });
     vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
       this: HTMLElement,
     ) {
@@ -42,12 +48,17 @@ it.each([304, 30000])(
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement,
     ) {
-      const top = this.tagName === "TEXTAREA" ? 30 : 0;
+      const top =
+        this.tagName === "TEXTAREA" ? 30 - (this.closest(".result-scroll")?.scrollTop ?? 0) : 0;
       const height = this.classList.contains("action-bar")
         ? actionsHeight
-        : this.tagName === "SUMMARY"
-          ? 44
-          : 0;
+        : this.tagName === "DETAILS"
+          ? (this as HTMLDetailsElement).open
+            ? 240
+            : 44
+          : this.tagName === "SUMMARY"
+            ? 44
+            : 0;
       return {
         x: 0,
         y: top,
@@ -84,9 +95,15 @@ it.each([304, 30000])(
       const field = host.querySelector("textarea")!;
       expect(Number.parseFloat(field.style.height)).toBe(contentHeight === 304 ? 304 : 408);
       expect(field.value).toHaveLength(26000);
+      const details = host.querySelector("details")!;
+      details.open = true;
+      await act(async () => {
+        if (observed.has(host.querySelector(".result-scroll")!)) resize?.([], {} as ResizeObserver);
+      });
+      expect(Number.parseFloat(field.style.height)).toBe(contentHeight === 304 ? 304 : 408);
       viewportHeight = 350;
       await act(async () => {
-        resize?.([], {} as ResizeObserver);
+        if (observed.has(host.querySelector(".result-scroll")!)) resize?.([], {} as ResizeObserver);
       });
       expect(Number.parseFloat(field.style.height)).toBe(278);
       // An action failure adds feedback without resizing the viewport.
@@ -97,10 +114,109 @@ it.each([304, 30000])(
       expect(Number.parseFloat(field.style.height)).toBe(232);
       viewportHeight = 800;
       await act(async () => {
-        resize?.([], {} as ResizeObserver);
+        if (observed.has(host.querySelector(".result-scroll")!)) resize?.([], {} as ResizeObserver);
       });
       expect(Number.parseFloat(field.style.height)).toBe(Math.min(contentHeight, 682));
       expect(host.querySelector("button")?.textContent).toBe("Copy");
+      const container = host.querySelector(".result-scroll")!;
+      container.scrollTop = 140;
+      await act(async () => {
+        if (observed.has(container)) resize?.([], {} as ResizeObserver);
+      });
+      expect(container.scrollTop).toBe(140);
+    } finally {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    }
+  },
+);
+
+it.each([80, 140])(
+  "reveals new clipped action feedback while preserving already visible feedback (%ipx)",
+  async (feedbackBottom) => {
+    let resize: ResizeObserverCallback | undefined;
+    const observed = new Set<Element>();
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resize = callback;
+        }
+        observe(element: Element) {
+          observed.add(element);
+        }
+        disconnect() {}
+      },
+    );
+    vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockReturnValue(1000);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.classList.contains("result-scroll") ? 100 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const height = this.classList.contains("action-feedback")
+        ? 40
+        : this.classList.contains("action-bar")
+          ? 70
+          : 0;
+      const top = this.classList.contains("action-feedback") ? feedbackBottom - height : 0;
+      return {
+        top,
+        bottom: top + height,
+        left: 0,
+        right: 320,
+        x: 0,
+        y: top,
+        width: 320,
+        height,
+        toJSON() {},
+      };
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(
+          <OptimizerResult
+            improved="Long output"
+            changes={[]}
+            goal="general"
+            hidden={false}
+            actions={
+              <div className="action-bar">
+                <button>Copy</button>
+              </div>
+            }
+            onEdit={() => {}}
+            onNew={() => {}}
+          />,
+        );
+      });
+      const container = host.querySelector(".result-scroll")!;
+      container.scrollTop = 50;
+      const feedback = document.createElement("p");
+      feedback.className = "action-feedback";
+      feedback.setAttribute("role", "alert");
+      feedback.textContent = "Copy failed";
+      const actions = host.querySelector(".action-bar")!;
+      actions.append(feedback);
+      await act(async () => {
+        if (observed.has(actions)) resize?.([], {} as ResizeObserver);
+      });
+      expect(host.querySelector("textarea")!.style.height).toBe("120px");
+      expect(container.scrollTop).toBe(feedbackBottom > 100 ? 90 : 50);
+      // Subsequent resizes must not pull the reader back to an existing message.
+      container.scrollTop = 10;
+      await act(async () => {
+        if (observed.has(actions)) resize?.([], {} as ResizeObserver);
+      });
+      expect(container.scrollTop).toBe(10);
     } finally {
       await act(async () => {
         root.unmount();
