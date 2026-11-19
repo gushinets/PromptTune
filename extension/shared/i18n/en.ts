@@ -6,6 +6,11 @@ export const en = {
   emailBonusAlreadyClaimed:
     "This email has already received its bonus. No additional improvements were credited.",
   emailBonusTitle: "Get 50 more improvements?",
+  emailBonusConsent:
+    "I allow PromptOptimizer to send my email and installation ID to its server to verify my address, award the bonus and prevent repeat claims. This is optional and can be turned off here.",
+  emailBonusConsentRequired: "Allow email data sharing to request or confirm a verification code.",
+  quotaReturnToTab: "Return to the original tab",
+  quotaAvailable: (remaining: number) => `${remaining} improvements available.`,
   emailBonusDescription: "Leave your email and get 50 more free PromptOptimizer improvements",
   emailBonusRequest: "Get 50 more improvements",
   emailBonusCodeTitle: "Confirm your email",

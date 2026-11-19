@@ -16,6 +16,90 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
+
+it.each([false, true])(
+  "requires optional Firefox email consent before transmission (native=%s)",
+  async (native) => {
+    vi.stubEnv("FIREFOX", "true");
+    let granted = false;
+    let local: Record<string, unknown> = {};
+    Object.assign(browser, {
+      permissions: {
+        getAll: vi.fn(async () =>
+          native ? { data_collection: granted ? ["personallyIdentifyingInfo"] : [] } : {},
+        ),
+        request: vi.fn(async () => {
+          granted = true;
+          return true;
+        }),
+        remove: vi.fn(async () => {
+          granted = false;
+          return true;
+        }),
+      },
+    });
+    vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...local }));
+    vi.mocked(browser.storage.local.set).mockImplementation(async (value) => {
+      Object.assign(local, value);
+    });
+    vi.mocked(browser.runtime.sendMessage).mockClear().mockResolvedValue({ sent: true });
+    await act(async () => root.render(<EmailBonusModal onClose={vi.fn()} onConfirmed={vi.fn()} />));
+    await act(async () =>
+      host
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalled();
+    const consent = host.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(consent).not.toBeNull();
+    expect(consent!.checked).toBe(false);
+    await act(async () => consent!.click());
+    expect(consent!.checked).toBe(true);
+    await act(async () =>
+      host
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "REQUEST_EMAIL_BONUS",
+      email: "",
+    });
+    if (native)
+      expect(browser.permissions.request).toHaveBeenCalledWith({
+        data_collection: ["personallyIdentifyingInfo"],
+      });
+    await act(async () => consent!.click());
+    vi.mocked(browser.runtime.sendMessage).mockClear();
+    await act(async () =>
+      host
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalled();
+  },
+);
+
+it("keeps email transmission blocked when the native permission prompt is declined", async () => {
+  vi.stubEnv("FIREFOX", "true");
+  Object.assign(browser, {
+    permissions: {
+      getAll: vi.fn().mockResolvedValue({ data_collection: [] }),
+      request: vi.fn().mockResolvedValue(false),
+    },
+  });
+  vi.mocked(browser.runtime.sendMessage).mockClear();
+  await act(async () => root.render(<EmailBonusModal onClose={vi.fn()} onConfirmed={vi.fn()} />));
+  const consent = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  await act(async () => consent.click());
+  expect(consent.checked).toBe(false);
+  await act(async () =>
+    host
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(browser.runtime.sendMessage).not.toHaveBeenCalled();
 });
 it("requires email proof before reporting credit, and supports dismissal", async () => {
   const onConfirmed = vi.fn();

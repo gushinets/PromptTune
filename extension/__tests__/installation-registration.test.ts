@@ -156,7 +156,7 @@ it("keeps registration and first quota access on the same ID during a concurrent
 });
 
 it("uses the install timestamp when the first quota lookup overtakes slow install cleanup at midnight", async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-31T20:59:59.000Z"));
   state = { installation_id: "installed" };
   vi.stubGlobal("defineBackground", (main: () => void) => main);
@@ -267,6 +267,25 @@ it("recovers the captured install date after the registrar is recreated followin
   expect(state.install_at).toBe("2026-01-31T20:59:59.000Z");
   expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
   expect(alarms.size).toBe(0);
+});
+
+it("retains the original installation date after a browser restart clears every alarm", async () => {
+  state = { installation_id: "installed" };
+  const request = vi
+    .spyOn(apiClient, "registerInstallation")
+    .mockResolvedValue({ registered: true });
+  vi.mocked(browser.storage.local.set)
+    .mockRejectedValueOnce(new Error("storage unavailable"))
+    .mockRejectedValueOnce(new Error("storage unavailable"));
+  const register = createInstallationRegistrar();
+  await expect(register.initialize("2026-01-31T20:59:59.000Z")).rejects.toThrow(
+    "storage unavailable",
+  );
+  await expect(register()).rejects.toThrow("storage unavailable");
+  alarms.clear();
+  await createInstallationRegistrar()();
+  expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
+  expect(state.install_at).toBe("2026-01-31T20:59:59.000Z");
 });
 
 it("opens welcome despite install-date storage failure and recovers from a durable alarm in a new background", async () => {

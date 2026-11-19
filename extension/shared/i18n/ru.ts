@@ -8,6 +8,11 @@ export const ru: TranslationKeys = {
   emailBonusAlreadyClaimed:
     "Бонус за этот email уже был получен. Дополнительные улучшения не начислены.",
   emailBonusTitle: "Получить ещё 50 улучшений?",
+  emailBonusConsent:
+    "Разрешаю PromptOptimizer передать мой email и идентификатор установки на свой сервер для проверки адреса, начисления бонуса и защиты от повторного начисления. Это необязательно; разрешение можно отключить здесь.",
+  emailBonusConsentRequired: "Разреши передачу email, чтобы запросить или подтвердить код.",
+  quotaReturnToTab: "Вернуться в исходную вкладку",
+  quotaAvailable: (remaining: number) => `Доступно улучшений: ${remaining}.`,
   emailBonusDescription: "Оставь email и получи ещё 50 бесплатных улучшений PromptOptimizer",
   emailBonusRequest: "Получить еще 50 улучшений",
   emailBonusCodeTitle: "Подтверди email",

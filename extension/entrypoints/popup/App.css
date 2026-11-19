@@ -1168,6 +1168,21 @@ textarea.improved-textarea {
   outline: 2px solid #a5a6ff;
   outline-offset: 3px;
 }
+.email-bonus-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.email-bonus-consent input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  padding: 0;
+}
 .email-bonus-submit {
   width: 100%;
   min-height: 44px;

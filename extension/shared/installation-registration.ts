@@ -2,6 +2,11 @@ import browser from "webextension-polyfill";
 import { apiClient } from "./api-client";
 import { BACKEND_MODE, STORAGE_KEYS } from "./constants";
 import { getInstallationId } from "./storage";
+import {
+  readInstallationJournal,
+  writeInstallationJournal,
+  clearInstallationJournal,
+} from "./installation-journal";
 
 export const INSTALLATION_REGISTRATION_ALARM = "quota-installation-registration";
 export const INSTALLATION_TIMESTAMP_ALARM_PREFIX = `${INSTALLATION_REGISTRATION_ALARM}:`;
@@ -22,8 +27,9 @@ export function createInstallationRegistrar(): InstallationRegistrar {
     const requestedEpoch = epoch;
     const promise = (async () => {
       let installedAt = pendingInstallAt;
+      if (installedAt === null) installedAt = await readInstallationJournal();
       if (installedAt === null) {
-        // Alarm metadata survives worker recreation independently of local storage writes.
+        // Recover journals written by earlier versions during the current browser session.
         const alarms = await browser.alarms.getAll();
         installedAt =
           alarms
@@ -35,6 +41,8 @@ export function createInstallationRegistrar(): InstallationRegistrar {
             .at(-1) ?? null;
       }
       if (installedAt === null) return;
+      if (requestedEpoch !== epoch) return;
+      await writeInstallationJournal(installedAt);
       const journal = `${INSTALLATION_TIMESTAMP_ALARM_PREFIX}${installedAt}`;
       await browser.alarms.create(journal, { periodInMinutes: 5 });
       if (BACKEND_MODE === "fastapi") {
@@ -44,6 +52,7 @@ export function createInstallationRegistrar(): InstallationRegistrar {
       if (requestedEpoch === epoch) pendingInstallAt = null;
       // Keep the normal registration retry after the timestamp is durably committed.
       await browser.alarms.clear(journal).catch(() => undefined);
+      if (BACKEND_MODE !== "fastapi") await clearInstallationJournal();
     })().finally(() => {
       if (initialization === promise) initialization = null;
     });
@@ -65,6 +74,7 @@ export function createInstallationRegistrar(): InstallationRegistrar {
       if (typeof installedAt !== "string" || !Number.isFinite(Date.parse(installedAt))) return;
       const installationId = await getInstallationId();
       if (state[STORAGE_KEYS.REGISTERED_INSTALLATION_ID] === installationId) {
+        await clearInstallationJournal();
         await browser.alarms.clear(INSTALLATION_REGISTRATION_ALARM);
         return;
       }
@@ -73,6 +83,7 @@ export function createInstallationRegistrar(): InstallationRegistrar {
       await browser.storage.local.set({
         [STORAGE_KEYS.REGISTERED_INSTALLATION_ID]: installationId,
       });
+      await clearInstallationJournal();
       await browser.alarms.clear(INSTALLATION_REGISTRATION_ALARM);
     })();
     const flight = { epoch, promise };

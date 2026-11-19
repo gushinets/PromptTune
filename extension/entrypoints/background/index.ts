@@ -4,6 +4,7 @@ import {
   INSTALLATION_TIMESTAMP_ALARM_PREFIX,
 } from "@shared/installation-registration";
 import browser from "webextension-polyfill";
+import { requireEmailConsent } from "@shared/email-consent";
 import { openQuotaWindow } from "@shared/quota-window";
 import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
@@ -670,12 +671,18 @@ export default defineBackground(() => {
         return { ok: true };
       }
       case "REQUEST_EMAIL_BONUS": {
+        await requireEmailConsent();
         await registerInstallation();
-        return apiClient.requestEmailBonus(await getInstallationId(), msg.email);
+        const installationId = await getInstallationId();
+        await requireEmailConsent();
+        return apiClient.requestEmailBonus(installationId, msg.email);
       }
       case "CONFIRM_EMAIL_BONUS": {
+        await requireEmailConsent();
         await registerInstallation();
-        return apiClient.confirmEmailBonus(await getInstallationId(), msg.code);
+        const installationId = await getInstallationId();
+        await requireEmailConsent();
+        return apiClient.confirmEmailBonus(installationId, msg.code);
       }
       case "GET_LIMITS": {
         await registerInstallation();

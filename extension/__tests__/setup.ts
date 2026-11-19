@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { vi } from "vitest";
+import "fake-indexeddb/auto";
 import type { Browser } from "webextension-polyfill";
 
 const testGlobals = globalThis as typeof globalThis & {

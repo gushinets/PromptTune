@@ -14,6 +14,14 @@ This document lists external destinations opened by the browser extension produc
 
 Only HTTPS URLs are accepted for release-facing URLs. Invalid or non-HTTPS `VITE_CWS_REVIEW_URL` values fall back to the default PromptOptimizer review page.
 
+## Optional email bonus data
+
+The email bonus sends the address and installation ID to the configured backend to verify ownership, award the one-time bonus, and prevent repeat claims. Firefox declares `personallyIdentifyingInfo` as optional. The email dialog provides a consent checkbox: on Firefox with native data consent it requests/removes that permission; on older supported versions it stores an explicit opt-in locally. Both requesting and confirming a code check current consent in the background before contacting the API. Turning consent off prevents further email-bonus requests; it does not remove the server's existing claim record used to prevent duplicate bonuses.
+
+Private hotkey quota windows contain only quota information and a session-bound return target. They never mount the editor or restore/save regular drafts. Returning focuses the source tab and closes the quota window; private prompt text and generated results remain in the source page.
+
+The installation timestamp is journaled in extension-owned IndexedDB before writing `storage.local`. This journal survives browser restarts independently of Firefox alarms and is removed after successful installation registration. Alarms schedule retries but are not the persistent record.
+
 ## Release Checklist
 
 - Verify any `VITE_CWS_REVIEW_URL` override points to the intended Chrome Web Store review page.

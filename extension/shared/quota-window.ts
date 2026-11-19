@@ -15,11 +15,17 @@ export async function openQuotaWindow(
     // Transfer only quota fields: private text and results never enter shared storage.
     const id = crypto.randomUUID();
     const key = `optimizer_selection_${id}`;
+    const sessionId = await ensureBrowserSessionId();
+    const returnParams = new URLSearchParams({ quota: "1", quotaOnly: "1" });
+    if (source.id !== undefined) {
+      returnParams.set("returnTab", String(source.id));
+      returnParams.set("returnSession", sessionId);
+    }
     const limits = result?.rate_limit;
     if (limits) {
       await setOptimizerHandoff(key, {
         quotaOnly: true,
-        sourceSessionId: await ensureBrowserSessionId(),
+        sourceSessionId: sessionId,
         expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
         quota: {
           remaining: limits.remaining,
@@ -36,9 +42,10 @@ export async function openQuotaWindow(
         },
       });
     }
+    if (limits) returnParams.set("quotaHandoff", key);
     try {
       await browser.windows.create({
-        url: `${browser.runtime.getURL("popup.html")}?quota=1${limits ? `&quotaHandoff=${key}` : ""}`,
+        url: `${browser.runtime.getURL("popup.html")}?${returnParams}`,
         type: "popup",
         width: 380,
         height: 660,

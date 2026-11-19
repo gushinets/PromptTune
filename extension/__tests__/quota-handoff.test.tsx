@@ -5,6 +5,7 @@ import browser from "webextension-polyfill";
 import { App } from "../entrypoints/popup/App";
 import { openQuotaWindow } from "../shared/quota-window";
 import { loadSelectionSession } from "../shared/selection";
+import { setPopupSessionDraft } from "../shared/storage";
 
 let state: Record<string, unknown>, host: HTMLDivElement, root: Root;
 const quota = {
@@ -22,6 +23,7 @@ const quota = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.spyOn(window, "close").mockImplementation(() => {});
   state = { installation_id: "i", audience_mode: "ai", library: [] };
   vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...state }));
   vi.mocked(browser.storage.local.set).mockImplementation(async (values) => {
@@ -152,8 +154,9 @@ it.each(["slow", "failed"])(
     const search = new URL(String(options.url), "https://extension.test").search;
     window.history.replaceState({}, "", `/popup.html${search}`);
     const session = await loadSelectionSession(window.location.search);
-    expect(session).toEqual({ initialQuota: quota });
-    expect(await loadSelectionSession(search)).toEqual({});
+    expect(session).toMatchObject({ initialQuota: quota, quotaOnly: true });
+    expect(await loadSelectionSession(search)).toMatchObject({ quotaOnly: true });
+    expect((await loadSelectionSession(search)).initialQuota).toBeUndefined();
     await act(async () => root.render(<App {...session} />));
     expect(host.querySelector('[role="dialog"]')?.textContent).toContain(
       "Get 50 more improvements?",
@@ -184,7 +187,7 @@ it("shows the private renewal date after the bonus when refresh fails", async ()
   const search = new URL(String(options.url), "https://extension.test").search;
   window.history.replaceState({}, "", `/popup.html${search}`);
   const session = await loadSelectionSession(window.location.search);
-  expect(session).toEqual({ initialQuota: claimed });
+  expect(session).toMatchObject({ initialQuota: claimed, quotaOnly: true });
   await act(async () => root.render(<App {...session} />));
   expect(host.querySelector('[role="dialog"]')).toBeNull();
   expect(host.querySelector(".upgrade-banner")?.textContent).toContain("2027");
@@ -205,4 +208,44 @@ it("removes the private quota handoff when its window cannot open", async () => 
     ),
   ).rejects.toThrow("window unavailable");
   expect(Object.keys(state).some((key) => key.startsWith("optimizer_selection_"))).toBe(false);
+});
+
+it("keeps private quota windows out of regular drafts and returns to their source tab", async () => {
+  await setPopupSessionDraft({
+    draftSessionId: "regular",
+    draftCreatedAt: Date.now(),
+    activeTab: "improve",
+    original: "Regular prompt",
+    improved: "Unrelated regular result",
+    changes: [],
+    goal: "general",
+    lastRequestId: "regular",
+    lastRequestContextKey: null,
+    lastModel: null,
+    lastLatencyMs: null,
+    attemptN: 1,
+  });
+  const before = JSON.stringify(state);
+  const close = vi.spyOn(window, "close").mockImplementation(() => {});
+  Object.assign(browser.tabs, { update: vi.fn().mockResolvedValue({}) });
+  Object.assign(browser.windows, { update: vi.fn().mockResolvedValue({}) });
+  vi.mocked(browser.tabs.get).mockResolvedValue({ id: 42, windowId: 9, incognito: true } as never);
+  vi.mocked(browser.runtime.sendMessage).mockRejectedValue(new Error("offline"));
+  await openQuotaWindow(
+    "Private original",
+    { request_id: "private", improved_text: "Private result", rate_limit: quota },
+    { id: 42, incognito: true } as never,
+  );
+  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+  const session = await loadSelectionSession(
+    new URL(String(options.url), "https://extension.test").search,
+  );
+  await act(async () => root.render(<App {...session} />));
+  expect(host.querySelector(".improved-textarea")).toBeNull();
+  expect(host.querySelector("textarea")).toBeNull();
+  expect(JSON.stringify(state)).toBe(before);
+  await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+  expect(browser.tabs.update).toHaveBeenCalledWith(42, { active: true });
+  expect(browser.windows.update).toHaveBeenCalledWith(9, { focused: true });
+  expect(close).toHaveBeenCalledOnce();
 });

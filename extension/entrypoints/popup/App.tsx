@@ -2,6 +2,7 @@ import { countPromptCharacters, parseInputLengthError } from "@shared/prompt-len
 import { useState, useEffect, useCallback, useMemo, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
 import { EmailBonusModal } from "./components/EmailBonusModal";
+import { QuotaOnlyWindow } from "./QuotaOnlyWindow";
 import { PromptForm } from "./components/PromptForm";
 import { ProcessingScreen } from "./components/ProcessingScreen";
 import { OptimizerResult } from "./components/OptimizerResult";
@@ -128,10 +129,20 @@ interface AppProps {
   initialSelection?: PromptSelection;
   initialDraft?: PopupSessionDraft;
   initialQuota?: RateLimitInfo;
+  quotaOnly?: boolean;
+  quotaReturnTarget?: { tabId: number; sessionId: string };
+}
+
+export function App(props: AppProps) {
+  if (props.quotaOnly)
+    return (
+      <QuotaOnlyWindow initialQuota={props.initialQuota} returnTarget={props.quotaReturnTarget} />
+    );
+  return <OptimizerApp {...props} />;
 }
 
 /** Shared optimizer UI; a selected session keeps its source tab across surface changes. */
-export function App({
+function OptimizerApp({
   viewMode = "popup",
   initialSelection,
   initialDraft,

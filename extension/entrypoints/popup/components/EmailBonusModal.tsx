@@ -3,17 +3,20 @@ import browser from "webextension-polyfill";
 import { useT } from "@shared/i18n";
 import { extractRateLimitResponse } from "@shared/response-utils";
 import type { RateLimitInfo } from "@shared/types";
+import { changeEmailConsent, getEmailConsent, type EmailConsent } from "@shared/email-consent";
 
 export function EmailBonusModal({
   onClose,
   onConfirmed,
   initialQuota,
   onPending,
+  closeLabel,
 }: {
   onClose: () => void;
   onConfirmed: (info: RateLimitInfo) => void;
   initialQuota?: RateLimitInfo | null;
   onPending?: (info: RateLimitInfo) => void;
+  closeLabel?: string;
 }) {
   const t = useT();
   const dialog = useRef<HTMLDivElement>(null);
@@ -25,6 +28,24 @@ export function EmailBonusModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [consent, setConsent] = useState<EmailConsent | null>(
+    import.meta.env.FIREFOX ? null : { native: false, granted: true },
+  );
+  const [consentBusy, setConsentBusy] = useState(false);
+  useEffect(() => {
+    if (!import.meta.env.FIREFOX) return;
+    let active = true;
+    getEmailConsent()
+      .then((value) => {
+        if (active) setConsent(value);
+      })
+      .catch(() => {
+        if (active) setError(t.emailBonusConsentRequired);
+      });
+    return () => {
+      active = false;
+    };
+  }, [t]);
   const [resendAt, setResendAt] = useState(
     initialQuota?.verification_resend_at ? Date.parse(initialQuota.verification_resend_at) : 0,
   );
@@ -65,6 +86,10 @@ export function EmailBonusModal({
   };
   const run = async (action: () => Promise<void>) => {
     if (inFlight.current) return;
+    if (!consent?.granted || consentBusy) {
+      setError(t.emailBonusConsentRequired);
+      return;
+    }
     interacted.current = true;
     inFlight.current = true;
     setBusy(true);
@@ -125,7 +150,7 @@ export function EmailBonusModal({
           type="button"
           className="email-bonus-close"
           onClick={onClose}
-          aria-label={t.emailBonusClose}
+          aria-label={closeLabel ?? t.emailBonusClose}
         >
           ×
         </button>
@@ -189,6 +214,27 @@ export function EmailBonusModal({
                 : t.emailBonusConfirm}
           </button>
         </form>
+        {import.meta.env.FIREFOX && (
+          <label className="email-bonus-consent">
+            <input
+              type="checkbox"
+              checked={consent?.granted ?? false}
+              aria-disabled={!consent || busy || consentBusy}
+              onChange={(event) => {
+                if (!consent || inFlight.current || consentBusy) return;
+                setConsentBusy(true);
+                void changeEmailConsent(event.target.checked, consent.native)
+                  .then((granted) => {
+                    setConsent({ ...consent, granted });
+                    setError("");
+                  })
+                  .catch(() => setError(t.emailBonusConsentRequired))
+                  .finally(() => setConsentBusy(false));
+              }}
+            />
+            <span>{t.emailBonusConsent}</span>
+          </label>
+        )}
         {stage === "code" && (
           <div className="email-bonus-secondary">
             <button
@@ -220,7 +266,7 @@ export function EmailBonusModal({
           </div>
         )}
         <button type="button" className="email-bonus-return" onClick={onClose}>
-          {t.emailBonusClose}
+          {closeLabel ?? t.emailBonusClose}
         </button>
       </div>
     </div>
