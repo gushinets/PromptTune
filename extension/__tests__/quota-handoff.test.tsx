@@ -249,3 +249,29 @@ it("keeps private quota windows out of regular drafts and returns to their sourc
   expect(browser.windows.update).toHaveBeenCalledWith(9, { focused: true });
   expect(close).toHaveBeenCalledOnce();
 });
+
+it.each([
+  { scenario: "monthly renewal", remaining: 50, bonus_claimed: false },
+  { scenario: "bonus claimed elsewhere", remaining: 0, bonus_claimed: true },
+])("closes a private bonus offer after $scenario", async (fresh) => {
+  let release!: (value: unknown) => void;
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+    if ((message as { type?: string }).type === "GET_LIMITS")
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    return { ok: true };
+  });
+  await act(async () => root.render(<App quotaOnly initialQuota={quota} />));
+  expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+  await act(async () =>
+    release({
+      ...quota,
+      remaining: fresh.remaining,
+      per_day_remaining: fresh.remaining,
+      bonus_claimed: fresh.bonus_claimed,
+    }),
+  );
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(host.querySelector(".btn-upgrade")).toBeNull();
+});

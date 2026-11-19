@@ -65,6 +65,44 @@ it("shares an in-flight registration between quota callers", async () => {
   await Promise.all([first, second]);
 });
 
+it.each([true, false])(
+  "keeps a registered installation usable when IndexedDB is denied (timestamp=%s)",
+  async (hasTimestamp) => {
+    state = {
+      installation_id: "installed",
+      registered_installation_id: "installed",
+      ...(hasTimestamp ? { install_at: "2026-01-05T10:00:00.000Z" } : {}),
+    };
+    vi.spyOn(indexedDB, "open").mockImplementation(() => {
+      throw new DOMException(
+        "A mutation operation was attempted on a database that did not allow mutations.",
+        "InvalidStateError",
+      );
+    });
+    vi.stubGlobal("defineBackground", (main: () => void) => main);
+    Object.assign(browser, { permissions: { onRemoved: { addListener: vi.fn() } } });
+    Object.assign(browser.runtime, { onInstalled: { addListener: vi.fn() } });
+    vi.mocked(browser.runtime.getManifest).mockReturnValue({ version: "0.1.0" } as never);
+    const request = vi
+      .spyOn(apiClient, "registerInstallation")
+      .mockResolvedValue({ registered: true });
+    const limits = vi.spyOn(apiClient, "limits").mockResolvedValue({
+      per_day_remaining: 50,
+      per_day_total: 50,
+      per_minute_remaining: 10,
+      per_minute_total: 10,
+    });
+    const { default: main } = await import("../entrypoints/background/index");
+    (main as unknown as () => void)();
+    const handle = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+    await expect(handle({ type: "GET_LIMITS" }, {}, vi.fn())).resolves.toMatchObject({
+      type: "LIMITS_RESULT",
+    });
+    expect(limits).toHaveBeenCalledWith("installed");
+    expect(request).not.toHaveBeenCalled();
+  },
+);
+
 it("registers from onInstalled and retries its original timestamp from the alarm", async () => {
   state = { installation_id: "installed" };
   vi.stubGlobal("defineBackground", (main: () => void) => main);

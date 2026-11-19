@@ -38,6 +38,12 @@ export function QuotaOnlyWindow({
         if (!active || request !== revision.current || !info) return;
         setQuota(info);
         if (
+          info.bonus_claimed ||
+          (info.remaining ?? info.per_day_remaining) > 0 ||
+          info.pending_improvements
+        ) {
+          setOffer(false);
+        } else if (
           initial &&
           !info.bonus_claimed &&
           !info.pending_improvements &&

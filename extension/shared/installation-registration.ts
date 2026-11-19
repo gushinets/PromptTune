@@ -61,6 +61,23 @@ export function createInstallationRegistrar(): InstallationRegistrar {
   };
   const register = async (): Promise<void> => {
     const requestedEpoch = epoch;
+    if (pendingInstallAt === null && !initialization) {
+      const state = await browser.storage.local.get([
+        STORAGE_KEYS.INSTALLATION_ID,
+        STORAGE_KEYS.REGISTERED_INSTALLATION_ID,
+      ]);
+      if (requestedEpoch !== epoch) return register();
+      const id = state[STORAGE_KEYS.INSTALLATION_ID];
+      if (
+        typeof id === "string" &&
+        id.trim() &&
+        state[STORAGE_KEYS.REGISTERED_INSTALLATION_ID] === id
+      ) {
+        // The server anchor is already confirmed; recovery storage is no longer a prerequisite.
+        void browser.alarms.clear(INSTALLATION_REGISTRATION_ALARM).catch(() => undefined);
+        return;
+      }
+    }
     await persistInitialization();
     if (BACKEND_MODE !== "fastapi") return;
     if (requestedEpoch !== epoch) return register();
@@ -74,7 +91,7 @@ export function createInstallationRegistrar(): InstallationRegistrar {
       if (typeof installedAt !== "string" || !Number.isFinite(Date.parse(installedAt))) return;
       const installationId = await getInstallationId();
       if (state[STORAGE_KEYS.REGISTERED_INSTALLATION_ID] === installationId) {
-        await clearInstallationJournal();
+        await clearInstallationJournal().catch(() => undefined);
         await browser.alarms.clear(INSTALLATION_REGISTRATION_ALARM);
         return;
       }
@@ -83,7 +100,7 @@ export function createInstallationRegistrar(): InstallationRegistrar {
       await browser.storage.local.set({
         [STORAGE_KEYS.REGISTERED_INSTALLATION_ID]: installationId,
       });
-      await clearInstallationJournal();
+      await clearInstallationJournal().catch(() => undefined);
       await browser.alarms.clear(INSTALLATION_REGISTRATION_ALARM);
     })();
     const flight = { epoch, promise };
