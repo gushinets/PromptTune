@@ -36,6 +36,8 @@ export interface ImproveRequest {
 }
 
 export interface ImproveResponse {
+  /** Extension receipt time of the successful generation, in milliseconds. */
+  completed_at?: number;
   request_id: string;
   improved_text: string;
   changes?: string[];

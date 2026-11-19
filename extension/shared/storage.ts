@@ -25,6 +25,7 @@ export interface PopupSessionDraft {
   saveOnEditOnly?: boolean;
   draftSessionId?: string;
   draftCreatedAt?: number;
+  resultCompletedAt?: number;
   sourceTabId?: number;
   sourceSessionId?: string;
   standaloneTarget?: { tabId: number; sessionId?: string };
@@ -72,6 +73,10 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
     (draft.draftSessionId === undefined || typeof draft.draftSessionId === "string") &&
     (draft.draftCreatedAt === undefined ||
       (typeof draft.draftCreatedAt === "number" && Number.isFinite(draft.draftCreatedAt))) &&
+    (draft.resultCompletedAt === undefined ||
+      (typeof draft.resultCompletedAt === "number" &&
+        Number.isFinite(draft.resultCompletedAt) &&
+        draft.resultCompletedAt >= 0)) &&
     (draft.standaloneTarget === undefined || isStandaloneTarget(draft.standaloneTarget)) &&
     (draft.sourceSessionId === undefined || typeof draft.sourceSessionId === "string") &&
     (draft.sourceTabId === undefined ||
@@ -325,11 +330,16 @@ export async function getPopupSessionDraft(
         Number.isFinite(draft.draftCreatedAt)
       );
     })
-    .sort(
-      (a, b) =>
-        (b[1] as StoredPopupSessionDraft).draftCreatedAt! -
-        (a[1] as StoredPopupSessionDraft).draftCreatedAt!,
-    );
+    .sort((a, b) => {
+      const left = a[1] as StoredPopupSessionDraft;
+      const right = b[1] as StoredPopupSessionDraft;
+      if (options.resultOnly) {
+        const completion =
+          (right.resultCompletedAt ?? right.updatedAt) - (left.resultCompletedAt ?? left.updatedAt);
+        if (completion !== 0) return completion;
+      }
+      return right.draftCreatedAt! - left.draftCreatedAt!;
+    });
   const key = candidates[0]?.[0] ?? STORAGE_KEYS.POPUP_SESSION_DRAFT;
   const draft = data[key] as
     | StoredPopupSessionDraft
@@ -357,7 +367,11 @@ export async function getPopupSessionDraft(
     }
 
     await withOptimizerStorageLock(() => migrateLegacyPopupDraft({ [key]: draft }));
-    return restored(draft);
+    return restored(
+      draft.improved.trim() && draft.resultCompletedAt === undefined
+        ? { ...draft, resultCompletedAt: draft.draftCreatedAt ?? Date.now() }
+        : draft,
+    );
   }
 
   if (typeof draft.updatedAt !== "number" || !Number.isFinite(draft.updatedAt)) {
@@ -371,7 +385,11 @@ export async function getPopupSessionDraft(
   }
 
   const { updatedAt: _updatedAt, ...sessionDraft } = draft;
-  return restored(sessionDraft);
+  return restored(
+    sessionDraft.improved.trim() && sessionDraft.resultCompletedAt === undefined
+      ? { ...sessionDraft, resultCompletedAt: draft.updatedAt }
+      : sessionDraft,
+  );
 }
 
 /** Restore only the live draft addressed by a standalone optimizer URL. */
@@ -390,7 +408,9 @@ export async function getPopupSessionDraftById(id: string): Promise<PopupSession
   )
     return null;
   const { updatedAt: _updatedAt, ...session } = draft as StoredPopupSessionDraft;
-  return session;
+  return session.improved.trim() && session.resultCompletedAt === undefined
+    ? { ...session, resultCompletedAt: updatedAt }
+    : session;
 }
 
 let draftQueue: Promise<unknown> = Promise.resolve();
@@ -407,7 +427,13 @@ export async function withOptimizerStorageLock<T>(operation: () => Promise<T>): 
 export async function migrateLegacyPopupDraft(data: Record<string, unknown>): Promise<void> {
   const legacy = data[STORAGE_KEYS.POPUP_SESSION_DRAFT];
   if (isPopupSessionDraft(legacy) && !("updatedAt" in legacy)) {
-    const migrated = { ...legacy, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
+    const migrated = {
+      ...legacy,
+      ...(legacy.improved.trim() && legacy.resultCompletedAt === undefined
+        ? { resultCompletedAt: legacy.draftCreatedAt ?? Date.now() }
+        : {}),
+      updatedAt: Date.now(),
+    } satisfies StoredPopupSessionDraft;
     await browser.storage.local.set({ [STORAGE_KEYS.POPUP_SESSION_DRAFT]: migrated });
     data[STORAGE_KEYS.POPUP_SESSION_DRAFT] = migrated;
   }

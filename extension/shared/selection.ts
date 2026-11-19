@@ -1,5 +1,7 @@
+import { extractRateLimitResponse } from "./response-utils";
+import type { RateLimitInfo } from "./types";
 import browser from "webextension-polyfill";
-import { ensureBrowserSessionId } from "./browser-target";
+import { ensureBrowserSessionId, getBrowserSessionId } from "./browser-target";
 import { LIMITS, STORAGE_KEYS } from "./constants";
 import {
   POPUP_DRAFT_PREFIX,
@@ -108,19 +110,33 @@ export function getSelectionSessionId(search: string): string | undefined {
 export async function loadSelectionSession(search: string): Promise<{
   initialSelection?: PromptSelection;
   initialDraft?: PopupSessionDraft;
+  initialQuota?: RateLimitInfo;
 }> {
   const id = getSelectionSessionId(search);
   if (!id) return {};
   const key = `${SELECTION_KEY_PREFIX}${id}`;
+  const quota =
+    new URLSearchParams(search).get("quota") === "1"
+      ? await browser.storage.local
+          .get(key)
+          .then(async (data) => {
+            const payload = data[key] as { quota?: unknown; sourceSessionId?: string } | undefined;
+            if (!isLiveHandoff(payload, Date.now())) return null;
+            const info = extractRateLimitResponse(payload?.quota);
+            return info && payload?.sourceSessionId === (await getBrowserSessionId()) ? info : null;
+          })
+          .catch(() => null)
+      : null;
+  const initialQuota = quota ? { initialQuota: quota } : {};
   const draft = await getPopupSessionDraftById(id).catch(() => null);
   if (draft) {
     await browser.storage.local.remove(key).catch(() => undefined);
-    return { initialDraft: draft };
+    return { initialDraft: draft, ...initialQuota };
   }
   const selection = await readSelection(search);
   if (!selection) {
     const committed = await getPopupSessionDraftById(id).catch(() => null);
-    return committed ? { initialDraft: committed } : {};
+    return committed ? { initialDraft: committed, ...initialQuota } : {};
   }
   const initialSelection = {
     ...selection,
@@ -157,10 +173,12 @@ export async function loadSelectionSession(search: string): Promise<{
       attemptN: 0,
     });
     await browser.storage.local.remove(key).catch(() => undefined);
-    return initial.created ? { initialSelection } : { initialDraft: initial.draft };
+    return initial.created
+      ? { initialSelection, ...initialQuota }
+      : { initialDraft: initial.draft, ...initialQuota };
   } catch {
     // The window remains usable; its payload stays available for reload/retry until expiry.
-    return { initialSelection };
+    return { initialSelection, ...initialQuota };
   }
 }
 

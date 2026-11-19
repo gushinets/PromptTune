@@ -1,6 +1,7 @@
 import browser from "webextension-polyfill";
 import { ensureBrowserSessionId } from "./browser-target";
-import { getPopupSessionDraft, initializePopupSessionDraft } from "./storage";
+import { getPopupSessionDraft, initializePopupSessionDraft, setOptimizerHandoff } from "./storage";
+import { LIMITS } from "./constants";
 import type { ImproveGoal, ImproveResponse } from "./types";
 
 /** Keep hotkey results in an extension-owned surface when its allowance runs out. */
@@ -55,8 +56,19 @@ export async function openQuotaWindow(
       lastModel: result?.model ?? null,
       lastLatencyMs: result?.latency_ms ?? null,
       attemptN: result ? 1 : 0,
+      ...(result ? { resultCompletedAt: result.completed_at ?? Date.now() } : {}),
     },
   );
+  if (result?.rate_limit) {
+    await setOptimizerHandoff(`optimizer_selection_${draftSessionId}`, {
+      text: original,
+      sourceTabId: source.id,
+      sourceSessionId,
+      draftSessionId,
+      quota: result.rate_limit,
+      expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+    });
+  }
   // loadSelectionSession restores an addressed committed draft before reading any selection payload.
   await browser.windows.create({
     url: `${browser.runtime.getURL("popup.html")}?selection=optimizer_selection_${draftSessionId}&session=${draftSessionId}&quota=1`,

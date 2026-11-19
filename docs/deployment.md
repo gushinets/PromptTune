@@ -439,7 +439,9 @@ New installations call `POST /v1/installations` from `onInstalled`, independentl
 of analytics consent. The original local installation timestamp is retained for
 offline retries (startup, a five-minute retry alarm, and before quota requests).
 Registration is idempotent: an existing server anchor is never moved, and future
-client timestamps are clamped to server time.
+client timestamps are clamped to server time. Fresh-install timestamp persistence
+is shared with quota callers and completes before they register or request quota,
+even when handoff cleanup is still pending.
 `FREE_REQ_PER_DAY` is obsolete; the monthly package is 50. `FREE_REQ_PER_MIN`
 remains a separate per-installation minute throttle (default 10).
 `FREE_REQ_PER_IP_MIN` is an additional shared per-IP throttle (default 50 requests
@@ -474,6 +476,14 @@ explained without implying new credit. Pending email proof is restored from
 these fields when the popup or sidebar is reopened.
 Deprecated `per_day_*` fields mirror the monthly values during extension rollout;
 new UI must use monthly semantics. Deploy the updated extension with the API.
+
+Quota recovery selects results by their successful completion timestamp, while
+normal editor restoration still uses editor creation order. Legacy results freeze
+their last saved timestamp when restored so later edits do not become new successes.
+A final hotkey result carries its quota to the new window through a one-shot local
+handoff, bounded to five minutes and the current browser session. The offer is
+shown from that response immediately; a separate server refresh does not delay
+it or reopen it after dismissal.
 
 Integration tests run only against an explicitly supplied disposable database:
 `QUOTA_TEST_DATABASE_URL=postgresql+asyncpg://... pytest tests/test_quota.py tests/test_email_bonus.py`.

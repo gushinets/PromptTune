@@ -282,3 +282,44 @@ it("explains that a verified email already received its bonus instead of implyin
   );
   expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe("0/50");
 });
+
+it("persists the successful completion time without restamping it when the editor changes", async () => {
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+    const type = (message as { type?: string }).type;
+    if (type === "GET_LIMITS") return quota(3);
+    if (type === "IMPROVE_REQUEST")
+      return {
+        request_id: "timed-result",
+        improved_text: "Result",
+        completed_at: 12345,
+        rate_limit: quota(2),
+      };
+    return { ok: true };
+  });
+  await generate();
+  const latest = () =>
+    vi
+      .mocked(browser.storage.local.set)
+      .mock.calls.flatMap(([data]) => Object.entries(data))
+      .filter(([key]) => key.startsWith("optimizer_draft_"))
+      .at(-1)?.[1];
+  expect(latest()).toMatchObject({ resultCompletedAt: 12345, improved: "Result" });
+  await act(async () =>
+    [...host.querySelectorAll("button")]
+      .find((button) => button.textContent === "Edit original")!
+      .click(),
+  );
+  await act(async () => {
+    const field = host.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      field,
+      "Edited prompt",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(latest()).toMatchObject({
+    resultCompletedAt: 12345,
+    original: "Edited prompt",
+    improved: "Result",
+  });
+});

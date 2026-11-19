@@ -127,11 +127,18 @@ interface AppProps {
   viewMode?: ViewMode;
   initialSelection?: PromptSelection;
   initialDraft?: PopupSessionDraft;
+  initialQuota?: RateLimitInfo;
 }
 
 /** Shared optimizer UI; a selected session keeps its source tab across surface changes. */
-export function App({ viewMode = "popup", initialSelection, initialDraft }: AppProps) {
+export function App({
+  viewMode = "popup",
+  initialSelection,
+  initialDraft,
+  initialQuota,
+}: AppProps) {
   const t = useT();
+  const [initialQuotaSnapshot] = useState(initialQuota);
   const [isSelectionLaunch] = useState(
     () => viewMode === "popup" && new URLSearchParams(window.location.search).has("selection"),
   );
@@ -250,8 +257,11 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [error, setError] = useState<ErrorInfo | null>(() =>
     selectionLaunchFailed ? { type: "generic", message: t.errorSelectionUnavailable } : null,
   );
-  const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
-  const [limitsLoaded, setLimitsLoaded] = useState(false);
+  const [rateLimit, setRateLimit] = useState(() => ({
+    remaining: initialQuotaSnapshot?.remaining ?? initialQuotaSnapshot?.per_day_remaining ?? 0,
+    total: initialQuotaSnapshot?.total ?? initialQuotaSnapshot?.per_day_total ?? 0,
+  }));
+  const [limitsLoaded, setLimitsLoaded] = useState(Boolean(initialQuotaSnapshot));
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -263,8 +273,16 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     return () =>
       request === quotaRefreshRequest.current && version === quotaMutationVersion.current;
   }, []);
-  const [quotaInfo, setQuotaInfo] = useState<RateLimitInfo | null>(null);
-  const [showEmailBonus, setShowEmailBonus] = useState(false);
+  const [quotaInfo, setQuotaInfo] = useState<RateLimitInfo | null>(initialQuotaSnapshot ?? null);
+  const [showEmailBonus, setShowEmailBonus] = useState(
+    () =>
+      BACKEND_MODE === "fastapi" &&
+      Boolean(
+        initialQuotaSnapshot &&
+        isPeriodQuotaExhausted(initialQuotaSnapshot) &&
+        !initialQuotaSnapshot.bonus_claimed,
+      ),
+  );
   const [emailBonusNotice, setEmailBonusNotice] = useState(false);
   const applyQuota = useCallback(
     (info: RateLimitInfo, offer = false, source: "mutation" | "lookup" = "mutation") => {
@@ -312,6 +330,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [lastModel, setLastModel] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
+  const [resultCompletedAt, setResultCompletedAt] = useState<number | null>(null);
   const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
   const [goalIsUserSelected, setGoalIsUserSelected] = useState(false);
   const hasTrackedPopupOpenedRef = useRef(false);
@@ -447,6 +466,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLastModel(draft.lastModel);
         setLastLatencyMs(draft.lastLatencyMs);
         setAttemptN(draft.attemptN);
+        setResultCompletedAt(draft.resultCompletedAt ?? null);
 
         if (draft.goal && isOptimizerRequestContext({ mode: restoredMode, goal: draft.goal })) {
           // Legacy drafts do not distinguish explicit choices from detected defaults.
@@ -552,6 +572,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       lastModel,
       lastLatencyMs,
       attemptN,
+      ...(resultCompletedAt !== null ? { resultCompletedAt } : {}),
     }),
     [
       draftSessionId,
@@ -574,6 +595,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       lastModel,
       lastLatencyMs,
       attemptN,
+      resultCompletedAt,
     ],
   );
 
@@ -590,7 +612,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
     let active = true;
-    let initial = true;
+    let initial = !initialQuotaSnapshot;
     const refresh = () => {
       const isCurrent = startQuotaLookup();
       void browser.runtime
@@ -620,7 +642,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       clearInterval(timer);
       window.removeEventListener("focus", refresh);
     };
-  }, [applyQuota, startQuotaLookup]);
+  }, [applyQuota, startQuotaLookup, initialQuotaSnapshot]);
 
   useEffect(() => {
     const className = viewMode === "sidepanel" ? "sidepanel-body" : "popup-body";
@@ -858,6 +880,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLastModel(result.model ?? null);
         setLastLatencyMs(typeof result.latency_ms === "number" ? result.latency_ms : null);
         setAttemptN(nextAttempt);
+        setResultCompletedAt(result.completed_at ?? Date.now());
         if (isRegeneration) {
           void trackEvent(
             "result_regenerated",
@@ -984,6 +1007,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     setLastModel(null);
     setLastLatencyMs(null);
     setAttemptN(0);
+    setResultCompletedAt(null);
   }, []);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
@@ -1061,6 +1085,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
       setEditingOriginal(true);
       setImproved("");
+      setResultCompletedAt(null);
       setResultContext(null);
       setChanges([]);
       try {

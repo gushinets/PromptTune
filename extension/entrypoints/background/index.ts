@@ -61,7 +61,6 @@ export default defineBackground(() => {
   const clientVersion = browser.runtime.getManifest().version;
   const registerInstallation = createInstallationRegistrar();
   const retryInstallationRegistration = () => registerInstallation().catch(() => undefined);
-  void retryInstallationRegistration();
   const pendingRequests = new Map<string, AbortController>();
   const requestOwners = new Map<string, { controller: AbortController; started: boolean }>();
 
@@ -448,11 +447,13 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener(async (details) => {
     const installAt = new Date().toISOString();
+    const initialized =
+      details.reason === "install" ? registerInstallation.initialize(installAt) : null;
     registerSelectionMenu();
+    await initialized;
     await cleanupSelections();
     if (details.reason !== "install") return;
 
-    await browser.storage.local.set({ [STORAGE_KEYS.INSTALL_AT]: installAt });
     void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
     await retryInstallationRegistration();
 
@@ -608,6 +609,7 @@ export default defineBackground(() => {
               controller.signal,
             );
 
+            result.completed_at = Date.now();
             if (typeof result.latency_ms !== "number") {
               result.latency_ms = Date.now() - startedAt;
             }

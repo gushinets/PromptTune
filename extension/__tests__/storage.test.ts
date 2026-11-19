@@ -368,6 +368,7 @@ describe("storage", () => {
         lastModel: "gpt",
         lastLatencyMs: 123,
         attemptN: 2,
+        resultCompletedAt: new Date("2026-06-16T11:00:00.000Z").getTime(),
       });
       expect(browser.storage.local.remove).not.toHaveBeenCalled();
     });
@@ -400,6 +401,7 @@ describe("storage", () => {
         lastModel: "gpt",
         lastLatencyMs: 123,
         attemptN: 2,
+        resultCompletedAt: new Date("2026-06-16T12:00:00.000Z").getTime(),
       });
       expect(browser.storage.local.set).toHaveBeenCalledWith({
         [STORAGE_KEYS.POPUP_SESSION_DRAFT]: expect.objectContaining({
