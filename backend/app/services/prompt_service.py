@@ -28,6 +28,7 @@ class PromptService:
     async def check_rate_limit(
         self, installation_id: str, ip: str
     ) -> tuple[bool, RateLimitInfo | None]:
+        await throttle(self.redis, "improve-ip", ip, settings.free_req_per_ip_min, 60)
         minute_remaining = await throttle(
             self.redis, "improve", installation_id, settings.free_req_per_min, 60
         )

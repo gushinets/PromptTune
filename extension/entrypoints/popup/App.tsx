@@ -254,20 +254,43 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
-  const quotaVersion = useRef(0);
+  const quotaMutationVersion = useRef(0);
+  const quotaRefreshRequest = useRef(0);
+  const startQuotaLookup = useCallback(() => {
+    const request = ++quotaRefreshRequest.current;
+    const version = quotaMutationVersion.current;
+    return () =>
+      request === quotaRefreshRequest.current && version === quotaMutationVersion.current;
+  }, []);
   const [quotaInfo, setQuotaInfo] = useState<RateLimitInfo | null>(null);
   const [showEmailBonus, setShowEmailBonus] = useState(false);
-  const applyQuota = useCallback((info: RateLimitInfo, offer = false) => {
-    quotaVersion.current += 1;
-    const remaining = info.remaining ?? info.per_day_remaining;
-    if (remaining > 0 || info.bonus_claimed) setShowEmailBonus(false);
-    setRateLimit({ remaining, total: info.total ?? info.per_day_total });
-    setQuotaInfo(info);
-    setLimitsUnavailable(false);
-    setLimitsLoaded(true);
-    if (BACKEND_MODE === "fastapi" && offer && remaining === 0 && !info.bonus_claimed)
-      setShowEmailBonus(true);
-  }, []);
+  const applyQuota = useCallback(
+    (info: RateLimitInfo, offer = false, source: "mutation" | "lookup" = "mutation") => {
+      if (source === "mutation") quotaMutationVersion.current += 1;
+      const remaining = info.remaining ?? info.per_day_remaining;
+      if (remaining > 0 || info.bonus_claimed) setShowEmailBonus(false);
+      setRateLimit({ remaining, total: info.total ?? info.per_day_total });
+      setQuotaInfo(info);
+      setLimitsUnavailable(false);
+      setLimitsLoaded(true);
+      if (BACKEND_MODE === "fastapi" && offer && remaining === 0 && !info.bonus_claimed)
+        setShowEmailBonus(true);
+    },
+    [],
+  );
+  const recoverQuota = useCallback(() => {
+    const isCurrent = startQuotaLookup();
+    void browser.runtime
+      .sendMessage({ type: "GET_LIMITS" })
+      .then((response) => {
+        if (!isCurrent()) return;
+        const info = extractRateLimitResponse(response);
+        if (info) applyQuota(info, true, "lookup");
+      })
+      .catch(() => {
+        if (isCurrent()) setLimitsUnavailable(true);
+      });
+  }, [applyQuota, startQuotaLookup]);
   const [siteContext, setSiteContext] = useState<{
     hostname?: string;
     goal: AiImproveGoal;
@@ -561,22 +584,23 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     let active = true;
     let initial = true;
     const refresh = () => {
-      const version = quotaVersion.current;
+      const isCurrent = startQuotaLookup();
       void browser.runtime
         .sendMessage({ type: "GET_LIMITS" })
         .then((response) => {
-          if (!active || version !== quotaVersion.current) return;
+          if (!active || !isCurrent()) return;
           const info = extractRateLimitResponse(response);
           if (info) {
             applyQuota(
               info,
               initial && new URLSearchParams(window.location.search).get("quota") === "1",
+              "lookup",
             );
             initial = false;
           } else setLimitsUnavailable(true);
         })
         .catch(() => {
-          if (active) setLimitsUnavailable(true);
+          if (active && isCurrent()) setLimitsUnavailable(true);
         });
     };
     refresh();
@@ -584,10 +608,11 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     const timer = setInterval(refresh, 60_000);
     return () => {
       active = false;
+      quotaRefreshRequest.current += 1;
       clearInterval(timer);
       window.removeEventListener("focus", refresh);
     };
-  }, [applyQuota]);
+  }, [applyQuota, startQuotaLookup]);
 
   useEffect(() => {
     const className = viewMode === "sidepanel" ? "sidepanel-body" : "popup-body";
@@ -774,12 +799,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       if (isExhausted) {
         // A canceled request may refund quota after a quick retry received 429.
         // Revalidate the cached zero so an open panel can recover without reopening.
+        const isCurrent = startQuotaLookup();
         const limits = extractRateLimitResponse(
           await browser.runtime.sendMessage({ type: "GET_LIMITS" }),
         );
-        if (activeRequestRef.current !== requestKey) return;
+        if (activeRequestRef.current !== requestKey || !isCurrent()) return;
         if (!limits) throw new Error(t.tooltipUnavailable);
-        applyQuota(limits, true);
+        applyQuota(limits, true, "lookup");
         setLimitsUnavailable(false);
         setLimitsLoaded(true);
         if ((limits.remaining ?? limits.per_day_remaining) <= 0) {
@@ -849,13 +875,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       const info = mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
-        void browser.runtime
-          .sendMessage({ type: "GET_LIMITS" })
-          .then((response) => {
-            const info = extractRateLimitResponse(response);
-            if (info) applyQuota(info, true);
-          })
-          .catch(() => setLimitsUnavailable(true));
+        recoverQuota();
       }
     } finally {
       owner?.close();
@@ -872,11 +892,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     attemptN,
     goal,
     isExhausted,
+    startQuotaLookup,
     isOriginalOverLimit,
     lastRequestId,
     lastRequestContextKey,
     mapErrorToToast,
     applyQuota,
+    recoverQuota,
     original,
     improved,
     siteHostname,
@@ -990,13 +1012,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           : mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
-        void browser.runtime
-          .sendMessage({ type: "GET_LIMITS" })
-          .then((response) => {
-            const info = extractRateLimitResponse(response);
-            if (info) applyQuota(info, true);
-          })
-          .catch(() => setLimitsUnavailable(true));
+        recoverQuota();
       }
       return false;
     } finally {
@@ -1010,7 +1026,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     isOriginalOverLimit,
     refreshLibraryCount,
     mapErrorToToast,
-    applyQuota,
+    recoverQuota,
     viewMode,
     t,
   ]);
@@ -1050,7 +1066,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       {showEmailBonus && (
         <EmailBonusModal
           initialQuota={quotaInfo}
-          onPending={setQuotaInfo}
+          onPending={(info) => applyQuota(info)}
           onClose={() => setShowEmailBonus(false)}
           onConfirmed={(info) => {
             applyQuota(info);

@@ -436,7 +436,12 @@ Run `alembic upgrade head` before starting the updated API (migration 008).
 Existing installations receive 50 improvements on first access; renewal stays
 anchored to their original server registration date, at Moscow midnight.
 `FREE_REQ_PER_DAY` is obsolete; the monthly package is 50. `FREE_REQ_PER_MIN`
-remains a separate short abuse throttle. Redis does not store monthly balances.
+remains a separate per-installation minute throttle (default 10).
+`FREE_REQ_PER_IP_MIN` is an additional shared per-IP throttle (default 50 requests
+per 60 seconds), applied before quota reservation and the LLM call, even when
+installation IDs change. It permits multiple installations behind NAT without
+merging their monthly balances. Both throttles reject with temporary 429s and
+consume no monthly units. Redis does not store monthly balances.
 
 Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`
 and a separate random `EMAIL_CODE_SECRET` (at least 32 characters, identical on

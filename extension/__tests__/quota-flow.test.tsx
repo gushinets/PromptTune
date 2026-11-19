@@ -18,6 +18,9 @@ const quota = (remaining: number, claimed = false) => ({
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(browser.runtime.getManifest).mockReturnValue({ version: "0.1.0" } as ReturnType<
+    typeof browser.runtime.getManifest
+  >);
   vi.mocked(browser.storage.local.get).mockResolvedValue({
     installation_id: "i",
     audience_mode: "ai",
@@ -132,3 +135,96 @@ it("preserves the previous result if another surface consumes the last unit", as
     "Preserve my previous result",
   );
 });
+
+it.each(["older-first", "newer-first"])(
+  "keeps the latest started quota refresh when responses finish %s",
+  async (order) => {
+    const pending: Array<(value: unknown) => void> = [];
+    let queries = 0;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+      if ((message as { type?: string }).type === "GET_LIMITS") {
+        if (++queries === 1) return quota(7);
+        return new Promise((resolve) => pending.push(resolve));
+      }
+      return { ok: true };
+    });
+    await act(async () => root.render(<App />));
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(pending).toHaveLength(2);
+    if (order === "older-first") {
+      await act(async () => pending[0](quota(0)));
+      expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe(
+        "7/50",
+      );
+      await act(async () => pending[1](quota(50, true)));
+    } else {
+      await act(async () => pending[1](quota(50, true)));
+      await act(async () => pending[0](quota(0)));
+    }
+    expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe("50/50");
+  },
+);
+
+it.each(["improve", "save"])(
+  "ignores stale %s recovery after a newer successful improvement",
+  async (operation) => {
+    const { apiClient } = await import("../shared/api-client");
+    let release!: (value: unknown) => void;
+    let queries = 0;
+    let failImprove = false;
+    let confirmed = false;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+      const type = (message as { type?: string }).type;
+      if (type === "GET_LIMITS") {
+        if (++queries === 1) return quota(1);
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      }
+      if (type === "IMPROVE_REQUEST") {
+        if (failImprove) {
+          failImprove = false;
+          throw new Error("API 429: Monthly improvement quota exhausted");
+        }
+        return {
+          request_id: crypto.randomUUID(),
+          improved_text: "Keep this result",
+          rate_limit: quota(confirmed ? 50 : 1, confirmed),
+        };
+      }
+      return { ok: true };
+    });
+    const edit = () =>
+      [...host.querySelectorAll("button")]
+        .find((button) => button.textContent === "Edit original")!
+        .click();
+    await generate();
+    if (operation === "save") {
+      vi.spyOn(apiClient, "savePrompt").mockRejectedValue(
+        new Error("API 429: Monthly improvement quota exhausted"),
+      );
+      await act(async () =>
+        [...host.querySelectorAll("button")]
+          .find((button) => button.textContent?.includes("Save to Library"))!
+          .click(),
+      );
+    } else {
+      failImprove = true;
+      await act(async () => edit());
+      await act(async () => host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+    }
+    await act(async () => {
+      await Promise.resolve();
+    });
+    if (operation === "save") expect(apiClient.savePrompt).toHaveBeenCalledTimes(1);
+    expect(queries).toBe(2);
+    confirmed = true;
+    await act(async () => edit());
+    await act(async () => host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+    expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe("50/50");
+    await act(async () => release(quota(0)));
+    expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe("50/50");
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+  },
+);

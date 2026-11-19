@@ -5,6 +5,8 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
+from email_validator import validate_email
+
 from app.config import settings
 
 
@@ -30,7 +32,8 @@ def _send(email: str, code: str) -> None:
             smtp.starttls(context=context)
         if settings.smtp_username:
             smtp.login(settings.smtp_username, settings.smtp_password or "")
-        smtp.send_message(message)
+        recipient = validate_email(email, check_deliverability=False)
+        smtp.send_message(message, to_addrs=[recipient.ascii_email or recipient.normalized])
 
 
 async def send_verification_email(email: str, code: str) -> None:
