@@ -44,6 +44,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(async () => root.unmount());
+  window.history.replaceState({}, "", "/");
   host.remove();
   vi.restoreAllMocks();
 });
@@ -149,7 +150,8 @@ it.each(["slow", "failed"])(
     expect(Object.keys(state).some((key) => key.startsWith("optimizer_draft_"))).toBe(false);
     const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
     const search = new URL(String(options.url), "https://extension.test").search;
-    const session = await loadSelectionSession(search);
+    window.history.replaceState({}, "", `/popup.html${search}`);
+    const session = await loadSelectionSession(window.location.search);
     expect(session).toEqual({ initialQuota: quota });
     expect(await loadSelectionSession(search)).toEqual({});
     await act(async () => root.render(<App {...session} />));
@@ -158,6 +160,8 @@ it.each(["slow", "failed"])(
     );
     expect(host.textContent).not.toContain("Private original");
     expect(host.textContent).not.toContain("Private result");
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+    expect(host.querySelector(".error-toast")).toBeNull();
   },
 );
 
@@ -177,13 +181,14 @@ it("shows the private renewal date after the bonus when refresh fails", async ()
     { id: 42, incognito: true } as never,
   );
   const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
-  const session = await loadSelectionSession(
-    new URL(String(options.url), "https://extension.test").search,
-  );
+  const search = new URL(String(options.url), "https://extension.test").search;
+  window.history.replaceState({}, "", `/popup.html${search}`);
+  const session = await loadSelectionSession(window.location.search);
   expect(session).toEqual({ initialQuota: claimed });
   await act(async () => root.render(<App {...session} />));
   expect(host.querySelector('[role="dialog"]')).toBeNull();
   expect(host.querySelector(".upgrade-banner")?.textContent).toContain("2027");
+  expect(host.querySelector(".error-toast")).toBeNull();
 });
 
 it("removes the private quota handoff when its window cannot open", async () => {

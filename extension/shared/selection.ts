@@ -112,11 +112,19 @@ export async function loadSelectionSession(search: string): Promise<{
   initialDraft?: PopupSessionDraft;
   initialQuota?: RateLimitInfo;
 }> {
-  const id = getSelectionSessionId(search);
+  const params = new URLSearchParams(search);
+  const quotaOnlyKey = params.get("quotaHandoff") ?? "";
+  const quotaOnlyLaunch =
+    params.get("quota") === "1" &&
+    quotaOnlyKey.startsWith(SELECTION_KEY_PREFIX) &&
+    quotaOnlyKey.length > SELECTION_KEY_PREFIX.length;
+  const id = quotaOnlyLaunch
+    ? quotaOnlyKey.slice(SELECTION_KEY_PREFIX.length)
+    : getSelectionSessionId(search);
   if (!id) return {};
   const key = `${SELECTION_KEY_PREFIX}${id}`;
   const quotaHandoff =
-    new URLSearchParams(search).get("quota") === "1"
+    params.get("quota") === "1"
       ? await browser.storage.local
           .get(key)
           .then(async (data) => {
@@ -132,7 +140,7 @@ export async function loadSelectionSession(search: string): Promise<{
           .catch(() => null)
       : null;
   const initialQuota = quotaHandoff ? { initialQuota: quotaHandoff.info } : {};
-  if (quotaHandoff?.quotaOnly) {
+  if (quotaOnlyLaunch || quotaHandoff?.quotaOnly) {
     await browser.storage.local.remove(key).catch(() => undefined);
     return initialQuota;
   }

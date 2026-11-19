@@ -38,7 +38,7 @@ export async function openQuotaWindow(
     }
     try {
       await browser.windows.create({
-        url: `${browser.runtime.getURL("popup.html")}?quota=1${limits ? `&selection=${key}&session=${id}` : ""}`,
+        url: `${browser.runtime.getURL("popup.html")}?quota=1${limits ? `&quotaHandoff=${key}` : ""}`,
         type: "popup",
         width: 380,
         height: 660,
