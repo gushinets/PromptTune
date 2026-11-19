@@ -4,6 +4,7 @@ import { BACKEND_MODE, STORAGE_KEYS } from "./constants";
 import { getInstallationId } from "./storage";
 
 export const INSTALLATION_REGISTRATION_ALARM = "quota-installation-registration";
+export const INSTALLATION_TIMESTAMP_ALARM_PREFIX = `${INSTALLATION_REGISTRATION_ALARM}:`;
 
 /** Register independently of analytics consent; retain the install timestamp across offline retries. */
 export interface InstallationRegistrar {
@@ -18,23 +19,41 @@ export function createInstallationRegistrar(): InstallationRegistrar {
   let inFlight: { epoch: number; promise: Promise<void> } | null = null;
   const persistInitialization = (): Promise<void> => {
     if (initialization) return initialization;
-    if (pendingInstallAt === null) return Promise.resolve();
     const requestedEpoch = epoch;
-    const promise = browser.storage.local
-      .set({ [STORAGE_KEYS.INSTALL_AT]: pendingInstallAt })
-      .then(() => {
-        if (requestedEpoch === epoch) pendingInstallAt = null;
-      })
-      .finally(() => {
-        if (initialization === promise) initialization = null;
-      });
+    const promise = (async () => {
+      let installedAt = pendingInstallAt;
+      if (installedAt === null) {
+        // Alarm metadata survives worker recreation independently of local storage writes.
+        const alarms = await browser.alarms.getAll();
+        installedAt =
+          alarms
+            .map((alarm) => alarm.name)
+            .filter((name) => name.startsWith(INSTALLATION_TIMESTAMP_ALARM_PREFIX))
+            .map((name) => name.slice(INSTALLATION_TIMESTAMP_ALARM_PREFIX.length))
+            .filter((date) => Number.isFinite(Date.parse(date)))
+            .sort()
+            .at(-1) ?? null;
+      }
+      if (installedAt === null) return;
+      const journal = `${INSTALLATION_TIMESTAMP_ALARM_PREFIX}${installedAt}`;
+      await browser.alarms.create(journal, { periodInMinutes: 5 });
+      if (BACKEND_MODE === "fastapi") {
+        await browser.alarms.create(INSTALLATION_REGISTRATION_ALARM, { periodInMinutes: 5 });
+      }
+      await browser.storage.local.set({ [STORAGE_KEYS.INSTALL_AT]: installedAt });
+      if (requestedEpoch === epoch) pendingInstallAt = null;
+      // Keep the normal registration retry after the timestamp is durably committed.
+      await browser.alarms.clear(journal).catch(() => undefined);
+    })().finally(() => {
+      if (initialization === promise) initialization = null;
+    });
     initialization = promise;
     return promise;
   };
   const register = async (): Promise<void> => {
-    if (BACKEND_MODE !== "fastapi") return;
     const requestedEpoch = epoch;
     await persistInitialization();
+    if (BACKEND_MODE !== "fastapi") return;
     if (requestedEpoch !== epoch) return register();
     if (inFlight?.epoch === epoch) return inFlight.promise;
     const promise = (async () => {

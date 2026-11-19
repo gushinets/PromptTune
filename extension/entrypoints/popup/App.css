@@ -1159,7 +1159,8 @@ textarea.improved-textarea {
   font: inherit;
   cursor: pointer;
 }
-.email-bonus-modal button:disabled {
+.email-bonus-modal button:disabled,
+.email-bonus-modal button[aria-disabled="true"] {
   opacity: 0.55;
   cursor: default;
 }

@@ -4,6 +4,7 @@ import { openQuotaWindow } from "../shared/quota-window";
 import {
   setPopupSessionDraft,
   getPopupSessionDraft,
+  withOptimizerStorageLock,
   type PopupSessionDraft,
 } from "../shared/storage";
 import { loadSelectionSession } from "../shared/selection";
@@ -164,4 +165,56 @@ it("freezes a legacy result's last known success time before later editor autosa
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("selects the latest result after an in-flight storage writer commits", async () => {
+  const now = Date.now();
+  const first: PopupSessionDraft = {
+    draftSessionId: "first-result",
+    draftCreatedAt: now - 2000,
+    resultCompletedAt: now - 2000,
+    activeTab: "improve",
+    optimizer_screen: "result",
+    original: "First prompt",
+    improved: "First result",
+    changes: [],
+    goal: "general",
+    lastRequestId: "first",
+    lastRequestContextKey: null,
+    lastModel: null,
+    lastLatencyMs: null,
+    attemptN: 1,
+  };
+  await setPopupSessionDraft(first);
+  let commit!: () => void;
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const writer = withOptimizerStorageLock(async () => {
+    started();
+    await new Promise<void>((resolve) => {
+      commit = resolve;
+    });
+    state.optimizer_draft_second = {
+      ...first,
+      draftSessionId: "second",
+      draftCreatedAt: now - 1000,
+      resultCompletedAt: now,
+      updatedAt: now,
+      improved: "Second result",
+    };
+  });
+  await ready;
+  const opening = openQuotaWindow("Rejected", undefined, { id: 77 } as never);
+  // Drain reads queued by the launch while the earlier writer still holds the lock.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  commit();
+  await Promise.all([writer, opening]);
+  expect(await getPopupSessionDraft(false)).toMatchObject({ improved: "Second result" });
+  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+  expect(
+    (await loadSelectionSession(new URL(String(options.url), "https://extension.test").search))
+      .initialDraft,
+  ).toMatchObject({ improved: "Second result" });
 });

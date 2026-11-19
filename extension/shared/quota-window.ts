@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { ensureBrowserSessionId } from "./browser-target";
-import { getPopupSessionDraft, initializePopupSessionDraft, setOptimizerHandoff } from "./storage";
+import { initializePopupSessionDraft, setOptimizerHandoff } from "./storage";
 import { LIMITS } from "./constants";
 import type { ImproveGoal, ImproveResponse } from "./types";
 
@@ -51,20 +51,8 @@ export async function openQuotaWindow(
   }
   const draftSessionId = crypto.randomUUID();
   const sourceSessionId = await ensureBrowserSessionId();
-  const previous = !result ? await getPopupSessionDraft(false, { resultOnly: true }) : null;
-  const latest = previous ? await getPopupSessionDraft(false) : null;
-  const restored = previous
-    ? {
-        ...previous,
-        draftSessionId,
-        draftCreatedAt: Math.max(Date.now(), (latest?.draftCreatedAt ?? 0) + 1),
-        activeTab: "improve" as const,
-        optimizer_screen: "result" as const,
-        saveOnEditOnly: false,
-      }
-    : null;
   await initializePopupSessionDraft(
-    restored ?? {
+    {
       draftSessionId,
       draftCreatedAt: Date.now(),
       sourceTabId: source.id,
@@ -86,6 +74,7 @@ export async function openQuotaWindow(
       attemptN: result ? 1 : 0,
       ...(result ? { resultCompletedAt: result.completed_at ?? Date.now() } : {}),
     },
+    { restoreLatestResult: !result },
   );
   if (result?.rate_limit) {
     await setOptimizerHandoff(`optimizer_selection_${draftSessionId}`, {

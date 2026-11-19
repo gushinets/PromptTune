@@ -37,6 +37,8 @@ async def get_limits(
     db: AsyncSession = Depends(get_db),
 ):
     await ensure_installation_id_when_ip_present(ip, installation_id, redis)
+    # Status creates records for new IDs; share admission across all IDs from this IP.
+    await throttle(redis, "limits-ip", ip, 60, 60)
     return await with_minute_allowance(
         await QuotaService(db).status(installation_id), redis, installation_id
     )

@@ -30,6 +30,15 @@ export function EmailBonusModal({
   );
   const [clock, setClock] = useState(Date.now());
   const inFlight = useRef(false);
+  const interacted = useRef(false);
+  useEffect(() => {
+    if (interacted.current || !initialQuota?.verification_pending || !initialQuota.email) return;
+    setEmail(initialQuota.email);
+    setStage("code");
+    setResendAt(
+      initialQuota.verification_resend_at ? Date.parse(initialQuota.verification_resend_at) : 0,
+    );
+  }, [initialQuota]);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     dialog.current?.querySelector<HTMLInputElement>("input")?.focus();
@@ -56,6 +65,7 @@ export function EmailBonusModal({
   };
   const run = async (action: () => Promise<void>) => {
     if (inFlight.current) return;
+    interacted.current = true;
     inFlight.current = true;
     setBusy(true);
     setError("");
@@ -138,8 +148,11 @@ export function EmailBonusModal({
               aria-label="Email"
               placeholder="your@email.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={busy}
+              onChange={(e) => {
+                interacted.current = true;
+                setEmail(e.target.value);
+              }}
+              readOnly={busy}
             />
           ) : (
             <>
@@ -154,8 +167,11 @@ export function EmailBonusModal({
                 aria-label={t.emailBonusCodeLabel}
                 placeholder="000000"
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
-                disabled={busy}
+                onChange={(e) => {
+                  interacted.current = true;
+                  setCode(e.target.value);
+                }}
+                readOnly={busy}
               />
             </>
           )}
@@ -165,7 +181,7 @@ export function EmailBonusModal({
             </p>
           )}
           {notice && <p role="status">{notice}</p>}
-          <button type="submit" className="email-bonus-submit" disabled={busy}>
+          <button type="submit" className="email-bonus-submit" aria-disabled={busy}>
             {busy
               ? t.emailBonusPending
               : stage === "email"
@@ -177,21 +193,24 @@ export function EmailBonusModal({
           <div className="email-bonus-secondary">
             <button
               type="button"
-              disabled={busy || clock < resendAt}
-              onClick={() =>
+              aria-disabled={busy || clock < resendAt}
+              onClick={() => {
+                if (clock < resendAt) return;
                 void run(async () => {
                   await send();
                   setNotice(t.emailBonusSent);
-                })
-              }
+                });
+              }}
             >
               {t.emailBonusResend}
               {clock < resendAt ? ` (${Math.ceil((resendAt - clock) / 1000)})` : ""}
             </button>
             <button
               type="button"
-              disabled={busy}
+              aria-disabled={busy}
               onClick={() => {
+                if (inFlight.current) return;
+                interacted.current = true;
                 setStage("email");
                 setError("");
               }}

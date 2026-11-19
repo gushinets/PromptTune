@@ -1,6 +1,7 @@
 import {
   createInstallationRegistrar,
   INSTALLATION_REGISTRATION_ALARM,
+  INSTALLATION_TIMESTAMP_ALARM_PREFIX,
 } from "@shared/installation-registration";
 import browser from "webextension-polyfill";
 import { openQuotaWindow } from "@shared/quota-window";
@@ -429,7 +430,11 @@ export default defineBackground(() => {
   });
   browser.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === SELECTION_CLEANUP_ALARM) await cleanupSelections();
-    if (alarm.name === INSTALLATION_REGISTRATION_ALARM) await retryInstallationRegistration();
+    if (
+      alarm.name === INSTALLATION_REGISTRATION_ALARM ||
+      alarm.name.startsWith(INSTALLATION_TIMESTAMP_ALARM_PREFIX)
+    )
+      await retryInstallationRegistration();
   });
 
   let selectionMenuRegistered = false;
@@ -448,13 +453,17 @@ export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(async (details) => {
     const installAt = new Date().toISOString();
     const initialized =
-      details.reason === "install" ? registerInstallation.initialize(installAt) : null;
+      details.reason === "install"
+        ? registerInstallation.initialize(installAt).catch(() => undefined)
+        : null;
     registerSelectionMenu();
+    if (details.reason === "install") {
+      void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
+    }
     await initialized;
     await cleanupSelections();
     if (details.reason !== "install") return;
 
-    void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
     await retryInstallationRegistration();
 
     if (await canTrackAnalytics()) {

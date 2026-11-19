@@ -12,8 +12,16 @@ vi.mock("@shared/constants", async (importOriginal) => ({
   ANALYTICS_ENABLED: false,
 }));
 let state: Record<string, unknown>;
+let alarms: Map<string, browser.Alarms.Alarm>;
 beforeEach(() => {
   vi.clearAllMocks();
+  alarms = new Map();
+  vi.mocked(browser.alarms.create).mockImplementation(async (name) => {
+    if (typeof name !== "string") throw new Error("Named alarm required");
+    alarms.set(name, { name, scheduledTime: Date.now(), periodInMinutes: 5 });
+  });
+  vi.mocked(browser.alarms.getAll).mockImplementation(async () => [...alarms.values()]);
+  vi.mocked(browser.alarms.clear).mockImplementation(async (name) => alarms.delete(name!));
   vi.mocked(browser.tabs.create).mockResolvedValue({ id: 1 } as never);
   state = { installation_id: "installed", install_at: "2026-01-05T10:00:00.000Z" };
   vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...state }));
@@ -244,4 +252,55 @@ it("blocks registration until retrying the install-date write succeeds", async (
   expect(request).not.toHaveBeenCalled();
   await register();
   expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
+});
+
+it("recovers the captured install date after the registrar is recreated following a failed write", async () => {
+  state = { installation_id: "installed" };
+  const request = vi
+    .spyOn(apiClient, "registerInstallation")
+    .mockResolvedValue({ registered: true });
+  vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error("storage unavailable"));
+  await expect(
+    createInstallationRegistrar().initialize("2026-01-31T20:59:59.000Z"),
+  ).rejects.toThrow("storage unavailable");
+  await createInstallationRegistrar()();
+  expect(state.install_at).toBe("2026-01-31T20:59:59.000Z");
+  expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
+  expect(alarms.size).toBe(0);
+});
+
+it("opens welcome despite install-date storage failure and recovers from a durable alarm in a new background", async () => {
+  state = { installation_id: "installed" };
+  vi.stubGlobal("defineBackground", (main: () => void) => main);
+  Object.assign(browser, { permissions: { onRemoved: { addListener: vi.fn() } } });
+  Object.assign(browser.runtime, { onInstalled: { addListener: vi.fn() } });
+  vi.mocked(browser.runtime.getManifest).mockReturnValue({ version: "0.1.0" } as never);
+  const request = vi
+    .spyOn(apiClient, "registerInstallation")
+    .mockResolvedValue({ registered: true });
+  vi.mocked(browser.storage.local.set).mockImplementation(async (value) => {
+    if ("install_at" in value) throw new Error("storage unavailable");
+    Object.assign(state, value);
+  });
+  const { default: main } = await import("../entrypoints/background/index");
+  (main as unknown as () => void)();
+  const installed = vi.mocked(browser.runtime.onInstalled.addListener).mock.calls.at(-1)![0];
+  await installed({ reason: "install" } as never);
+  expect(browser.tabs.create).toHaveBeenCalled();
+  expect(request).not.toHaveBeenCalled();
+  const retry = [...alarms.values()].find((alarm) =>
+    alarm.name.startsWith(INSTALLATION_REGISTRATION_ALARM),
+  )!;
+  expect(retry).toBeDefined();
+  vi.mocked(browser.storage.local.set).mockImplementation(async (value) => {
+    Object.assign(state, value);
+  });
+  (main as unknown as () => void)();
+  const onAlarm = vi.mocked(browser.alarms.onAlarm.addListener).mock.calls.at(-1)![0];
+  await onAlarm(retry);
+  expect(state.install_at).toEqual(expect.any(String));
+  expect(request).toHaveBeenCalledWith("installed", state.install_at);
+  expect(
+    [...alarms.keys()].filter((name) => name.startsWith(INSTALLATION_REGISTRATION_ALARM)),
+  ).toEqual([]);
 });

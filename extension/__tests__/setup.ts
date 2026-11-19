@@ -88,6 +88,7 @@ vi.mock("webextension-polyfill", async () => {
       alarms: {
         clear: vi.fn().mockResolvedValue(true),
         get: vi.fn().mockResolvedValue(undefined),
+        getAll: vi.fn().mockResolvedValue([]),
         create: vi.fn().mockResolvedValue(undefined),
         onAlarm: { addListener: vi.fn() },
       },

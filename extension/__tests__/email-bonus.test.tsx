@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { EmailBonusModal } from "../entrypoints/popup/components/EmailBonusModal";
+import type { RateLimitInfo } from "../shared/types";
 
 let host: HTMLDivElement;
 let root: Root;
@@ -103,3 +104,74 @@ it("restores an existing email challenge without sending another code", async ()
   expect(host.textContent).toContain("pending@example.com");
   expect(browser.runtime.sendMessage).not.toHaveBeenCalled();
 });
+
+const pendingQuota: RateLimitInfo = {
+  email: "pending@example.com",
+  verification_pending: true,
+  verification_resend_at: new Date(0).toISOString(),
+  per_day_remaining: 0,
+  per_day_total: 50,
+  per_minute_remaining: 10,
+  per_minute_total: 10,
+};
+
+it("hydrates a late verification lookup but respects an explicit change of email", async () => {
+  const render = (quota?: RateLimitInfo) =>
+    root.render(<EmailBonusModal onClose={vi.fn()} onConfirmed={vi.fn()} initialQuota={quota} />);
+  await act(async () => render());
+  await act(async () => render(pendingQuota));
+  expect(host.querySelector("input")?.getAttribute("inputmode")).toBe("numeric");
+  expect(host.textContent).toContain("pending@example.com");
+  const change = host.querySelectorAll<HTMLButtonElement>(".email-bonus-secondary button")[1];
+  await act(async () => change.click());
+  await act(async () => render({ ...pendingQuota }));
+  expect(host.querySelector("input")?.type).toBe("email");
+});
+
+it("preserves edited email when a pending verification lookup arrives", async () => {
+  const props = { onClose: vi.fn(), onConfirmed: vi.fn() };
+  await act(async () => root.render(<EmailBonusModal {...props} />));
+  const input = host.querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "new@example.com",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => root.render(<EmailBonusModal {...props} initialQuota={pendingQuota} />));
+  expect(host.querySelector("input")?.type).toBe("email");
+  expect(host.querySelector("input")?.value).toBe("new@example.com");
+});
+
+it.each([false, true])(
+  "keeps keyboard focus on resend during and after a request (failure=%s)",
+  async (fail) => {
+    let finish!: () => void;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(
+      () =>
+        new Promise((resolve, reject) => {
+          finish = () => (fail ? reject(new Error("offline")) : resolve({ sent: true }));
+        }),
+    );
+    const onClose = vi.fn();
+    await act(async () =>
+      root.render(
+        <EmailBonusModal onClose={onClose} onConfirmed={vi.fn()} initialQuota={pendingQuota} />,
+      ),
+    );
+    const resend = host.querySelector<HTMLButtonElement>(".email-bonus-secondary button")!;
+    resend.focus();
+    await act(async () => resend.click());
+    // Native disabled controls are removed from keyboard focus in browsers.
+    expect(resend.disabled).toBe(false);
+    expect(document.activeElement).toBe(resend);
+    await act(async () => finish());
+    expect(resend.disabled).toBe(false);
+    expect(document.activeElement).toBe(resend);
+    await act(async () =>
+      resend.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    expect(onClose).toHaveBeenCalledOnce();
+  },
+);

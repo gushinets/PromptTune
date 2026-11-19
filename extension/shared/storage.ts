@@ -321,6 +321,14 @@ export async function getPopupSessionDraft(
       if (preferred) return preferred;
     }
   }
+  return selectPopupSessionDraft(data, options);
+}
+
+async function selectPopupSessionDraft(
+  data: Record<string, unknown>,
+  options: { independent?: boolean; resultOnly?: boolean },
+  lockHeld = false,
+): Promise<PopupSessionDraft | null> {
   // Generic restores open an independent editor; explicit one-shot handoffs above retain identity.
   const restored = (draft: PopupSessionDraft): PopupSessionDraft =>
     options.independent
@@ -383,7 +391,9 @@ export async function getPopupSessionDraft(
       return null;
     }
 
-    await withOptimizerStorageLock(() => migrateLegacyPopupDraft({ [key]: draft }));
+    const migrate = () => migrateLegacyPopupDraft({ [key]: draft });
+    if (lockHeld) await migrate();
+    else await withOptimizerStorageLock(migrate);
     return restored(
       draft.improved.trim() && draft.resultCompletedAt === undefined
         ? { ...draft, resultCompletedAt: draft.draftCreatedAt ?? Date.now() }
@@ -556,7 +566,10 @@ export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<vo
 }
 
 /** Commit the first selection snapshot without overwriting a concurrent autosave. */
-export async function initializePopupSessionDraft(draft: PopupSessionDraft): Promise<{
+export async function initializePopupSessionDraft(
+  draft: PopupSessionDraft,
+  options: { restoreLatestResult?: boolean } = {},
+): Promise<{
   created: boolean;
   draft: PopupSessionDraft;
 }> {
@@ -565,6 +578,22 @@ export async function initializePopupSessionDraft(draft: PopupSessionDraft): Pro
   return withOptimizerStorageLock(async () => {
     const existing = await getPopupSessionDraftById(id);
     if (existing) return { created: false, draft: existing };
+    if (options.restoreLatestResult) {
+      const data = await readDrafts();
+      await migrateLegacyPopupDraft(data);
+      const previous = await selectPopupSessionDraft(data, { resultOnly: true }, true);
+      const latest = await selectPopupSessionDraft(data, {}, true);
+      if (previous) {
+        draft = {
+          ...previous,
+          draftSessionId: id,
+          draftCreatedAt: Math.max(Date.now(), (latest?.draftCreatedAt ?? 0) + 1),
+          activeTab: "improve",
+          optimizer_screen: "result",
+          saveOnEditOnly: false,
+        };
+      }
+    }
     const value = { ...draft, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
     await writeWithDraftBudget(`${POPUP_DRAFT_PREFIX}${id}`, value, value);
     return { created: true, draft };
