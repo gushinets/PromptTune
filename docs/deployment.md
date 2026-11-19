@@ -429,3 +429,42 @@ curl -fsS https://api.anytoolai.store/v1/config | python3 -c 'import json, sys; 
 The command must exit successfully. The default backend accepts 30,000 input
 characters and rejects 30,001; custom limits remain configurable. Check the
 weekly production `api_error` metric after rollout.
+
+## ANY-825: monthly quota and email verification
+
+Run `alembic upgrade head` before starting the updated API (migration 008).
+Existing installations receive 50 improvements on first access; renewal stays
+anchored to their original server registration date, at Moscow midnight.
+`FREE_REQ_PER_DAY` is obsolete; the monthly package is 50. `FREE_REQ_PER_MIN`
+remains a separate short abuse throttle. Redis does not store monthly balances.
+
+Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`
+and a separate random `EMAIL_CODE_SECRET` (at least 32 characters, identical on
+all API workers). Use STARTTLS (`SMTP_STARTTLS=true`, `SMTP_SSL=false`, port 587)
+or implicit TLS (`SMTP_SSL=true`, port 465). Plaintext SMTP is rejected.
+Missing configuration or delivery failure returns a retryable error and grants no
+bonus. Never log verification codes. SMTP delivery requires outbound connectivity
+from the API container; SMTP traffic does not use the HTTP egress proxy.
+
+Verification codes expire in 10 minutes, allow five guesses, and can be resent
+once per minute. Request throttles additionally cover installation, IP and email.
+Claims are permanent and unique per normalized email; do not purge the claim
+ledger with analytics or reservation retention. Each installation can receive
+only one bonus, even with a different address. Reinstalling and verifying an
+already claimed address records verification without issuing another bonus.
+
+The API exposes `remaining`, `total`, `next_reset_at`, `bonus_claimed`,
+`email_verified`, `email`, `verification_pending` and `verification_resend_at`
+from `/v1/limits` and improvement responses. Pending email proof is restored from
+these fields when the popup or sidebar is reopened.
+Deprecated `per_day_*` fields mirror the monthly values during extension rollout;
+new UI must use monthly semantics. Deploy the updated extension with the API.
+
+Integration tests run only against an explicitly supplied disposable database:
+`QUOTA_TEST_DATABASE_URL=postgresql+asyncpg://... pytest tests/test_quota.py tests/test_email_bonus.py`.
+These tests recreate tables in that database. Never point them at production.
+
+Known pre-existing schema drift: `alembic check` also flags nullability differences
+on old timestamp columns and missing standalone analytics indexes from earlier
+migrations. Migration 008 creates only quota tables and matches their model
+metadata; resolving the older drift is separate from ANY-825.

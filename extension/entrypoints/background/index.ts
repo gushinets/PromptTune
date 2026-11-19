@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { openQuotaWindow } from "@shared/quota-window";
 import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
@@ -634,6 +635,22 @@ export default defineBackground(() => {
         }
       }
 
+      case "SHOW_QUOTA": {
+        if (!sender.tab) throw new Error("Quota window requires a source tab");
+        await openQuotaWindow(
+          msg.payload.original,
+          msg.payload.result,
+          sender.tab,
+          msg.payload.goal,
+        );
+        return { ok: true };
+      }
+      case "REQUEST_EMAIL_BONUS": {
+        return apiClient.requestEmailBonus(await getInstallationId(), msg.email);
+      }
+      case "CONFIRM_EMAIL_BONUS": {
+        return apiClient.confirmEmailBonus(await getInstallationId(), msg.code);
+      }
       case "GET_LIMITS": {
         const installationId = await getInstallationId();
         const rate_limit = await apiClient.limits(installationId);

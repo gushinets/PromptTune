@@ -1,6 +1,7 @@
 import { countPromptCharacters, parseInputLengthError } from "@shared/prompt-length";
 import { useState, useEffect, useCallback, useMemo, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
+import { EmailBonusModal } from "./components/EmailBonusModal";
 import { PromptForm } from "./components/PromptForm";
 import { ProcessingScreen } from "./components/ProcessingScreen";
 import { OptimizerResult } from "./components/OptimizerResult";
@@ -33,6 +34,7 @@ import { isOptimizerRequestContext } from "@shared/goal-options";
 import { createImproveOwner, type ImproveOwner } from "@shared/improve-owner";
 import { trackEvent } from "@shared/analytics";
 import type {
+  RateLimitInfo,
   AiImproveGoal,
   AudienceMode,
   ImproveGoal,
@@ -252,7 +254,20 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
-  const [showProComingSoon, setShowProComingSoon] = useState(false);
+  const quotaVersion = useRef(0);
+  const [quotaInfo, setQuotaInfo] = useState<RateLimitInfo | null>(null);
+  const [showEmailBonus, setShowEmailBonus] = useState(false);
+  const applyQuota = useCallback((info: RateLimitInfo, offer = false) => {
+    quotaVersion.current += 1;
+    const remaining = info.remaining ?? info.per_day_remaining;
+    if (remaining > 0 || info.bonus_claimed) setShowEmailBonus(false);
+    setRateLimit({ remaining, total: info.total ?? info.per_day_total });
+    setQuotaInfo(info);
+    setLimitsUnavailable(false);
+    setLimitsLoaded(true);
+    if (BACKEND_MODE === "fastapi" && offer && remaining === 0 && !info.bonus_claimed)
+      setShowEmailBonus(true);
+  }, []);
   const [siteContext, setSiteContext] = useState<{
     hostname?: string;
     goal: AiImproveGoal;
@@ -543,25 +558,36 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
-    browser.runtime
-      .sendMessage({ type: "GET_LIMITS" })
-      .then((res) => {
-        const rate_limit = extractRateLimitResponse(res);
-        if (!rate_limit) {
-          setLimitsUnavailable(true);
-          return;
-        }
-        setRateLimit({
-          remaining: rate_limit.per_day_remaining,
-          total: rate_limit.per_day_total,
+    let active = true;
+    let initial = true;
+    const refresh = () => {
+      const version = quotaVersion.current;
+      void browser.runtime
+        .sendMessage({ type: "GET_LIMITS" })
+        .then((response) => {
+          if (!active || version !== quotaVersion.current) return;
+          const info = extractRateLimitResponse(response);
+          if (info) {
+            applyQuota(
+              info,
+              initial && new URLSearchParams(window.location.search).get("quota") === "1",
+            );
+            initial = false;
+          } else setLimitsUnavailable(true);
+        })
+        .catch(() => {
+          if (active) setLimitsUnavailable(true);
         });
-        setLimitsUnavailable(false);
-        setLimitsLoaded(true);
-      })
-      .catch(() => {
-        setLimitsUnavailable(true);
-      });
-  }, []);
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    const timer = setInterval(refresh, 60_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [applyQuota]);
 
   useEffect(() => {
     const className = viewMode === "sidepanel" ? "sidepanel-body" : "popup-body";
@@ -653,22 +679,15 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     }
   }, []);
 
-  const handleUpgradeClick = useCallback(
-    (surface: "rate_limit_tooltip" | "rate_limit_banner") => {
-      setShowProComingSoon(true);
-      void trackEvent(
-        "upgrade_clicked",
-        {
-          surface,
-          destination: "coming_soon",
-          email_collected: false,
-          paid_checkout_enabled: false,
-        },
-        viewMode,
-      );
-    },
-    [viewMode],
-  );
+  const renewalDate = quotaInfo?.next_reset_at
+    ? new Date(quotaInfo.next_reset_at).toLocaleDateString(undefined, {
+        timeZone: "Europe/Moscow",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
+  const renewalMessage = renewalDate ? t.quotaRenewal(renewalDate) : t.tooltipResets;
 
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
@@ -689,7 +708,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
           return { type: "auth", message: t.errorAuthMessage };
         }
-        if (err.status === 429 || err.detail.toLowerCase().includes("rate limit")) {
+        if (err.detail.toLowerCase().includes("monthly improvement quota exhausted")) {
           return { type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) };
         }
         if (err.status === 422) {
@@ -701,12 +720,15 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       if (message.includes("403") || message.toLowerCase().includes("login is invalid")) {
         return { type: "auth", message: t.errorAuthMessage };
       }
-      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+      if (message.toLowerCase().includes("monthly improvement quota exhausted")) {
         return { type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) };
       }
       if (message.includes("422")) {
         const validationDetail = message.replace(/^.*API 422:\s*/i, "").trim();
         return { type: "generic", message: validationDetail || message };
+      }
+      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+        return { type: "generic", message: t.quotaTemporary };
       }
       if (
         message.includes("Failed to fetch") ||
@@ -757,13 +779,10 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         );
         if (activeRequestRef.current !== requestKey) return;
         if (!limits) throw new Error(t.tooltipUnavailable);
-        setRateLimit({
-          remaining: limits.per_day_remaining,
-          total: limits.per_day_total,
-        });
+        applyQuota(limits, true);
         setLimitsUnavailable(false);
         setLimitsLoaded(true);
-        if (limits.per_day_remaining <= 0) {
+        if ((limits.remaining ?? limits.per_day_remaining) <= 0) {
           setError({ type: "rate-limit", message: t.errorRateLimitMessage(limits.per_day_total) });
           return;
         }
@@ -775,9 +794,6 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       submitted = true;
       setSaveOnEditOnly(false);
       setEditingOriginal(false);
-      setImproved("");
-      setChanges([]);
-      setResultContext(null);
       const nextAttempt = isRegeneration ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
@@ -821,10 +837,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           viewMode,
         );
         if (result.rate_limit) {
-          setRateLimit({
-            remaining: result.rate_limit.per_day_remaining,
-            total: result.rate_limit.per_day_total,
-          });
+          applyQuota(result.rate_limit, true);
           setLimitsUnavailable(false);
           setLimitsLoaded(true);
         }
@@ -836,9 +849,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       const info = mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
-        setRateLimit((prev) => ({ ...prev, remaining: 0 }));
-        setLimitsUnavailable(false);
-        setLimitsLoaded(true);
+        void browser.runtime
+          .sendMessage({ type: "GET_LIMITS" })
+          .then((response) => {
+            const info = extractRateLimitResponse(response);
+            if (info) applyQuota(info, true);
+          })
+          .catch(() => setLimitsUnavailable(true));
       }
     } finally {
       owner?.close();
@@ -859,6 +876,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     lastRequestId,
     lastRequestContextKey,
     mapErrorToToast,
+    applyQuota,
     original,
     improved,
     siteHostname,
@@ -972,9 +990,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           : mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
-        setRateLimit((prev) => ({ ...prev, remaining: 0 }));
-        setLimitsUnavailable(false);
-        setLimitsLoaded(true);
+        void browser.runtime
+          .sendMessage({ type: "GET_LIMITS" })
+          .then((response) => {
+            const info = extractRateLimitResponse(response);
+            if (info) applyQuota(info, true);
+          })
+          .catch(() => setLimitsUnavailable(true));
       }
       return false;
     } finally {
@@ -988,6 +1010,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     isOriginalOverLimit,
     refreshLibraryCount,
     mapErrorToToast,
+    applyQuota,
     viewMode,
     t,
   ]);
@@ -1024,6 +1047,18 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className={`popup-container ${viewMode}`}>
+      {showEmailBonus && (
+        <EmailBonusModal
+          initialQuota={quotaInfo}
+          onPending={setQuotaInfo}
+          onClose={() => setShowEmailBonus(false)}
+          onConfirmed={(info) => {
+            applyQuota(info);
+            setShowEmailBonus(false);
+            setError(null);
+          }}
+        />
+      )}
       <header className="header">
         <div className="header-brand">
           <img className="header-icon" src={APP_ICON_SRC} alt="" aria-hidden="true" />
@@ -1105,25 +1140,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                     </p>
                     <p>
                       {rateLimit.total > 0 ? t.tooltipDailyLimit(rateLimit.total) : ""}
-                      {t.tooltipResets}{" "}
-                      <button
-                        type="button"
-                        className="rate-limit-tooltip-link"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          handleUpgradeClick("rate_limit_tooltip");
-                        }}
-                      >
-                        {t.tooltipUpgrade}
-                      </button>
+                      {renewalMessage}
                     </p>
-                    {showProComingSoon && (
-                      <p className="tooltip-pro-coming-soon" role="status">
-                        <strong>{t.proComingSoonTitle}</strong>
-                        <span>{t.proComingSoonSubtitle}</span>
-                      </p>
-                    )}
                   </>
                 )}
               </div>
@@ -1171,17 +1189,11 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
             {isExhausted && (
               <div className="upgrade-banner">
                 <p>{t.exhaustedTitle}</p>
-                <button
-                  className="btn-upgrade"
-                  onClick={() => handleUpgradeClick("rate_limit_banner")}
-                >
-                  {t.btnUpgrade}
-                </button>
-                {showProComingSoon && (
-                  <div className="pro-coming-soon" role="status">
-                    <strong>{t.proComingSoonTitle}</strong>
-                    <span>{t.proComingSoonSubtitle}</span>
-                  </div>
+                <p>{renewalMessage}</p>
+                {!quotaInfo?.bonus_claimed && (
+                  <button className="btn-upgrade" onClick={() => setShowEmailBonus(true)}>
+                    {t.emailBonusTitle}
+                  </button>
                 )}
               </div>
             )}
@@ -1193,7 +1205,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                   mode={audienceMode}
                   goal={goal}
                   loading={loading || layoutTransition}
-                  submitDisabled={!sourceContextReady}
+                  submitDisabled={!sourceContextReady || isExhausted}
                   hidden={loading || Boolean(improved && !editingOriginal)}
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {
@@ -1205,6 +1217,15 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                   }}
                   onImprove={handleImprove}
                 />
+                {editingOriginal && improved && !loading && (
+                  <button
+                    type="button"
+                    className="email-bonus-return"
+                    onClick={() => setEditingOriginal(false)}
+                  >
+                    {t.returnToResult}
+                  </button>
+                )}
                 {loading && (
                   <ProcessingScreen
                     mode={processingContext?.mode ?? audienceMode}

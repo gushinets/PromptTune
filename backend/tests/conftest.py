@@ -1,10 +1,14 @@
+import os
 from collections.abc import AsyncGenerator
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.db.models import Base
 from app.dependencies import get_db, get_redis
 from app.main import app
 
@@ -63,6 +67,7 @@ def mock_redis():
     # check() uses redis.mget to read counters (0 usage → allowed)
     redis_mock.mget = AsyncMock(return_value=[None, None])
     redis_mock.ping = AsyncMock(return_value=True)
+    redis_mock.eval = AsyncMock(return_value=1)
 
     # Pipeline mock works for both get_remaining (GETs) and check (incr/expire)
     pipe_mock = Mock()
@@ -93,5 +98,40 @@ def mock_db():
         yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    yield session
+    from app.api.schemas import RateLimitInfo
+
+    info = RateLimitInfo(
+        remaining=49,
+        total=50,
+        per_day_remaining=49,
+        per_day_total=50,
+        per_minute_remaining=9,
+        per_minute_total=10,
+    )
+    with (
+        patch(
+            "app.services.quota.QuotaService.reserve",
+            new=AsyncMock(return_value=("reservation", info)),
+        ) as reserve,
+        patch("app.services.quota.QuotaService.finish", new=AsyncMock(return_value=info)) as finish,
+        patch("app.services.quota.QuotaService.refund", new=AsyncMock()) as refund,
+        patch("app.services.quota.QuotaService.status", new=AsyncMock(return_value=info)),
+    ):
+        session.quota_reserve = reserve
+        session.quota_finish = finish
+        session.quota_refund = refund
+        yield session
     app.dependency_overrides.pop(get_db, None)
+
+
+@pytest_asyncio.fixture
+async def quota_sessions():
+    url = os.getenv("QUOTA_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("QUOTA_TEST_DATABASE_URL is required for PostgreSQL integration tests")
+    engine = create_async_engine(url)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
+        await connection.run_sync(Base.metadata.create_all)
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    await engine.dispose()

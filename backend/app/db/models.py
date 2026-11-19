@@ -68,3 +68,42 @@ class AnalyticsEvent(Base):
     user_plan: Mapped[str | None] = mapped_column(String(32))
     source: Mapped[str | None] = mapped_column(String(32))
     properties: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+
+class ImprovementQuota(Base):
+    __tablename__ = "improvement_quotas"
+
+    installation_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    anchor_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_reset_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    remaining: Mapped[int] = mapped_column(Integer, default=50)
+    total: Mapped[int] = mapped_column(Integer, default=50)
+    bonus_claimed: Mapped[bool] = mapped_column(default=False)
+    email: Mapped[str | None] = mapped_column(String(254))
+    email_verified: Mapped[bool] = mapped_column(default=False)
+    challenge_digest: Mapped[str | None] = mapped_column(String(64))
+    challenge_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    challenge_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    challenge_attempts: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class EmailBonusClaim(Base):
+    __tablename__ = "email_bonus_claims"
+
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(64))
+    claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class QuotaReservation(Base):
+    __tablename__ = "quota_reservations"
+    __table_args__ = (
+        Index("ix_quota_reservations_installation_status", "installation_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    installation_id: Mapped[str] = mapped_column(String(64))
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), default="pending")

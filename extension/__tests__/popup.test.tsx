@@ -135,8 +135,8 @@ describe("App", () => {
   });
 
   it.each([
-    { total: 0, visible: "5", description: "5 today" },
-    { total: 50, visible: "5/50", description: "5/50 today" },
+    { total: 0, visible: "5", description: "5 this month" },
+    { total: 50, visible: "5/50", description: "5/50 this month" },
   ])(
     "renders the quota badge consistently for total=$total",
     async ({ total, visible, description }) => {
@@ -192,7 +192,7 @@ describe("App", () => {
             finishCanceled = resolve;
           });
         }
-        if (remaining === 0) throw new ApiError(429, "Rate limit exceeded");
+        if (remaining === 0) throw new ApiError(429, "Monthly improvement quota exhausted");
         return {
           type: "IMPROVE_RESULT",
           payload: { request_id: "after-refund", improved_text: "Recovered result" },
@@ -224,6 +224,9 @@ describe("App", () => {
     });
     expect(improvements).toBe(2);
     remaining = 1;
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
     await act(async () => {
       getImproveButton(container).click();
     });
@@ -266,8 +269,8 @@ describe("App", () => {
     await flushEffects();
     await setOriginalPrompt(container, "Keep my prompt");
     await act(async () => {
-      getImproveButton(container).click();
-      getImproveButton(container).click();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true }));
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true }));
     });
     expect(queries).toBe(2);
     await act(async () => {
@@ -326,8 +329,9 @@ describe("App", () => {
         findButton(container, "Edit original").click();
       });
       await setOriginalPrompt(container, "Edited original prompt");
+      expect(getImproveButton(container).disabled).toBe(true);
       await act(async () => {
-        getImproveButton(container).click();
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true }));
       });
       expect(
         vi
@@ -1944,97 +1948,37 @@ describe("App", () => {
     expect((detailsRequeried as HTMLDetailsElement).open).toBe(true);
   });
 
-  it("tracks upgrade intent and shows coming soon without external navigation", async () => {
-    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) => {
-      const typed = msg as { type?: string };
-      if (typed.type === "GET_LIMITS") {
-        return {
-          type: "LIMITS_RESULT",
-          payload: {
-            rate_limit: {
-              per_minute_remaining: 0,
-              per_day_remaining: 0,
-              per_minute_total: 5,
-              per_day_total: 10,
-            },
-          },
-        };
-      }
-      return { ok: true };
-    });
-
-    await act(async () => {
-      root.render(<App />);
-    });
-    await flushEffects();
-
-    expect(container.textContent).toContain("You've used all free improvements today.");
-    expect(container.textContent).toContain("Upgrade for unlimited");
-
-    await act(async () => {
-      findButton(container, "Upgrade for unlimited").click();
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain("Pro soon");
+  it("opens the email offer from the exhausted banner without external navigation", async () => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (msg: unknown) =>
+      (msg as { type?: string }).type === "GET_LIMITS"
+        ? {
+            per_minute_remaining: 5,
+            per_minute_total: 5,
+            per_day_remaining: 0,
+            per_day_total: 50,
+          }
+        : { ok: true },
+    );
+    await act(async () => root.render(<App />));
+    await act(async () => findButton(container, "Get 50 more improvements?").click());
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Get 50 more improvements?",
+    );
     expect(browser.tabs.create).not.toHaveBeenCalled();
-    expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
-      type: "TRACK_EVENT",
-      payload: {
-        name: "upgrade_clicked",
-        properties: {
-          surface: "rate_limit_banner",
-          destination: "coming_soon",
-          email_collected: false,
-          paid_checkout_enabled: false,
-        },
-        context: { source: "popup" },
-      },
-    });
   });
 
-  it("tracks upgrade intent and shows coming soon from the rate-limit tooltip", async () => {
-    await act(async () => {
-      root.render(<App />);
-    });
-    await flushEffects();
-
-    const limitBadge = container.querySelector(".rate-limit-badge");
-    expect(limitBadge).toBeInstanceOf(HTMLButtonElement);
-
-    await act(async () => {
-      (limitBadge as HTMLButtonElement).focus();
-      await Promise.resolve();
-    });
-
-    expect(container.textContent).toContain("improvements left today");
+  it("describes a monthly package in the quota tooltip", async () => {
+    await act(async () => root.render(<App />));
+    await act(async () =>
+      (container.querySelector(".rate-limit-badge") as HTMLButtonElement).focus(),
+    );
     expect(container.querySelector(".rate-limit-tooltip")?.textContent).toContain(
-      "Upgrade for unlimited",
+      "improvements left this month",
     );
-    expect(findButton(container, "Upgrade for unlimited").className).toBe(
-      "rate-limit-tooltip-link",
+    expect(container.querySelector(".rate-limit-tooltip")?.textContent).toContain(
+      "Monthly package",
     );
-
-    await act(async () => {
-      findButton(container, "Upgrade for unlimited").click();
-      await Promise.resolve();
-    });
-
-    expect(container.querySelector(".rate-limit-tooltip")?.textContent).toContain("Pro soon");
     expect(browser.tabs.create).not.toHaveBeenCalled();
-    expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
-      type: "TRACK_EVENT",
-      payload: {
-        name: "upgrade_clicked",
-        properties: {
-          surface: "rate_limit_tooltip",
-          destination: "coming_soon",
-          email_collected: false,
-          paid_checkout_enabled: false,
-        },
-        context: { source: "popup" },
-      },
-    });
   });
 
   it.each([4, 5])("routes a %i-star rating to the Chrome Web Store review page", async (star) => {
@@ -2133,9 +2077,7 @@ describe("App", () => {
     expect(savePromptSpy).toHaveBeenCalledTimes(1);
     expect(findButton(container, "Save").textContent).toContain("Save to Library");
     expect(container.textContent).not.toContain("Saved!");
-    expect(container.textContent).toContain(
-      "You've used all 10 requests today. Resets at midnight UTC.",
-    );
+    expect(container.textContent).toContain("Too many requests. Please try again shortly.");
     const libraryWrites = vi
       .mocked(browser.storage.local.set)
       .mock.calls.filter(([data]) => "library" in data);

@@ -88,17 +88,32 @@ export default defineContentScript({
           const text = adapter.getText(field);
           if (!text.trim()) return;
 
-          const response = await browser.runtime.sendMessage({
-            type: "IMPROVE_REQUEST",
-            payload: {
-              text,
-              audience_mode: "ai",
-              goal: detectAiGoalFromHostname(location.hostname),
-              site: location.hostname,
-              page_url: location.href,
-              analytics_context: { source: "content" },
-            },
-          });
+          let response: unknown;
+          try {
+            response = await browser.runtime.sendMessage({
+              type: "IMPROVE_REQUEST",
+              payload: {
+                text,
+                audience_mode: "ai",
+                goal: detectAiGoalFromHostname(location.hostname),
+                site: location.hostname,
+                page_url: location.href,
+                analytics_context: { source: "content" },
+              },
+            });
+          } catch (error) {
+            if (String(error).toLowerCase().includes("monthly improvement quota exhausted")) {
+              await browser.runtime.sendMessage({
+                type: "SHOW_QUOTA",
+                payload: {
+                  original: text,
+                  goal: detectAiGoalFromHostname(location.hostname),
+                },
+              });
+              return;
+            }
+            throw error;
+          }
           const result = extractImproveResponse(response);
 
           if (result?.improved_text.trim()) {
@@ -122,6 +137,17 @@ export default defineContentScript({
               },
               "content",
             );
+            const quota = result.rate_limit;
+            if (quota && (quota.remaining ?? quota.per_day_remaining) === 0) {
+              await browser.runtime.sendMessage({
+                type: "SHOW_QUOTA",
+                payload: {
+                  original: text,
+                  result,
+                  goal: detectAiGoalFromHostname(location.hostname),
+                },
+              });
+            }
           }
           break;
         }

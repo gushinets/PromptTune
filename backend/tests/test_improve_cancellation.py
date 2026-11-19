@@ -2,7 +2,7 @@ import asyncio
 import json
 from contextlib import ExitStack
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -14,15 +14,16 @@ from tests.test_rate_limiter import InMemoryRedisMock
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["upsert", "model_processing", "commit", "response"])
+@pytest.mark.parametrize("failure", ["finalize", "model_processing", "commit", "response"])
 async def test_any_unsuccessful_improvement_refunds_its_reservation(mock_db, mock_litellm, failure):
     redis = InMemoryRedisMock()
     await RateLimiter(redis).check("inst-1", "1.2.3.4")
+    redis.eval = AsyncMock(return_value=1)
     app.dependency_overrides[get_redis] = lambda: redis
     try:
         with ExitStack() as stack:
-            if failure == "upsert":
-                mock_db.get.side_effect = RuntimeError("Database lookup failed")
+            if failure == "finalize":
+                mock_db.quota_finish.side_effect = RuntimeError("Quota finalize failed")
             elif failure == "commit":
                 mock_db.commit.side_effect = RuntimeError("Database commit failed")
             elif failure == "model_processing":
@@ -51,9 +52,7 @@ async def test_any_unsuccessful_improvement_refunds_its_reservation(mock_db, moc
                     "/v1/improve", json={"text": "write a poem", "installation_id": "inst-1"}
                 )
             assert response.status_code == 500
-            counters = {key: value for key, value in redis.store.items() if key.startswith("rl:")}
-            assert len(counters) == 2
-            assert set(counters.values()) == {"1"}
+            mock_db.quota_refund.assert_awaited_once_with("reservation")
     finally:
         app.dependency_overrides.pop(get_redis, None)
 
@@ -84,6 +83,7 @@ async def run_request(receive, send):
 async def test_cancellation_stops_llm_and_refunds_once(mock_db, cancel_server_task):
     redis = InMemoryRedisMock()
     await RateLimiter(redis).check("inst-1", "1.2.3.4")
+    redis.eval = AsyncMock(return_value=1)
     app.dependency_overrides[get_redis] = lambda: redis
     incoming = asyncio.Queue()
     incoming.put_nowait(
@@ -121,11 +121,7 @@ async def test_cancellation_stops_llm_and_refunds_once(mock_db, cancel_server_ta
                     incoming.put_nowait({"type": "http.disconnect"})
                     await asyncio.wait_for(asyncio.shield(task), timeout=1)
                 assert stopped.is_set()
-                counters = {
-                    key: value for key, value in redis.store.items() if key.startswith("rl:")
-                }
-                assert len(counters) == 2
-                assert set(counters.values()) == {"1"}
+                mock_db.quota_refund.assert_awaited_once_with("reservation")
                 assert mock_db.commit.await_count == 0
                 await asyncio.sleep(0)
                 assert not (asyncio.all_tasks() - baseline - {asyncio.current_task()})
@@ -140,6 +136,7 @@ async def test_cancellation_stops_llm_and_refunds_once(mock_db, cancel_server_ta
 @pytest.mark.asyncio
 async def test_success_keeps_quota_and_cleans_up_monitor(client, mock_db, mock_litellm):
     redis = InMemoryRedisMock()
+    redis.eval = AsyncMock(return_value=1)
     app.dependency_overrides[get_redis] = lambda: redis
     baseline = asyncio.all_tasks()
     try:
@@ -147,9 +144,8 @@ async def test_success_keeps_quota_and_cleans_up_monitor(client, mock_db, mock_l
             "/v1/improve", json={"text": "write a poem", "installation_id": "inst-1"}
         )
         assert response.status_code == 200
-        counters = {key: value for key, value in redis.store.items() if key.startswith("rl:")}
-        assert len(counters) == 2
-        assert set(counters.values()) == {"1"}
+        mock_db.quota_finish.assert_awaited_once_with("reservation")
+        mock_db.quota_refund.assert_not_awaited()
         await asyncio.sleep(0)
         assert not (asyncio.all_tasks() - baseline - {asyncio.current_task()})
     finally:
@@ -161,23 +157,16 @@ async def test_server_cancellation_during_reservation_refunds_the_charge(mock_db
     charged = asyncio.Event()
     release = asyncio.Event()
 
-    class PausedReservationRedis(InMemoryRedisMock):
-        def pipeline(self):
-            pipeline = super().pipeline()
-            execute = pipeline.execute
+    original_reserve = mock_db.quota_reserve.return_value
 
-            async def paused_execute():
-                reserves = any(op == "incr" for op, _ in pipeline.ops)
-                result = await execute()
-                if reserves:
-                    charged.set()
-                    await release.wait()
-                return result
+    async def paused_reserve(installation_id):
+        charged.set()
+        await release.wait()
+        return original_reserve
 
-            pipeline.execute = paused_execute
-            return pipeline
-
-    redis = PausedReservationRedis()
+    mock_db.quota_reserve.side_effect = paused_reserve
+    redis = InMemoryRedisMock()
+    redis.eval = AsyncMock(return_value=1)
     app.dependency_overrides[get_redis] = lambda: redis
     incoming = asyncio.Queue()
     incoming.put_nowait(
@@ -198,9 +187,7 @@ async def test_server_cancellation_during_reservation_refunds_the_charge(mock_db
         release.set()
         with pytest.raises(asyncio.CancelledError):
             await task
-        counters = {key: value for key, value in redis.store.items() if key.startswith("rl:")}
-        assert len(counters) == 2
-        assert set(counters.values()) == {"0"}
+        mock_db.quota_refund.assert_awaited_once_with("reservation")
         assert mock_db.commit.await_count == 0
     finally:
         release.set()

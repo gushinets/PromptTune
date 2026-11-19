@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -19,6 +20,15 @@ class ImproveRequest(BaseModel):
 
 
 class RateLimitInfo(BaseModel):
+    remaining: int = 50
+    total: int = 50
+    next_reset_at: datetime | None = None
+    bonus_claimed: bool = False
+    email_verified: bool = False
+    email: str | None = None
+    verification_pending: bool = False
+    verification_resend_at: datetime | None = None
+    # Deprecated aliases, now monthly, for extension rollout compatibility.
     per_minute_remaining: int
     per_day_remaining: int
     per_minute_total: int
@@ -96,3 +106,13 @@ class AnalyticsBatchResponse(BaseModel):
     accepted: int
     deduplicated: int
     rejected: list[dict[str, str]] = Field(default_factory=list)
+
+
+class EmailBonusRequest(BaseModel):
+    installation_id: str = Field(..., min_length=1, max_length=64)
+    email: str = Field(..., min_length=3, max_length=254)
+
+
+class EmailBonusConfirm(BaseModel):
+    installation_id: str = Field(..., min_length=1, max_length=64)
+    code: str = Field(..., pattern=r"^\d{6}$")

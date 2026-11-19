@@ -1101,3 +1101,109 @@ textarea.improved-textarea {
     scroll-behavior: auto !important;
   }
 }
+
+.email-bonus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(7, 5, 23, 0.82);
+  backdrop-filter: blur(7px);
+  box-sizing: border-box;
+}
+.email-bonus-modal {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 24px 20px;
+  border: 1px solid rgba(148, 145, 255, 0.28);
+  border-radius: 18px;
+  background: linear-gradient(155deg, #29234f, #17122f);
+  box-shadow: 0 24px 65px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  color: #fff;
+}
+.email-bonus-modal h2 {
+  font-size: 20px;
+  margin: 8px 0;
+  line-height: 1.3;
+}
+.email-bonus-modal p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #b5b0d5;
+  overflow-wrap: anywhere;
+}
+.email-bonus-icon {
+  font-size: 30px;
+}
+.email-bonus-modal input {
+  width: 100%;
+  height: 43px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  background: #17132f;
+  color: #fff;
+  padding: 0 12px;
+  font: inherit;
+  margin: 4px 0 11px;
+}
+.email-bonus-modal button {
+  font: inherit;
+  cursor: pointer;
+}
+.email-bonus-modal button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.email-bonus-modal :focus-visible {
+  outline: 2px solid #a5a6ff;
+  outline-offset: 3px;
+}
+.email-bonus-submit {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8586ff, #5f5de8);
+  color: #fff;
+  font-weight: 600 !important;
+}
+.email-bonus-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 0;
+  color: #c9c6e4;
+  font-size: 24px !important;
+}
+.email-bonus-return,
+.email-bonus-secondary button {
+  background: transparent;
+  border: 0;
+  color: #c9c6e4;
+  text-decoration: underline;
+  padding: 10px 4px;
+  font-size: 12px !important;
+}
+.email-bonus-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.email-bonus-modal .email-bonus-error {
+  color: #fda4af;
+}

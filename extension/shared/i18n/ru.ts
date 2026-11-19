@@ -3,6 +3,22 @@ import { formatCharacterCount } from "../prompt-length";
 import type { TranslationKeys } from "./en";
 
 export const ru: TranslationKeys = {
+  returnToResult: "Вернуться к результату",
+  emailBonusTitle: "Получить ещё 50 улучшений?",
+  emailBonusDescription: "Оставь email и получи ещё 50 бесплатных улучшений PromptOptimizer",
+  emailBonusRequest: "Получить еще 50 улучшений",
+  emailBonusCodeTitle: "Подтверди email",
+  emailBonusCodeDescription: "Введи шестизначный код из письма. Он действует 10 минут.",
+  emailBonusConfirm: "Подтвердить email",
+  emailBonusResend: "Отправить новый код",
+  emailBonusChange: "Изменить email",
+  emailBonusClose: "Вернуться к результату и библиотеке",
+  emailBonusPending: "Подожди…",
+  emailBonusSent: "Новый код отправлен",
+  emailBonusCodeLabel: "Код подтверждения",
+  quotaRenewal: (date: string) => `Снова будут доступны 50 бесплатных улучшений: ${date}.`,
+  quotaTemporary: "Слишком много запросов. Попробуй чуть позже.",
+
   modeShortAi: "AI",
   modeShortContent: "Контент",
   btnCancel: "Отменить",
@@ -47,15 +63,15 @@ export const ru: TranslationKeys = {
   rateLimitLoading: "Загрузка...",
   rateLimitUnavailable: "Лимиты недоступны",
   rateLimitToday: (remaining: number, total: number) =>
-    total > 0 ? `${remaining}/${total} сегодня` : `${remaining} сегодня`,
-  tooltipLoading: "Загружаем ваш дневной баланс бесплатных запросов.",
+    total > 0 ? `${remaining}/${total} в этом месяце` : `${remaining} в этом месяце`,
+  tooltipLoading: "Загружаем ваш месячный баланс бесплатных улучшений.",
   tooltipUnavailable:
     "Не удалось загрузить баланс. Улучшения работают, следующий успешный запрос обновит счётчик.",
   tooltipRemaining: (remaining: number, total: number) =>
     total > 0 ? `${remaining} бесплатных` : String(remaining),
-  tooltipImprovementsLeft: "улучшений осталось сегодня",
-  tooltipDailyLimit: (total: number) => `Дневной лимит: ${total}. `,
-  tooltipResets: "Сбрасывается в полночь UTC.",
+  tooltipImprovementsLeft: "улучшений осталось в этом месяце",
+  tooltipDailyLimit: (total: number) => `Месячный пакет: ${total}. `,
+  tooltipResets: "Обновляется ежемесячно в полночь по Москве.",
   tooltipUpgrade: "Перейти на безлимит",
 
   // Layout toggle
@@ -67,7 +83,7 @@ export const ru: TranslationKeys = {
   tabLibrary: "Библиотека",
 
   // Improve tab
-  exhaustedTitle: "Вы использовали все бесплатные улучшения сегодня.",
+  exhaustedTitle: "Бесплатные улучшения закончились.",
   btnUpgrade: "Перейти на безлимит",
   proComingSoonTitle: "Pro скоро",
   proComingSoonSubtitle: "Платные планы и waitlist пока не открыты.",
@@ -161,9 +177,7 @@ export const ru: TranslationKeys = {
   errorAuthMessage: "Ваш логин недействителен. Обновите или переустановите расширение.",
   errorNetworkMessage: "Проверьте интернет-соединение и попробуйте снова.",
   errorRateLimitMessage: (total: number) =>
-    total > 0
-      ? `Вы использовали все ${total.toLocaleString()} запросов сегодня. Сброс в полночь UTC.`
-      : "Вы использовали все запросы сегодня. Сброс в полночь UTC.",
+    `Вы использовали все ${total.toLocaleString()} улучшений в этом месяце.`,
   errorGenericFallback: "Что-то пошло не так. Попробуйте снова.",
   errorInputTooLong: (max: number) =>
     `Текст слишком длинный (максимум ${formatCharacterCount(max)} символов). Сократите его или разделите на части.`,

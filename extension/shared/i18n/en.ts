@@ -1,6 +1,22 @@
 import type { ImproveGoal } from "../types";
 import { formatCharacterCount } from "../prompt-length";
 export const en = {
+  returnToResult: "Return to result",
+  emailBonusTitle: "Get 50 more improvements?",
+  emailBonusDescription: "Leave your email and get 50 more free PromptOptimizer improvements",
+  emailBonusRequest: "Get 50 more improvements",
+  emailBonusCodeTitle: "Confirm your email",
+  emailBonusCodeDescription: "Enter the six-digit code from the email. It expires in 10 minutes.",
+  emailBonusConfirm: "Confirm email",
+  emailBonusResend: "Send a new code",
+  emailBonusChange: "Change email",
+  emailBonusClose: "Return to result and library",
+  emailBonusPending: "Please wait…",
+  emailBonusSent: "A new code has been sent",
+  emailBonusCodeLabel: "Verification code",
+  quotaRenewal: (date: string) => `50 free improvements will be available again on ${date}.`,
+  quotaTemporary: "Too many requests. Please try again shortly.",
+
   modeShortAi: "AI",
   modeShortContent: "Content",
   btnCancel: "Cancel",
@@ -46,15 +62,15 @@ export const en = {
   rateLimitLoading: "Loading limits...",
   rateLimitUnavailable: "Limits unavailable",
   rateLimitToday: (remaining: number, total: number) =>
-    total > 0 ? `${remaining}/${total} today` : `${remaining} today`,
-  tooltipLoading: "Loading your daily free request balance.",
+    total > 0 ? `${remaining}/${total} this month` : `${remaining} this month`,
+  tooltipLoading: "Loading your monthly free improvement balance.",
   tooltipUnavailable:
     "We couldn't load your current balance. Improvements still work, and the next successful request will refresh this count.",
   tooltipRemaining: (remaining: number, total: number) =>
     total > 0 ? `${remaining} free` : String(remaining),
-  tooltipImprovementsLeft: "improvements left today",
-  tooltipDailyLimit: (total: number) => `Daily limit: ${total}. `,
-  tooltipResets: "Resets at midnight UTC.",
+  tooltipImprovementsLeft: "improvements left this month",
+  tooltipDailyLimit: (total: number) => `Monthly package: ${total}. `,
+  tooltipResets: "Renews monthly at midnight Moscow time.",
   tooltipUpgrade: "Upgrade for unlimited",
 
   // Layout toggle
@@ -66,7 +82,7 @@ export const en = {
   tabLibrary: "Library",
 
   // Improve tab
-  exhaustedTitle: "You've used all free improvements today.",
+  exhaustedTitle: "You've used all free improvements this month.",
   btnUpgrade: "Upgrade for unlimited",
   proComingSoonTitle: "Pro soon",
   proComingSoonSubtitle: "Paid plans and waitlist are not open yet.",
@@ -159,9 +175,7 @@ export const en = {
   errorAuthMessage: "Your login is invalid. Try refreshing the extension or reinstalling.",
   errorNetworkMessage: "Check your internet and try again.",
   errorRateLimitMessage: (total: number) =>
-    total > 0
-      ? `You've used all ${total.toLocaleString()} requests today. Resets at midnight UTC.`
-      : "You've used all requests today. Resets at midnight UTC.",
+    `You've used all ${total.toLocaleString()} improvements this month.`,
   errorGenericFallback: "Something went wrong. Please try again.",
   errorInputTooLong: (max: number) =>
     `Text is too long (maximum ${formatCharacterCount(max)} characters). Shorten it or split it into parts.`,

@@ -5,12 +5,14 @@ import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import RateLimitInfo
+from app.config import settings
 from app.db.models import Installation, PromptImprovement
 from app.goals import AudienceMode, CanonicalGoal
 from app.security.redaction import redact_secrets
+from app.services.abuse_limiter import throttle
 from app.services.errors import UpstreamServiceError
 from app.services.llm import improve_text
-from app.services.rate_limiter import RateLimiter
+from app.services.quota import QuotaService
 
 logger = logging.getLogger(__name__)
 
@@ -18,18 +20,24 @@ logger = logging.getLogger(__name__)
 class PromptService:
     def __init__(self, db: AsyncSession, redis: aioredis.Redis):
         self.db = db
-        self.rate_limiter = RateLimiter(redis)
+        self.quota = QuotaService(db)
+        self.redis = redis
+        self.reservation_id: str | None = None
+        self.remaining: RateLimitInfo | None = None
 
     async def check_rate_limit(
         self, installation_id: str, ip: str
     ) -> tuple[bool, RateLimitInfo | None]:
-        allowed, remaining = await self.rate_limiter.check(installation_id, ip)
-        info = RateLimitInfo(**remaining) if remaining else None
-        return allowed, info
+        minute_remaining = await throttle(
+            self.redis, "improve", installation_id, settings.free_req_per_min, 60
+        )
+        self.reservation_id, self.remaining = await self.quota.reserve(installation_id)
+        self.remaining.per_minute_remaining = minute_remaining
+        return self.reservation_id is not None, self.remaining
 
     async def refund_rate_limit(self, installation_id: str, ip: str) -> RateLimitInfo | None:
-        remaining = await self.rate_limiter.refund(installation_id, ip)
-        return RateLimitInfo(**remaining) if remaining else None
+        await self.quota.refund(self.reservation_id)
+        return None
 
     async def improve_prompt(
         self,
@@ -42,7 +50,8 @@ class PromptService:
         site: str | None = None,
         page_url: str | None = None,
     ) -> PromptImprovement:
-        await self._upsert_installation(installation_id)
+        if not self.reservation_id:
+            await self._upsert_installation(installation_id)
 
         request_id = str(uuid.uuid4())
 
@@ -133,6 +142,10 @@ class PromptService:
             raise
 
         self.db.add(record)
+        if self.reservation_id:
+            minute_remaining = self.remaining.per_minute_remaining if self.remaining else 0
+            self.remaining = await self.quota.finish(self.reservation_id)
+            self.remaining.per_minute_remaining = minute_remaining
         await self.db.commit()
         return record
 

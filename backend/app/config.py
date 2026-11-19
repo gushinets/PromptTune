@@ -107,6 +107,15 @@ class BotConfig:
     analytics_retention_months: int
     analytics_ingest_req_per_min: int
 
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+    email_code_secret: str | None = None
+
     @classmethod
     def from_env(cls) -> "BotConfig":
         """Load configuration from environment variables."""
@@ -144,6 +153,14 @@ class BotConfig:
             installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
             or "prompttune-installation",
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
+            smtp_host=_get_env("SMTP_HOST"),
+            smtp_port=_get_int_env("SMTP_PORT", 587),
+            smtp_username=_get_env("SMTP_USERNAME"),
+            smtp_password=_get_env("SMTP_PASSWORD"),
+            smtp_from=_get_env("SMTP_FROM"),
+            smtp_starttls=_get_bool_env("SMTP_STARTTLS", True),
+            smtp_ssl=_get_bool_env("SMTP_SSL", False),
+            email_code_secret=_get_env("EMAIL_CODE_SECRET"),
             analytics_enabled=_get_bool_env("ANALYTICS_ENABLED", True),
             analytics_retention_months=_get_int_env("ANALYTICS_RETENTION_MONTHS", 13),
             analytics_ingest_req_per_min=_get_int_env("ANALYTICS_INGEST_REQ_PER_MIN", 120),
