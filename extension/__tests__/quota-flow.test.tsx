@@ -323,3 +323,38 @@ it("persists the successful completion time without restamping it when the edito
     improved: "Result",
   });
 });
+
+it("describes pending work accurately when Ctrl+Enter rechecks zero balance", async () => {
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) =>
+    (message as { type?: string }).type === "GET_LIMITS"
+      ? { ...quota(0), pending_improvements: 1, exhausted: false }
+      : { ok: true },
+  );
+  await act(async () => root.render(<App />));
+  await act(async () => {
+    const field = host.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      field,
+      "Improve this",
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () =>
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true })),
+  );
+  expect(browser.runtime.sendMessage).toHaveBeenCalledWith({ type: "GET_LIMITS" });
+  expect(
+    vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.filter(([message]) => (message as { type?: string }).type === "GET_LIMITS"),
+  ).toHaveLength(2);
+  expect(host.querySelector(".error-toast-message")?.textContent).toContain(
+    "Improvements are still processing",
+  );
+  expect(host.textContent).not.toContain("You've used all 50 improvements this month");
+  expect(
+    vi
+      .mocked(browser.runtime.sendMessage)
+      .mock.calls.some(([message]) => (message as { type?: string }).type === "IMPROVE_REQUEST"),
+  ).toBe(false);
+});

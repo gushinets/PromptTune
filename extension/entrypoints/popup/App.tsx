@@ -843,7 +843,12 @@ export function App({
         setLimitsUnavailable(false);
         setLimitsLoaded(true);
         if ((limits.remaining ?? limits.per_day_remaining) <= 0) {
-          setError({ type: "rate-limit", message: t.errorRateLimitMessage(limits.per_day_total) });
+          setError({
+            type: "rate-limit",
+            message: isPeriodQuotaExhausted(limits)
+              ? t.errorRateLimitMessage(limits.total ?? limits.per_day_total)
+              : t.quotaPending,
+          });
           return;
         }
       }

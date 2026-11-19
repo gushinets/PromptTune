@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { apiClient } from "../shared/api-client";
+import { getInstallationId } from "../shared/storage";
 import {
   createInstallationRegistrar,
   INSTALLATION_REGISTRATION_ALARM,
@@ -105,6 +106,45 @@ it("waits for installation registration before the first quota lookup", async ()
   finish({ registered: true });
   await result;
   expect(limits).toHaveBeenCalledWith("installed");
+});
+
+it("keeps registration and first quota access on the same ID during a concurrent analytics lookup", async () => {
+  state = { install_at: "2026-01-31T20:59:59.000Z" };
+  vi.stubGlobal("defineBackground", (main: () => void) => main);
+  Object.assign(browser, { permissions: { onRemoved: { addListener: vi.fn() } } });
+  Object.assign(browser.runtime, { onInstalled: { addListener: vi.fn() } });
+  vi.mocked(browser.runtime.getManifest).mockReturnValue({ version: "0.1.0" } as never);
+  const request = vi
+    .spyOn(apiClient, "registerInstallation")
+    .mockResolvedValue({ registered: true });
+  const limits = vi.spyOn(apiClient, "limits").mockResolvedValue({
+    per_day_remaining: 50,
+    per_day_total: 50,
+    per_minute_remaining: 10,
+    per_minute_total: 10,
+  });
+  const { default: main } = await import("../entrypoints/background/index");
+  (main as unknown as () => void)();
+  let analyticsId: Promise<string> | undefined;
+  let raced = false;
+  vi.mocked(browser.storage.local.get).mockImplementation(async (keys) => {
+    const snapshot = { ...state };
+    if (keys === "installation_id" && !raced) {
+      raced = true;
+      queueMicrotask(() => {
+        analyticsId = getInstallationId();
+      });
+    }
+    return snapshot;
+  });
+  const handle = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  await handle({ type: "GET_LIMITS" }, {}, vi.fn());
+  expect(raced).toBe(true);
+  const id = await analyticsId;
+  expect(id).toEqual(expect.any(String));
+  expect(request).toHaveBeenCalledWith(id, "2026-01-31T20:59:59.000Z");
+  expect(limits).toHaveBeenCalledWith(id);
+  expect(state.installation_id).toBe(id);
 });
 
 it("uses the install timestamp when the first quota lookup overtakes slow install cleanup at midnight", async () => {

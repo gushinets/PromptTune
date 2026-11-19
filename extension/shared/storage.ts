@@ -103,14 +103,31 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
   );
 }
 
-export async function getInstallationId(): Promise<string> {
-  const data = await browser.storage.local.get(STORAGE_KEYS.INSTALLATION_ID);
-  if (data[STORAGE_KEYS.INSTALLATION_ID]) {
-    return data[STORAGE_KEYS.INSTALLATION_ID] as string;
-  }
-  const id = crypto.randomUUID();
-  await browser.storage.local.set({ [STORAGE_KEYS.INSTALLATION_ID]: id });
-  return id;
+let installationIdInitialization: Promise<string> | undefined;
+
+export function getInstallationId(): Promise<string> {
+  if (installationIdInitialization) return installationIdInitialization;
+  const initialize = async () => {
+    const data = await browser.storage.local.get(STORAGE_KEYS.INSTALLATION_ID);
+    if (data[STORAGE_KEYS.INSTALLATION_ID]) {
+      return data[STORAGE_KEYS.INSTALLATION_ID] as string;
+    }
+    const id = crypto.randomUUID();
+    await browser.storage.local.set({ [STORAGE_KEYS.INSTALLATION_ID]: id });
+    return id;
+  };
+  // Share initialization within a context and serialize creation across extension surfaces.
+  const pending = Promise.resolve()
+    .then(async () =>
+      navigator.locks
+        ? navigator.locks.request("prompttune-installation-id", initialize)
+        : initialize(),
+    )
+    .finally(() => {
+      if (installationIdInitialization === pending) installationIdInitialization = undefined;
+    });
+  installationIdInitialization = pending;
+  return pending;
 }
 
 export async function getAll(): Promise<LibraryEntry[]> {
