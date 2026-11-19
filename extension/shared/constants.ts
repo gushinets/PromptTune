@@ -43,6 +43,7 @@ export const STORAGE_KEYS = {
   AUDIENCE_MODE: "audience_mode",
   POPUP_SESSION_DRAFT: "popup_session_draft",
   INSTALL_AT: "install_at",
+  REGISTERED_INSTALLATION_ID: "registered_installation_id",
   FIRST_PROMPT_SUBMITTED_AT: "first_prompt_submitted_at",
   FIRST_RESULT_COPIED_AT: "first_result_copied_at",
   TOTAL_USES: "total_uses",

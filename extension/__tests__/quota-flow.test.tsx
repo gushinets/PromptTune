@@ -228,3 +228,57 @@ it.each(["improve", "save"])(
     expect(host.querySelector('[role="dialog"]')).toBeNull();
   },
 );
+
+it("does not offer a bonus while the zero balance is held by pending work", async () => {
+  let refunded = false;
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+    const type = (message as { type?: string }).type;
+    if (type === "GET_LIMITS") return quota(refunded ? 1 : 2);
+    if (type === "IMPROVE_REQUEST")
+      return {
+        request_id: "success49",
+        improved_text: "Useful result",
+        rate_limit: { ...quota(0), pending_improvements: 1, exhausted: false },
+      };
+    return { ok: true };
+  });
+  await generate();
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(host.querySelector(".upgrade-banner")?.textContent).toContain(
+    "Improvements are still processing",
+  );
+  expect(host.querySelector(".btn-upgrade")).toBeNull();
+  refunded = true;
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(host.querySelector(".upgrade-banner")).toBeNull();
+});
+
+it("explains that a verified email already received its bonus instead of implying new credit", async () => {
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+    const type = (message as { type?: string }).type;
+    if (type === "GET_LIMITS") return quota(0);
+    if (type === "REQUEST_EMAIL_BONUS") return { sent: true };
+    if (type === "CONFIRM_EMAIL_BONUS")
+      return { ...quota(0, true), email_bonus_outcome: "already_claimed" };
+    return { ok: true };
+  });
+  await act(async () => root.render(<App />));
+  await act(async () => host.querySelector<HTMLButtonElement>(".btn-upgrade")!.click());
+  for (const value of ["claimed@example.com", "123456"]) {
+    await act(async () => {
+      const input = host.querySelector(".email-bonus-modal input")!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      host
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+  }
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(host.querySelector(".upgrade-banner")?.textContent).toContain(
+    "This email has already received its bonus",
+  );
+  expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe("0/50");
+});

@@ -28,6 +28,7 @@ import {
   describeUnexpectedBackgroundResponse,
   extractImproveResponse,
   extractRateLimitResponse,
+  isPeriodQuotaExhausted,
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
 import { isOptimizerRequestContext } from "@shared/goal-options";
@@ -264,16 +265,23 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   }, []);
   const [quotaInfo, setQuotaInfo] = useState<RateLimitInfo | null>(null);
   const [showEmailBonus, setShowEmailBonus] = useState(false);
+  const [emailBonusNotice, setEmailBonusNotice] = useState(false);
   const applyQuota = useCallback(
     (info: RateLimitInfo, offer = false, source: "mutation" | "lookup" = "mutation") => {
       if (source === "mutation") quotaMutationVersion.current += 1;
       const remaining = info.remaining ?? info.per_day_remaining;
-      if (remaining > 0 || info.bonus_claimed) setShowEmailBonus(false);
+      if (remaining > 0 || info.bonus_claimed || !isPeriodQuotaExhausted(info))
+        setShowEmailBonus(false);
       setRateLimit({ remaining, total: info.total ?? info.per_day_total });
       setQuotaInfo(info);
       setLimitsUnavailable(false);
       setLimitsLoaded(true);
-      if (BACKEND_MODE === "fastapi" && offer && remaining === 0 && !info.bonus_claimed)
+      if (
+        BACKEND_MODE === "fastapi" &&
+        offer &&
+        isPeriodQuotaExhausted(info) &&
+        !info.bonus_claimed
+      )
         setShowEmailBonus(true);
     },
     [],
@@ -682,6 +690,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
+  const isQuotaPending = isExhausted && quotaInfo !== null && !isPeriodQuotaExhausted(quotaInfo);
   const isWarning =
     BACKEND_MODE === "fastapi" && limitsLoaded
       ? rateLimit.remaining > 0 && rateLimit.remaining <= 10
@@ -728,6 +737,9 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         hasAuthoritativeInputLimitRef.current = true;
         setPromptInputMaxChars(lengthLimit);
         return { type: "generic", message: t.errorInputTooLong(lengthLimit) };
+      }
+      if (errorMessage.toLowerCase().includes("temporarily reserved by pending requests")) {
+        return { type: "rate-limit", message: t.quotaPending };
       }
       if (err instanceof ApiError) {
         if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
@@ -1070,6 +1082,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           onClose={() => setShowEmailBonus(false)}
           onConfirmed={(info) => {
             applyQuota(info);
+            setEmailBonusNotice(info.email_bonus_outcome === "already_claimed");
             setShowEmailBonus(false);
             setError(null);
           }}
@@ -1204,12 +1217,17 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           <>
             {isExhausted && (
               <div className="upgrade-banner">
-                <p>{t.exhaustedTitle}</p>
-                <p>{renewalMessage}</p>
-                {!quotaInfo?.bonus_claimed && (
-                  <button className="btn-upgrade" onClick={() => setShowEmailBonus(true)}>
-                    {t.emailBonusTitle}
-                  </button>
+                <p>{isQuotaPending ? t.quotaPending : t.exhaustedTitle}</p>
+                {emailBonusNotice && <p role="status">{t.emailBonusAlreadyClaimed}</p>}
+                {!isQuotaPending && (
+                  <>
+                    <p>{renewalMessage}</p>
+                    {!quotaInfo?.bonus_claimed && (
+                      <button className="btn-upgrade" onClick={() => setShowEmailBonus(true)}>
+                        {t.emailBonusTitle}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}

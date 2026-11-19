@@ -1,3 +1,7 @@
+import {
+  createInstallationRegistrar,
+  INSTALLATION_REGISTRATION_ALARM,
+} from "@shared/installation-registration";
 import browser from "webextension-polyfill";
 import { openQuotaWindow } from "@shared/quota-window";
 import { apiClient, ApiError } from "@shared/api-client";
@@ -55,6 +59,9 @@ function mapPlatformOs(os: string): string {
 export default defineBackground(() => {
   const client = "extension";
   const clientVersion = browser.runtime.getManifest().version;
+  const registerInstallation = createInstallationRegistrar();
+  const retryInstallationRegistration = () => registerInstallation().catch(() => undefined);
+  void retryInstallationRegistration();
   const pendingRequests = new Map<string, AbortController>();
   const requestOwners = new Map<string, { controller: AbortController; started: boolean }>();
 
@@ -417,9 +424,13 @@ export default defineBackground(() => {
     }
   };
   void ensureSelectionCleanupAlarm().catch(() => undefined);
-  browser.runtime.onStartup.addListener(cleanupSelections);
+  browser.runtime.onStartup.addListener(async () => {
+    await cleanupSelections();
+    await retryInstallationRegistration();
+  });
   browser.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === SELECTION_CLEANUP_ALARM) await cleanupSelections();
+    if (alarm.name === INSTALLATION_REGISTRATION_ALARM) await retryInstallationRegistration();
   });
 
   let selectionMenuRegistered = false;
@@ -436,13 +447,14 @@ export default defineBackground(() => {
   if (import.meta.env.FIREFOX) registerSelectionMenu();
 
   browser.runtime.onInstalled.addListener(async (details) => {
+    const installAt = new Date().toISOString();
     registerSelectionMenu();
     await cleanupSelections();
     if (details.reason !== "install") return;
 
-    const installAt = new Date().toISOString();
     await browser.storage.local.set({ [STORAGE_KEYS.INSTALL_AT]: installAt });
     void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
+    await retryInstallationRegistration();
 
     if (await canTrackAnalytics()) {
       await track({
@@ -534,6 +546,7 @@ export default defineBackground(() => {
           }
           controller.signal.throwIfAborted();
 
+          await registerInstallation();
           const installationId = await getInstallationId();
           const trimmed = msg.payload.text.trim();
 
@@ -646,12 +659,15 @@ export default defineBackground(() => {
         return { ok: true };
       }
       case "REQUEST_EMAIL_BONUS": {
+        await registerInstallation();
         return apiClient.requestEmailBonus(await getInstallationId(), msg.email);
       }
       case "CONFIRM_EMAIL_BONUS": {
+        await registerInstallation();
         return apiClient.confirmEmailBonus(await getInstallationId(), msg.code);
       }
       case "GET_LIMITS": {
+        await registerInstallation();
         const installationId = await getInstallationId();
         const rate_limit = await apiClient.limits(installationId);
         return { type: "LIMITS_RESULT", payload: { rate_limit } };

@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field
 
@@ -20,6 +20,9 @@ class ImproveRequest(BaseModel):
 
 
 class RateLimitInfo(BaseModel):
+    pending_improvements: int = 0
+    exhausted: bool | None = None
+    email_bonus_outcome: Literal["awarded", "already_claimed"] | None = None
     remaining: int = 50
     total: int = 50
     next_reset_at: datetime | None = None
@@ -116,3 +119,8 @@ class EmailBonusRequest(BaseModel):
 class EmailBonusConfirm(BaseModel):
     installation_id: str = Field(..., min_length=1, max_length=64)
     code: str = Field(..., pattern=r"^\d{6}$")
+
+
+class RegisterInstallationRequest(BaseModel):
+    installation_id: str = Field(..., min_length=1, max_length=64)
+    installed_at: AwareDatetime

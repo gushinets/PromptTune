@@ -6,7 +6,7 @@ This document lists external destinations opened by the browser extension produc
 
 | Destination | Env var | Default production behavior | Data/privacy note |
 | --- | --- | --- | --- |
-| Backend API | `VITE_API_BASE_URL` | `https://api.anytoolai.store` | Receives prompt improvement and usage/technical analytics payloads described by backend API docs and store disclosure. |
+| Backend API | `VITE_API_BASE_URL` | `https://api.anytoolai.store` | Receives prompt improvement, essential installation registration (installation ID and install timestamp, independent of analytics consent), quota/email verification, and usage/technical analytics payloads described by backend API docs and store disclosure. |
 | Welcome page | `VITE_WELCOME_PAGE_URL` | `https://anytoolai-welcome.netlify.app/prompt-optimizer/` | Opened after install. No extension data is appended by the extension. |
 | Feedback form | `VITE_FEEDBACK_URL` | Google Forms URL currently used in `extension/shared/constants.ts` | Remains enabled for production. The form must be owned by the PromptOptimizer/AnyTool product account, and the store privacy disclosure must state that feedback submitted through Google Forms is processed by Google Forms and may include user-entered text. |
 | Chrome Web Store review page | `VITE_CWS_REVIEW_URL` | PromptOptimizer review page for extension ID `fbageijibmjblopdbgpdcpkojhnjjbpe` | Opens for ratings of 4 or 5. An HTTPS environment value can override the default URL. |

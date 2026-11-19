@@ -206,6 +206,17 @@ export const apiClient = {
     }
   },
 
+  registerInstallation(
+    installation_id: string,
+    installed_at: string,
+  ): Promise<{ registered: boolean }> {
+    return post(
+      "/v1/installations",
+      { installation_id, installed_at },
+      AbortSignal.timeout(10_000),
+    );
+  },
+
   limits(installation_id: string): Promise<RateLimitInfo> {
     if (BACKEND_MODE !== "fastapi") {
       return Promise.resolve({

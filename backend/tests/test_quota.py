@@ -140,3 +140,85 @@ async def test_generation_releases_database_connection_while_waiting(quota_sessi
             pytest.raises(UpstreamBadResponseError),
         ):
             await service.improve_prompt("prompt", "slow")
+
+
+async def test_installation_registration_keeps_original_clock_before_first_quota(quota_sessions):
+    from app.services.quota import QuotaService
+
+    clock = [datetime(2028, 1, 5, 10, tzinfo=UTC)]
+    installed_at = clock[0]
+    async with quota_sessions() as db:
+        service = QuotaService(db, now=lambda: clock[0])
+        # Offline delivery is retried on the 20th with the original installation timestamp.
+        clock[0] = datetime(2028, 1, 20, tzinfo=UTC)
+        await service.register("installed", installed_at)
+        # Repeated registration must not move the installation anniversary.
+        await service.register("installed", clock[0])
+        info = await service.status("installed")
+        assert info.next_reset_at == datetime(2028, 2, 4, 21, tzinfo=UTC)
+        clock[0] = datetime(2028, 2, 4, 21, tzinfo=UTC)
+        assert (await service.status("installed")).next_reset_at == datetime(
+            2028, 3, 4, 21, tzinfo=UTC
+        )
+
+
+async def test_zero_held_by_pending_work_is_not_successfully_exhausted(quota_sessions):
+    from app.services.quota import QuotaService
+
+    async with quota_sessions() as db:
+        service = QuotaService(db)
+        for _ in range(48):
+            reservation, _ = await service.reserve("parallel")
+            await service.finish(reservation)
+            await db.commit()
+        first, _ = await service.reserve("parallel")
+        second, held = await service.reserve("parallel")
+        assert held.remaining == 0 and held.pending_improvements == 2 and not held.exhausted
+        success49 = await service.finish(first)
+        await db.commit()
+        assert success49.remaining == 0 and success49.pending_improvements == 1
+        assert not success49.exhausted
+        denied, held = await service.reserve("parallel")
+        assert denied is None and not held.exhausted
+        await service.refund(second)
+        available = await service.status("parallel")
+        assert available.remaining == 1 and available.pending_improvements == 0
+        last, _ = await service.reserve("parallel")
+        success50 = await service.finish(last)
+        await db.commit()
+        assert success50.remaining == 0 and success50.pending_improvements == 0
+        assert success50.exhausted
+
+
+async def test_registration_endpoint_sets_clock_and_pending_requests_have_a_distinct_error(
+    client,
+    quota_sessions,
+    mock_redis,
+):
+    from app.dependencies import get_db
+    from app.main import app
+    from app.services.quota import QuotaService, period_boundary
+
+    async def database():
+        async with quota_sessions() as db:
+            yield db
+
+    app.dependency_overrides[get_db] = database
+    installed_at = datetime.now(UTC) - timedelta(days=15)
+    registered = await client.post(
+        "/v1/installations",
+        json={"installation_id": "api-install", "installed_at": installed_at.isoformat()},
+    )
+    assert registered.status_code == 200
+    status = (await client.get("/v1/limits", params={"installation_id": "api-install"})).json()
+    assert datetime.fromisoformat(
+        status["next_reset_at"].replace("Z", "+00:00")
+    ) == period_boundary(installed_at, 1)
+    async with quota_sessions() as db:
+        for _ in range(50):
+            await QuotaService(db).reserve("api-install")
+    rejected = await client.post(
+        "/v1/improve", json={"installation_id": "api-install", "text": "Improve"}
+    )
+    assert rejected.status_code == 429
+    assert "temporarily reserved by pending requests" in rejected.json()["detail"]

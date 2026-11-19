@@ -263,7 +263,7 @@ export async function setAudienceMode(mode: AudienceMode): Promise<void> {
 
 export async function getPopupSessionDraft(
   consumePopupHandoff = true,
-  options: { independent?: boolean } = {},
+  options: { independent?: boolean; resultOnly?: boolean } = {},
 ): Promise<PopupSessionDraft | null> {
   const data = await readLocalEntries(
     (key) =>
@@ -317,6 +317,7 @@ export async function getPopupSessionDraft(
       return (
         key.startsWith(POPUP_DRAFT_PREFIX) &&
         isPopupSessionDraft(draft) &&
+        (!options.resultOnly || Boolean(draft.improved.trim())) &&
         typeof updatedAt === "number" &&
         Number.isFinite(updatedAt) &&
         now - updatedAt <= LIMITS.POPUP_SESSION_TTL_MS &&
@@ -338,6 +339,11 @@ export async function getPopupSessionDraft(
     | boolean
     | undefined;
   if (!draft) return null;
+  if (
+    options.resultOnly &&
+    (typeof draft !== "object" || !isPopupSessionDraft(draft) || !draft.improved.trim())
+  )
+    return null;
 
   if (typeof draft !== "object") {
     await browser.storage.local.remove(key);

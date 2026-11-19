@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,17 @@ class QuotaService:
     def __init__(self, db: AsyncSession, now: Callable[[], datetime] | None = None):
         self.db = db
         self.now = now or (lambda: datetime.now(UTC))
+
+    async def register(self, installation_id: str, installed_at: datetime) -> None:
+        # Offline retries retain the recorded install time; neither retries nor future
+        # client clocks may move an established server anchor.
+        anchor = min(installed_at, self.now())
+        await self.db.execute(
+            insert(Installation)
+            .values(id=installation_id, created_at=anchor)
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+        await self.db.commit()
 
     async def locked(self, installation_id: str) -> ImprovementQuota:
         now = self.now()
@@ -95,8 +106,21 @@ class QuotaService:
         await self.db.flush()
         return quota
 
-    def info(self, quota: ImprovementQuota) -> RateLimitInfo:
+    async def info(self, quota: ImprovementQuota) -> RateLimitInfo:
+        pending = (
+            await self.db.execute(
+                select(func.count())
+                .select_from(QuotaReservation)
+                .where(
+                    QuotaReservation.installation_id == quota.installation_id,
+                    QuotaReservation.period_start == quota.period_start,
+                    QuotaReservation.status == "pending",
+                )
+            )
+        ).scalar_one()
         return RateLimitInfo(
+            pending_improvements=pending,
+            exhausted=quota.remaining == 0 and pending == 0,
             remaining=quota.remaining,
             total=quota.total,
             next_reset_at=quota.next_reset_at,
@@ -120,7 +144,7 @@ class QuotaService:
 
     async def status(self, installation_id: str) -> RateLimitInfo:
         quota = await self.locked(installation_id)
-        result = self.info(quota)
+        result = await self.info(quota)
         await self.db.commit()
         return result
 
@@ -141,7 +165,7 @@ class QuotaService:
                     status="pending",
                 )
             )
-        result = self.info(quota)
+        result = await self.info(quota)
         await self.db.commit()
         return reservation_id, result
 
@@ -157,7 +181,7 @@ class QuotaService:
         reservation.status = "completed"
         await self.db.flush()
         # Caller commits result and consumption together.
-        return self.info(quota)
+        return await self.info(quota)
 
     async def refund(self, reservation_id: str | None) -> None:
         if reservation_id is None:

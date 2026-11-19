@@ -435,6 +435,11 @@ weekly production `api_error` metric after rollout.
 Run `alembic upgrade head` before starting the updated API (migration 008).
 Existing installations receive 50 improvements on first access; renewal stays
 anchored to their original server registration date, at Moscow midnight.
+New installations call `POST /v1/installations` from `onInstalled`, independently
+of analytics consent. The original local installation timestamp is retained for
+offline retries (startup, a five-minute retry alarm, and before quota requests).
+Registration is idempotent: an existing server anchor is never moved, and future
+client timestamps are clamped to server time.
 `FREE_REQ_PER_DAY` is obsolete; the monthly package is 50. `FREE_REQ_PER_MIN`
 remains a separate per-installation minute throttle (default 10).
 `FREE_REQ_PER_IP_MIN` is an additional shared per-IP throttle (default 50 requests
@@ -460,7 +465,12 @@ already claimed address records verification without issuing another bonus.
 
 The API exposes `remaining`, `total`, `next_reset_at`, `bonus_claimed`,
 `email_verified`, `email`, `verification_pending` and `verification_resend_at`
-from `/v1/limits` and improvement responses. Pending email proof is restored from
+from `/v1/limits` and improvement responses. `pending_improvements` reports active
+reservations; `exhausted` becomes true only when availability is zero and no
+current-period work remains pending. Zero held by in-flight work blocks new
+requests without offering an email bonus. Email confirmation additionally returns
+`email_bonus_outcome` (`awarded` or `already_claimed`), so a reused address is
+explained without implying new credit. Pending email proof is restored from
 these fields when the popup or sidebar is reopened.
 Deprecated `per_day_*` fields mirror the monthly values during extension rollout;
 new UI must use monthly semantics. Deploy the updated extension with the API.
@@ -468,6 +478,9 @@ new UI must use monthly semantics. Deploy the updated extension with the API.
 Integration tests run only against an explicitly supplied disposable database:
 `QUOTA_TEST_DATABASE_URL=postgresql+asyncpg://... pytest tests/test_quota.py tests/test_email_bonus.py`.
 These tests recreate tables in that database. Never point them at production.
+Both backend CI workflows set `QUOTA_TEST_DATABASE_URL` and
+`ABUSE_TEST_REDIS_URL` to their disposable PostgreSQL/Redis services, so the real
+quota, claim and request-throttle checks run in the required CI job.
 
 Known pre-existing schema drift: `alembic check` also flags nullability differences
 on old timestamp columns and missing standalone analytics indexes from earlier

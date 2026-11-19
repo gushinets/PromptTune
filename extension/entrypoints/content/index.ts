@@ -1,7 +1,7 @@
 import browser from "webextension-polyfill";
 import { getAdapter } from "@adapters/registry";
 import { trackEvent } from "@shared/analytics";
-import { extractImproveResponse } from "@shared/response-utils";
+import { extractImproveResponse, isPeriodQuotaExhausted } from "@shared/response-utils";
 import type { Message } from "@shared/messages";
 import type { ImproveGoal } from "@shared/types";
 
@@ -102,7 +102,10 @@ export default defineContentScript({
               },
             });
           } catch (error) {
-            if (String(error).toLowerCase().includes("monthly improvement quota exhausted")) {
+            if (
+              String(error).toLowerCase().includes("monthly improvement quota exhausted") ||
+              String(error).toLowerCase().includes("temporarily reserved by pending requests")
+            ) {
               await browser.runtime.sendMessage({
                 type: "SHOW_QUOTA",
                 payload: {
@@ -138,7 +141,7 @@ export default defineContentScript({
               "content",
             );
             const quota = result.rate_limit;
-            if (quota && (quota.remaining ?? quota.per_day_remaining) === 0) {
+            if (quota && isPeriodQuotaExhausted(quota)) {
               await browser.runtime.sendMessage({
                 type: "SHOW_QUOTA",
                 payload: {

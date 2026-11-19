@@ -70,7 +70,13 @@ class EmailBonusService(QuotaService):
     async def confirm(self, installation_id: str, code: str):
         quota = await self.locked(installation_id)
         if quota.bonus_claimed and quota.email_verified:
-            info = self.info(quota)
+            claim = await self.db.get(EmailBonusClaim, quota.email)
+            info = await self.info(quota)
+            info.email_bonus_outcome = (
+                "awarded"
+                if claim and claim.installation_id == installation_id
+                else "already_claimed"
+            )
             await self.db.commit()
             return info
         if (
@@ -97,13 +103,15 @@ class EmailBonusService(QuotaService):
             .on_conflict_do_nothing(index_elements=["email"])
             .returning(EmailBonusClaim.email)
         )
-        if result.scalar_one_or_none() is not None:
+        credited = result.scalar_one_or_none() is not None
+        if credited:
             quota.remaining += 50
             quota.total += 50
         quota.bonus_claimed = True
         quota.email_verified = True
         quota.challenge_digest = None
         quota.challenge_expires_at = None
-        info = self.info(quota)
+        info = await self.info(quota)
+        info.email_bonus_outcome = "awarded" if credited else "already_claimed"
         await self.db.commit()
         return info

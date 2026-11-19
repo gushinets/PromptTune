@@ -193,34 +193,39 @@ it.each(["password", "email", "tel", "url"])(
   },
 );
 
-it("opens an extension quota surface after inserting the final hotkey result", async () => {
-  const field = document.createElement("textarea");
-  field.id = "prompt-textarea";
-  field.value = "Original";
-  document.body.append(field);
-  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
-    if ((message as { type?: string }).type === "IMPROVE_REQUEST")
-      return {
-        request_id: "last",
-        improved_text: "Inserted last result",
-        rate_limit: {
-          remaining: 0,
-          total: 50,
-          bonus_claimed: false,
-          per_day_remaining: 0,
-          per_day_total: 50,
-          per_minute_remaining: 9,
-          per_minute_total: 10,
-        },
-      };
-    return { ok: true };
-  });
-  await handle({ type: "IMPROVE_ACTIVE_FIELD" });
-  expect(field.value).toBe("Inserted last result");
-  expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
-    expect.objectContaining({ type: "SHOW_QUOTA" }),
-  );
-});
+it.each([0, 1])(
+  "opens quota UI for a final hotkey result only without pending work (%i pending)",
+  async (pending) => {
+    const field = document.createElement("textarea");
+    field.id = "prompt-textarea";
+    field.value = "Original";
+    document.body.append(field);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+      if ((message as { type?: string }).type === "IMPROVE_REQUEST")
+        return {
+          request_id: "last",
+          improved_text: "Inserted last result",
+          rate_limit: {
+            remaining: 0,
+            total: 50,
+            pending_improvements: pending,
+            exhausted: pending === 0,
+            bonus_claimed: false,
+            per_day_remaining: 0,
+            per_day_total: 50,
+            per_minute_remaining: 9,
+            per_minute_total: 10,
+          },
+        };
+      return { ok: true };
+    });
+    await handle({ type: "IMPROVE_ACTIVE_FIELD" });
+    expect(field.value).toBe("Inserted last result");
+    const call = expect.objectContaining({ type: "SHOW_QUOTA" });
+    if (pending === 0) expect(browser.runtime.sendMessage).toHaveBeenCalledWith(call);
+    else expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(call);
+  },
+);
 
 it("routes an exhausted hotkey attempt to quota UI without changing the field", async () => {
   const field = document.createElement("textarea");

@@ -4,6 +4,9 @@ import type { TranslationKeys } from "./en";
 
 export const ru: TranslationKeys = {
   returnToResult: "Вернуться к результату",
+  quotaPending: "Улучшения ещё обрабатываются. Остаток обновится после завершения запросов.",
+  emailBonusAlreadyClaimed:
+    "Бонус за этот email уже был получен. Дополнительные улучшения не начислены.",
   emailBonusTitle: "Получить ещё 50 улучшений?",
   emailBonusDescription: "Оставь email и получи ещё 50 бесплатных улучшений PromptOptimizer",
   emailBonusRequest: "Получить еще 50 улучшений",

@@ -176,3 +176,27 @@ async def test_bonus_waiting_for_lock_is_credited_in_new_month(quota_sessions):
         await pending
         info = await QuotaService(waiter, now=lambda: clock[0]).status("midnight")
         assert info.remaining == 100
+
+
+async def test_reinstalled_email_confirmation_reports_already_claimed_without_credit(
+    quota_sessions,
+):
+    from app.services.email_bonus import EmailBonusService
+
+    proof = []
+
+    async def send(email, code):
+        proof.append(code)
+
+    async with quota_sessions() as db:
+        service = EmailBonusService(db, sender=send, secret="secret")
+        await service.request("original", "claimed@example.com")
+        awarded = await service.confirm("original", proof[-1])
+        assert awarded.email_bonus_outcome == "awarded"
+        await service.request("reinstalled", "claimed@example.com")
+        reused = await service.confirm("reinstalled", proof[-1])
+        assert reused.remaining == 50
+        assert reused.email_bonus_outcome == "already_claimed"
+        assert (
+            await service.confirm("reinstalled", proof[-1])
+        ).email_bonus_outcome == "already_claimed"

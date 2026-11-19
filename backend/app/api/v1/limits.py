@@ -2,7 +2,12 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import EmailBonusConfirm, EmailBonusRequest, RateLimitInfo
+from app.api.schemas import (
+    EmailBonusConfirm,
+    EmailBonusRequest,
+    RateLimitInfo,
+    RegisterInstallationRequest,
+)
 from app.config import settings
 from app.dependencies import (
     ensure_installation_id_when_ip_present,
@@ -71,3 +76,16 @@ async def confirm_email(
         redis,
         req.installation_id,
     )
+
+
+@router.post("/installations")
+async def register_installation(
+    req: RegisterInstallationRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+    ip: str = Depends(get_client_ip),
+):
+    await ensure_installation_id_when_ip_present(ip, req.installation_id, redis)
+    await throttle(redis, "installation-register", ip, 100, 3600)
+    await QuotaService(db).register(req.installation_id, req.installed_at)
+    return {"registered": True}

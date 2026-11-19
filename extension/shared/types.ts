@@ -66,6 +66,9 @@ export interface PromptInputLimit {
 }
 
 export interface RateLimitInfo {
+  pending_improvements?: number;
+  exhausted?: boolean | null;
+  email_bonus_outcome?: "awarded" | "already_claimed" | null;
   remaining?: number;
   total?: number;
   next_reset_at?: string | null;

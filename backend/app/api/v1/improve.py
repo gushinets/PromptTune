@@ -65,7 +65,12 @@ async def improve(
                 await service.refund_rate_limit(installation_id=req.installation_id, ip=client_ip)
         raise
     if not allowed:
-        raise HTTPException(status_code=429, detail="Monthly improvement quota exhausted")
+        detail = (
+            "Improvement quota temporarily reserved by pending requests"
+            if remaining and remaining.exhausted is False
+            else "Monthly improvement quota exhausted"
+        )
+        raise HTTPException(status_code=429, detail=detail)
 
     work = asyncio.create_task(
         service.improve_prompt(

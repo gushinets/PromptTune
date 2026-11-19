@@ -2,6 +2,9 @@ import type { ImproveGoal } from "../types";
 import { formatCharacterCount } from "../prompt-length";
 export const en = {
   returnToResult: "Return to result",
+  quotaPending: "Improvements are still processing. Your balance will refresh when they finish.",
+  emailBonusAlreadyClaimed:
+    "This email has already received its bonus. No additional improvements were credited.",
   emailBonusTitle: "Get 50 more improvements?",
   emailBonusDescription: "Leave your email and get 50 more free PromptOptimizer improvements",
   emailBonusRequest: "Get 50 more improvements",

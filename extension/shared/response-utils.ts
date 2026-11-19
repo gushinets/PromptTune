@@ -110,3 +110,12 @@ export function describeUnexpectedBackgroundResponse(value: unknown): string {
 
   return `Unexpected response from background: keys=${keys.join(", ")}`;
 }
+
+/** Zero availability can be temporary while another surface owns a reservation. */
+export function isPeriodQuotaExhausted(info: RateLimitInfo): boolean {
+  return (
+    (info.remaining ?? info.per_day_remaining) <= 0 &&
+    info.exhausted !== false &&
+    (info.pending_improvements ?? 0) === 0
+  );
+}
