@@ -89,26 +89,115 @@ it.each(["slow", "failed"])(
   },
 );
 
-it.each(["expired", "other-session"])("does not seed a quota snapshot that is %s", async (mode) => {
-  vi.useFakeTimers();
-  try {
+it.each([
+  { mode: "expired", incognito: false },
+  { mode: "other-session", incognito: false },
+  { mode: "expired", incognito: true },
+  { mode: "other-session", incognito: true },
+])(
+  "does not seed a quota snapshot that is $mode (private=$incognito)",
+  async ({ mode, incognito }) => {
+    vi.useFakeTimers();
+    try {
+      await openQuotaWindow(
+        "Original",
+        { request_id: "last", improved_text: "Final result", rate_limit: quota },
+        { id: 42, incognito } as never,
+      );
+      const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+      if (mode === "expired") vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+      else
+        vi.mocked(browser.storage.session.get).mockResolvedValue({
+          optimizer_browser_session: "other-session",
+        });
+      const session = await loadSelectionSession(
+        new URL(String(options.url), "https://extension.test").search,
+      );
+      expect(session.initialQuota).toBeUndefined();
+      expect(session.initialDraft?.improved).toBe(incognito ? undefined : "Final result");
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it.each(["slow", "failed"])(
+  "seeds private quota without page text when refresh is %s",
+  async (mode) => {
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+      if ((message as { type?: string }).type === "GET_LIMITS") {
+        if (mode === "failed") throw new Error("Failed to fetch");
+        return new Promise(() => {});
+      }
+      return { ok: true };
+    });
     await openQuotaWindow(
-      "Original",
-      { request_id: "last", improved_text: "Final result", rate_limit: quota },
-      { id: 42 } as never,
+      "Private original",
+      {
+        request_id: "private-request",
+        improved_text: "Private result",
+        rate_limit: { ...quota, email: "excluded@example.com" },
+      },
+      { id: 42, incognito: true } as never,
     );
+    const writes = JSON.stringify(vi.mocked(browser.storage.local.set).mock.calls);
+    expect(writes).not.toContain("Private original");
+    expect(writes).not.toContain("Private result");
+    expect(writes).not.toContain("private-request");
+    expect(writes).not.toContain("excluded@example.com");
+    expect(writes).not.toContain("sourceTabId");
+    expect(Object.keys(state).some((key) => key.startsWith("optimizer_draft_"))).toBe(false);
     const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
-    if (mode === "expired") vi.advanceTimersByTime(5 * 60 * 1000 + 1);
-    else
-      vi.mocked(browser.storage.session.get).mockResolvedValue({
-        optimizer_browser_session: "other-session",
-      });
-    const session = await loadSelectionSession(
-      new URL(String(options.url), "https://extension.test").search,
+    const search = new URL(String(options.url), "https://extension.test").search;
+    const session = await loadSelectionSession(search);
+    expect(session).toEqual({ initialQuota: quota });
+    expect(await loadSelectionSession(search)).toEqual({});
+    await act(async () => root.render(<App {...session} />));
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain(
+      "Get 50 more improvements?",
     );
-    expect(session.initialQuota).toBeUndefined();
-    expect(session.initialDraft?.improved).toBe("Final result");
-  } finally {
-    vi.useRealTimers();
-  }
+    expect(host.textContent).not.toContain("Private original");
+    expect(host.textContent).not.toContain("Private result");
+  },
+);
+
+it("shows the private renewal date after the bonus when refresh fails", async () => {
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+    if ((message as { type?: string }).type === "GET_LIMITS") throw new Error("offline");
+    return { ok: true };
+  });
+  const claimed = { ...quota, bonus_claimed: true, email_verified: true };
+  await openQuotaWindow(
+    "Private original",
+    {
+      request_id: "private-request",
+      improved_text: "Private result",
+      rate_limit: claimed,
+    },
+    { id: 42, incognito: true } as never,
+  );
+  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+  const session = await loadSelectionSession(
+    new URL(String(options.url), "https://extension.test").search,
+  );
+  expect(session).toEqual({ initialQuota: claimed });
+  await act(async () => root.render(<App {...session} />));
+  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  expect(host.querySelector(".upgrade-banner")?.textContent).toContain("2027");
+});
+
+it("removes the private quota handoff when its window cannot open", async () => {
+  vi.mocked(browser.windows.create).mockRejectedValueOnce(new Error("window unavailable"));
+  await expect(
+    openQuotaWindow(
+      "Private original",
+      {
+        request_id: "private-request",
+        improved_text: "Private result",
+        rate_limit: quota,
+      },
+      { id: 42, incognito: true } as never,
+    ),
+  ).rejects.toThrow("window unavailable");
+  expect(Object.keys(state).some((key) => key.startsWith("optimizer_selection_"))).toBe(false);
 });

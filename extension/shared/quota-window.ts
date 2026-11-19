@@ -12,13 +12,41 @@ export async function openQuotaWindow(
   goal: ImproveGoal = "general",
 ): Promise<void> {
   if (source.incognito) {
-    // Private page text must never be written to shared extension draft storage.
-    await browser.windows.create({
-      url: `${browser.runtime.getURL("popup.html")}?quota=1`,
-      type: "popup",
-      width: 380,
-      height: 660,
-    });
+    // Transfer only quota fields: private text and results never enter shared storage.
+    const id = crypto.randomUUID();
+    const key = `optimizer_selection_${id}`;
+    const limits = result?.rate_limit;
+    if (limits) {
+      await setOptimizerHandoff(key, {
+        quotaOnly: true,
+        sourceSessionId: await ensureBrowserSessionId(),
+        expiresAt: Date.now() + LIMITS.HANDOFF_TTL_MS,
+        quota: {
+          remaining: limits.remaining,
+          total: limits.total,
+          pending_improvements: limits.pending_improvements,
+          exhausted: limits.exhausted,
+          bonus_claimed: limits.bonus_claimed,
+          email_verified: limits.email_verified,
+          next_reset_at: limits.next_reset_at,
+          per_day_remaining: limits.per_day_remaining,
+          per_day_total: limits.per_day_total,
+          per_minute_remaining: limits.per_minute_remaining,
+          per_minute_total: limits.per_minute_total,
+        },
+      });
+    }
+    try {
+      await browser.windows.create({
+        url: `${browser.runtime.getURL("popup.html")}?quota=1${limits ? `&selection=${key}&session=${id}` : ""}`,
+        type: "popup",
+        width: 380,
+        height: 660,
+      });
+    } catch (error) {
+      if (limits) await browser.storage.local.remove(key).catch(() => undefined);
+      throw error;
+    }
     return;
   }
   const draftSessionId = crypto.randomUUID();

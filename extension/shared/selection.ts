@@ -115,19 +115,27 @@ export async function loadSelectionSession(search: string): Promise<{
   const id = getSelectionSessionId(search);
   if (!id) return {};
   const key = `${SELECTION_KEY_PREFIX}${id}`;
-  const quota =
+  const quotaHandoff =
     new URLSearchParams(search).get("quota") === "1"
       ? await browser.storage.local
           .get(key)
           .then(async (data) => {
-            const payload = data[key] as { quota?: unknown; sourceSessionId?: string } | undefined;
+            const payload = data[key] as
+              | { quota?: unknown; sourceSessionId?: string; quotaOnly?: boolean }
+              | undefined;
             if (!isLiveHandoff(payload, Date.now())) return null;
             const info = extractRateLimitResponse(payload?.quota);
-            return info && payload?.sourceSessionId === (await getBrowserSessionId()) ? info : null;
+            return info && payload?.sourceSessionId === (await getBrowserSessionId())
+              ? { info, quotaOnly: payload?.quotaOnly === true }
+              : null;
           })
           .catch(() => null)
       : null;
-  const initialQuota = quota ? { initialQuota: quota } : {};
+  const initialQuota = quotaHandoff ? { initialQuota: quotaHandoff.info } : {};
+  if (quotaHandoff?.quotaOnly) {
+    await browser.storage.local.remove(key).catch(() => undefined);
+    return initialQuota;
+  }
   const draft = await getPopupSessionDraftById(id).catch(() => null);
   if (draft) {
     await browser.storage.local.remove(key).catch(() => undefined);

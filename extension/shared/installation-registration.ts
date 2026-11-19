@@ -12,13 +12,29 @@ export interface InstallationRegistrar {
 }
 
 export function createInstallationRegistrar(): InstallationRegistrar {
-  let initialization = Promise.resolve();
+  let initialization: Promise<void> | null = null;
+  let pendingInstallAt: string | null = null;
   let epoch = 0;
   let inFlight: { epoch: number; promise: Promise<void> } | null = null;
+  const persistInitialization = (): Promise<void> => {
+    if (initialization) return initialization;
+    if (pendingInstallAt === null) return Promise.resolve();
+    const requestedEpoch = epoch;
+    const promise = browser.storage.local
+      .set({ [STORAGE_KEYS.INSTALL_AT]: pendingInstallAt })
+      .then(() => {
+        if (requestedEpoch === epoch) pendingInstallAt = null;
+      })
+      .finally(() => {
+        if (initialization === promise) initialization = null;
+      });
+    initialization = promise;
+    return promise;
+  };
   const register = async (): Promise<void> => {
     if (BACKEND_MODE !== "fastapi") return;
     const requestedEpoch = epoch;
-    await initialization;
+    await persistInitialization();
     if (requestedEpoch !== epoch) return register();
     if (inFlight?.epoch === epoch) return inFlight.promise;
     const promise = (async () => {
@@ -51,8 +67,9 @@ export function createInstallationRegistrar(): InstallationRegistrar {
   return Object.assign(register, {
     initialize(installedAt: string) {
       epoch += 1;
-      initialization = browser.storage.local.set({ [STORAGE_KEYS.INSTALL_AT]: installedAt });
-      return initialization;
+      pendingInstallAt = installedAt;
+      initialization = null;
+      return persistInitialization();
     },
   });
 }

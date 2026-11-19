@@ -213,3 +213,35 @@ it("does not join a pre-install lookup that already read an empty timestamp", as
   expect(request).toHaveBeenCalledTimes(1);
   expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
 });
+
+it("retries persisting the original install timestamp after storage recovers", async () => {
+  state = { installation_id: "installed" };
+  const request = vi
+    .spyOn(apiClient, "registerInstallation")
+    .mockResolvedValue({ registered: true });
+  vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error("storage unavailable"));
+  const register = createInstallationRegistrar();
+  const installedAt = "2026-01-31T20:59:59.000Z";
+  await expect(register.initialize(installedAt)).rejects.toThrow("storage unavailable");
+  expect(request).not.toHaveBeenCalled();
+  await Promise.all([register(), register()]);
+  expect(state.install_at).toBe(installedAt);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(request).toHaveBeenCalledWith("installed", installedAt);
+});
+
+it("blocks registration until retrying the install-date write succeeds", async () => {
+  state = { installation_id: "installed" };
+  const request = vi
+    .spyOn(apiClient, "registerInstallation")
+    .mockResolvedValue({ registered: true });
+  vi.mocked(browser.storage.local.set)
+    .mockRejectedValueOnce(new Error("initial failure"))
+    .mockRejectedValueOnce(new Error("still unavailable"));
+  const register = createInstallationRegistrar();
+  await expect(register.initialize("2026-01-31T20:59:59.000Z")).rejects.toThrow("initial failure");
+  await expect(register()).rejects.toThrow("still unavailable");
+  expect(request).not.toHaveBeenCalled();
+  await register();
+  expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
+});
