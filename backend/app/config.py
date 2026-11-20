@@ -107,6 +107,16 @@ class BotConfig:
     analytics_retention_months: int
     analytics_ingest_req_per_min: int
 
+    free_req_per_ip_min: int = 50
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str | None = None
+    smtp_starttls: bool = True
+    smtp_ssl: bool = False
+    email_code_secret: str | None = None
+
     @classmethod
     def from_env(cls) -> "BotConfig":
         """Load configuration from environment variables."""
@@ -127,6 +137,7 @@ class BotConfig:
             openrouter_api_key=_get_env("OPENROUTER_API_KEY"),
             free_req_per_day=_get_int_env("FREE_REQ_PER_DAY", 50),
             free_req_per_min=_get_int_env("FREE_REQ_PER_MIN", 10),
+            free_req_per_ip_min=_get_int_env("FREE_REQ_PER_IP_MIN", 50),
             prompt_input_max_chars=_get_int_env("PROMPT_INPUT_MAX_CHARS", 30000),
             prompt_output_max_chars=_get_int_env("PROMPT_OUTPUT_MAX_CHARS", 12000),
             llm_completion_tokens=_get_int_env("LLM_COMPLETION_TOKENS", 8192),
@@ -144,6 +155,14 @@ class BotConfig:
             installation_id_salt=_get_env("INSTALLATION_ID_SALT", "prompttune-installation")
             or "prompttune-installation",
             ip_salt=_get_env("IP_SALT", "prompttune-ip") or "prompttune-ip",
+            smtp_host=_get_env("SMTP_HOST"),
+            smtp_port=_get_int_env("SMTP_PORT", 587),
+            smtp_username=_get_env("SMTP_USERNAME"),
+            smtp_password=_get_env("SMTP_PASSWORD"),
+            smtp_from=_get_env("SMTP_FROM"),
+            smtp_starttls=_get_bool_env("SMTP_STARTTLS", True),
+            smtp_ssl=_get_bool_env("SMTP_SSL", False),
+            email_code_secret=_get_env("EMAIL_CODE_SECRET"),
             analytics_enabled=_get_bool_env("ANALYTICS_ENABLED", True),
             analytics_retention_months=_get_int_env("ANALYTICS_RETENTION_MONTHS", 13),
             analytics_ingest_req_per_min=_get_int_env("ANALYTICS_INGEST_REQ_PER_MIN", 120),
@@ -160,6 +179,10 @@ class BotConfig:
             raise ValueError(f"FREE_REQ_PER_DAY must be positive. Got: {self.free_req_per_day}")
         if self.free_req_per_min <= 0:
             raise ValueError(f"FREE_REQ_PER_MIN must be positive. Got: {self.free_req_per_min}")
+        if self.free_req_per_ip_min <= 0:
+            raise ValueError(
+                f"FREE_REQ_PER_IP_MIN must be positive. Got: {self.free_req_per_ip_min}"
+            )
         if self.prompt_input_max_chars <= 0:
             raise ValueError(
                 f"PROMPT_INPUT_MAX_CHARS must be positive. Got: {self.prompt_input_max_chars}"

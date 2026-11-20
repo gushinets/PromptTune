@@ -6,6 +6,7 @@ import {
   DEFAULT_PROMPT_INPUT_MAX_CHARS,
 } from "./constants";
 import type {
+  RateLimitInfo,
   ImproveRequest,
   ImproveResponse,
   PromptInputLimit,
@@ -205,12 +206,18 @@ export const apiClient = {
     }
   },
 
-  limits(installation_id: string): Promise<{
-    per_minute_remaining: number;
-    per_day_remaining: number;
-    per_minute_total: number;
-    per_day_total: number;
-  }> {
+  registerInstallation(
+    installation_id: string,
+    installed_at: string,
+  ): Promise<{ registered: boolean }> {
+    return post(
+      "/v1/installations",
+      { installation_id, installed_at },
+      AbortSignal.timeout(10_000),
+    );
+  },
+
+  limits(installation_id: string): Promise<RateLimitInfo> {
     if (BACKEND_MODE !== "fastapi") {
       return Promise.resolve({
         per_minute_remaining: 0,
@@ -221,6 +228,14 @@ export const apiClient = {
     }
 
     return get("/v1/limits", { installation_id });
+  },
+
+  requestEmailBonus(installation_id: string, email: string): Promise<{ sent: boolean }> {
+    return post("/v1/email/request", { installation_id, email });
+  },
+
+  confirmEmailBonus(installation_id: string, code: string): Promise<RateLimitInfo> {
+    return post("/v1/email/confirm", { installation_id, code });
   },
 
   events(events: AnalyticsEventOut[]): Promise<{

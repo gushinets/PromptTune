@@ -1,4 +1,11 @@
+import {
+  createInstallationRegistrar,
+  INSTALLATION_REGISTRATION_ALARM,
+  INSTALLATION_TIMESTAMP_ALARM_PREFIX,
+} from "@shared/installation-registration";
 import browser from "webextension-polyfill";
+import { requireEmailConsent } from "@shared/email-consent";
+import { openQuotaWindow } from "@shared/quota-window";
 import { apiClient, ApiError } from "@shared/api-client";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
@@ -54,6 +61,8 @@ function mapPlatformOs(os: string): string {
 export default defineBackground(() => {
   const client = "extension";
   const clientVersion = browser.runtime.getManifest().version;
+  const registerInstallation = createInstallationRegistrar();
+  const retryInstallationRegistration = () => registerInstallation().catch(() => undefined);
   const pendingRequests = new Map<string, AbortController>();
   const requestOwners = new Map<string, { controller: AbortController; started: boolean }>();
 
@@ -416,9 +425,17 @@ export default defineBackground(() => {
     }
   };
   void ensureSelectionCleanupAlarm().catch(() => undefined);
-  browser.runtime.onStartup.addListener(cleanupSelections);
+  browser.runtime.onStartup.addListener(async () => {
+    await cleanupSelections();
+    await retryInstallationRegistration();
+  });
   browser.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === SELECTION_CLEANUP_ALARM) await cleanupSelections();
+    if (
+      alarm.name === INSTALLATION_REGISTRATION_ALARM ||
+      alarm.name.startsWith(INSTALLATION_TIMESTAMP_ALARM_PREFIX)
+    )
+      await retryInstallationRegistration();
   });
 
   let selectionMenuRegistered = false;
@@ -435,13 +452,20 @@ export default defineBackground(() => {
   if (import.meta.env.FIREFOX) registerSelectionMenu();
 
   browser.runtime.onInstalled.addListener(async (details) => {
+    const installAt = new Date().toISOString();
+    const initialized =
+      details.reason === "install"
+        ? registerInstallation.initialize(installAt).catch(() => undefined)
+        : null;
     registerSelectionMenu();
+    if (details.reason === "install") {
+      void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
+    }
+    await initialized;
     await cleanupSelections();
     if (details.reason !== "install") return;
 
-    const installAt = new Date().toISOString();
-    await browser.storage.local.set({ [STORAGE_KEYS.INSTALL_AT]: installAt });
-    void browser.tabs.create({ url: WELCOME_PAGE_URL }).catch(() => undefined);
+    await retryInstallationRegistration();
 
     if (await canTrackAnalytics()) {
       await track({
@@ -533,6 +557,7 @@ export default defineBackground(() => {
           }
           controller.signal.throwIfAborted();
 
+          await registerInstallation();
           const installationId = await getInstallationId();
           const trimmed = msg.payload.text.trim();
 
@@ -594,6 +619,7 @@ export default defineBackground(() => {
               controller.signal,
             );
 
+            result.completed_at = Date.now();
             if (typeof result.latency_ms !== "number") {
               result.latency_ms = Date.now() - startedAt;
             }
@@ -634,7 +660,32 @@ export default defineBackground(() => {
         }
       }
 
+      case "SHOW_QUOTA": {
+        if (!sender.tab) throw new Error("Quota window requires a source tab");
+        await openQuotaWindow(
+          msg.payload.original,
+          msg.payload.result,
+          sender.tab,
+          msg.payload.goal,
+        );
+        return { ok: true };
+      }
+      case "REQUEST_EMAIL_BONUS": {
+        await requireEmailConsent();
+        await registerInstallation();
+        const installationId = await getInstallationId();
+        await requireEmailConsent();
+        return apiClient.requestEmailBonus(installationId, msg.email);
+      }
+      case "CONFIRM_EMAIL_BONUS": {
+        await requireEmailConsent();
+        await registerInstallation();
+        const installationId = await getInstallationId();
+        await requireEmailConsent();
+        return apiClient.confirmEmailBonus(installationId, msg.code);
+      }
       case "GET_LIMITS": {
+        await registerInstallation();
         const installationId = await getInstallationId();
         const rate_limit = await apiClient.limits(installationId);
         return { type: "LIMITS_RESULT", payload: { rate_limit } };

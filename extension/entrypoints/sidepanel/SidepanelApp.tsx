@@ -344,6 +344,7 @@ export function SidepanelApp() {
         key={session?.id ?? freshDraft?.draftSessionId ?? "draft"}
         viewMode="sidepanel"
         initialDraft={session?.draft ?? freshDraft}
+        quotaReturnTarget={session?.windowTarget}
       />
     </>
   ) : null;

@@ -55,6 +55,30 @@ describe("storage", () => {
       expect(id).toBe("existing-id");
     });
 
+    it.each([false, true])("shares initial ID creation (Web Locks=%s)", async (locks) => {
+      if (!locks) vi.stubGlobal("navigator", {});
+      const state: Record<string, unknown> = {};
+      vi.mocked(browser.storage.local.get).mockImplementation(async () => ({ ...state }));
+      vi.mocked(browser.storage.local.set).mockImplementation(async (data) => {
+        Object.assign(state, data);
+      });
+      const ids = await Promise.all([
+        getInstallationId(),
+        getInstallationId(),
+        getInstallationId(),
+      ]);
+      expect(new Set(ids).size).toBe(1);
+      expect(state.installation_id).toBe(ids[0]);
+      expect(browser.storage.local.set).toHaveBeenCalledTimes(1);
+    });
+
+    it("can retry ID creation after a storage failure", async () => {
+      vi.mocked(browser.storage.local.get).mockResolvedValue({});
+      vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error("storage failed"));
+      await expect(getInstallationId()).rejects.toThrow("storage failed");
+      await expect(getInstallationId()).resolves.toEqual(expect.any(String));
+    });
+
     it("generates and stores new id if missing", async () => {
       vi.mocked(browser.storage.local.get).mockResolvedValue({});
       const id = await getInstallationId();
@@ -368,6 +392,7 @@ describe("storage", () => {
         lastModel: "gpt",
         lastLatencyMs: 123,
         attemptN: 2,
+        resultCompletedAt: new Date("2026-06-16T11:00:00.000Z").getTime(),
       });
       expect(browser.storage.local.remove).not.toHaveBeenCalled();
     });
@@ -400,6 +425,7 @@ describe("storage", () => {
         lastModel: "gpt",
         lastLatencyMs: 123,
         attemptN: 2,
+        resultCompletedAt: new Date("2026-06-16T12:00:00.000Z").getTime(),
       });
       expect(browser.storage.local.set).toHaveBeenCalledWith({
         [STORAGE_KEYS.POPUP_SESSION_DRAFT]: expect.objectContaining({

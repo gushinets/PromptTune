@@ -1,4 +1,4 @@
-import type { AudienceMode, ImproveGoal, ImproveResponse } from "./types";
+import type { AudienceMode, ImproveGoal, ImproveResponse, RateLimitInfo } from "./types";
 import type { AnalyticsTrackPayload, AnalyticsTrackContext } from "./analytics-types";
 
 export const IMPROVE_OWNER_PORT = "prompttune-improve-owner";
@@ -34,14 +34,15 @@ export type Message =
   | { type: "GET_PROMPT_LIMIT" }
   | { type: "GET_LIMITS" }
   | {
+      type: "SHOW_QUOTA";
+      payload: { original: string; result?: ImproveResponse; goal?: ImproveGoal };
+    }
+  | { type: "REQUEST_EMAIL_BONUS"; email: string }
+  | { type: "CONFIRM_EMAIL_BONUS"; code: string }
+  | {
       type: "LIMITS_RESULT";
       payload: {
-        rate_limit?: {
-          per_minute_remaining: number;
-          per_day_remaining: number;
-          per_minute_total: number;
-          per_day_total: number;
-        };
+        rate_limit?: RateLimitInfo;
       };
     }
   | { type: "PASTE_TEXT"; payload: { text: string } }

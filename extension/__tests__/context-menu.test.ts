@@ -242,3 +242,31 @@ it("deletes a successfully opened window's payload after five minutes even if it
     clock.mockRestore();
   }
 });
+
+it("opens a hotkey quota window with a saved result and its original target", async () => {
+  const handler = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
+  await handler(
+    {
+      type: "SHOW_QUOTA",
+      payload: {
+        original: "Source prompt",
+        result: { request_id: "last", improved_text: "Last result" },
+        goal: "chatgpt",
+      },
+    },
+    { tab: { id: 42 } } as never,
+    vi.fn(),
+  );
+  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+  expect(String(options.url)).toContain("quota=1");
+  const draft = vi
+    .mocked(browser.storage.local.set)
+    .mock.calls.flatMap(([data]) => Object.entries(data))
+    .find(([key]) => key.startsWith("optimizer_draft_"))?.[1];
+  expect(draft).toMatchObject({
+    original: "Source prompt",
+    improved: "Last result",
+    sourceTabId: 42,
+    optimizer_screen: "result",
+  });
+});

@@ -32,6 +32,13 @@ function toImproveResponse(value: Record<string, unknown>): ImproveResponse | nu
     response.rate_limit = value.rate_limit;
   }
 
+  if (
+    typeof value.completed_at === "number" &&
+    Number.isFinite(value.completed_at) &&
+    value.completed_at >= 0
+  ) {
+    response.completed_at = value.completed_at;
+  }
   const changes = normalizeChanges(value.changes);
   if (changes) {
     response.changes = changes;
@@ -109,4 +116,13 @@ export function describeUnexpectedBackgroundResponse(value: unknown): string {
   }
 
   return `Unexpected response from background: keys=${keys.join(", ")}`;
+}
+
+/** Zero availability can be temporary while another surface owns a reservation. */
+export function isPeriodQuotaExhausted(info: RateLimitInfo): boolean {
+  return (
+    (info.remaining ?? info.per_day_remaining) <= 0 &&
+    info.exhausted !== false &&
+    (info.pending_improvements ?? 0) === 0
+  );
 }

@@ -60,7 +60,7 @@ export default defineConfig({
             gecko: {
               strict_min_version: "115.0",
               data_collection_permissions: {
-                optional: ["technicalAndInteraction"],
+                optional: ["technicalAndInteraction", "personallyIdentifyingInfo"],
               },
             },
           },

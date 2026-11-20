@@ -1,6 +1,8 @@
 import { countPromptCharacters, parseInputLengthError } from "@shared/prompt-length";
 import { useState, useEffect, useCallback, useMemo, useRef, type FocusEvent } from "react";
 import browser from "webextension-polyfill";
+import { EmailBonusModal } from "./components/EmailBonusModal";
+import { QuotaOnlyWindow } from "./QuotaOnlyWindow";
 import { PromptForm } from "./components/PromptForm";
 import { ProcessingScreen } from "./components/ProcessingScreen";
 import { OptimizerResult } from "./components/OptimizerResult";
@@ -27,12 +29,14 @@ import {
   describeUnexpectedBackgroundResponse,
   extractImproveResponse,
   extractRateLimitResponse,
+  isPeriodQuotaExhausted,
 } from "@shared/response-utils";
 import { useT } from "@shared/i18n";
 import { isOptimizerRequestContext } from "@shared/goal-options";
 import { createImproveOwner, type ImproveOwner } from "@shared/improve-owner";
 import { trackEvent } from "@shared/analytics";
 import type {
+  RateLimitInfo,
   AiImproveGoal,
   AudienceMode,
   ImproveGoal,
@@ -124,11 +128,29 @@ interface AppProps {
   viewMode?: ViewMode;
   initialSelection?: PromptSelection;
   initialDraft?: PopupSessionDraft;
+  initialQuota?: RateLimitInfo;
+  quotaOnly?: boolean;
+  quotaReturnTarget?: { tabId: number; sessionId: string };
+}
+
+export function App(props: AppProps) {
+  if (props.quotaOnly)
+    return (
+      <QuotaOnlyWindow initialQuota={props.initialQuota} returnTarget={props.quotaReturnTarget} />
+    );
+  return <OptimizerApp {...props} />;
 }
 
 /** Shared optimizer UI; a selected session keeps its source tab across surface changes. */
-export function App({ viewMode = "popup", initialSelection, initialDraft }: AppProps) {
+function OptimizerApp({
+  viewMode = "popup",
+  initialSelection,
+  initialDraft,
+  initialQuota,
+  quotaReturnTarget,
+}: AppProps) {
   const t = useT();
+  const [initialQuotaSnapshot] = useState(initialQuota);
   const [isSelectionLaunch] = useState(
     () => viewMode === "popup" && new URLSearchParams(window.location.search).has("selection"),
   );
@@ -153,6 +175,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [sourceSessionId, setSourceSessionId] = useState(
     initialSelection?.sourceSessionId ?? initialDraft?.sourceSessionId,
   );
+  const [surfaceTarget, setSurfaceTarget] = useState(quotaReturnTarget);
   // A standalone window's target survives New independently of the current prompt binding.
   const [standaloneTarget, setStandaloneTarget] = useState<PopupSessionDraft["standaloneTarget"]>(
     () =>
@@ -163,13 +186,17 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
             ? { tabId: initialDraft.sourceTabId, sessionId: initialDraft.sourceSessionId }
             : undefined)),
   );
-  const isStandaloneWindow = isSelectionLaunch || initialSelection !== undefined;
-  const targetTabId = sourceTabId ?? (isStandaloneWindow ? standaloneTarget?.tabId : undefined);
+  const isStandaloneWindow =
+    isSelectionLaunch || initialSelection !== undefined || surfaceTarget !== undefined;
+  // A quota launch may borrow the current tab for an unbound toolbar result. Keep that
+  // window target out of sessionDraft so later launches choose their own fallback.
+  const windowTarget = standaloneTarget ?? surfaceTarget;
+  const targetTabId = sourceTabId ?? (isStandaloneWindow ? windowTarget?.tabId : undefined);
   const targetSessionId =
     sourceTabId !== undefined
       ? sourceSessionId
       : isStandaloneWindow
-        ? standaloneTarget?.sessionId
+        ? windowTarget?.sessionId
         : undefined;
   const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
@@ -247,12 +274,66 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [error, setError] = useState<ErrorInfo | null>(() =>
     selectionLaunchFailed ? { type: "generic", message: t.errorSelectionUnavailable } : null,
   );
-  const [rateLimit, setRateLimit] = useState({ remaining: 0, total: 0 });
-  const [limitsLoaded, setLimitsLoaded] = useState(false);
+  const [rateLimit, setRateLimit] = useState(() => ({
+    remaining: initialQuotaSnapshot?.remaining ?? initialQuotaSnapshot?.per_day_remaining ?? 0,
+    total: initialQuotaSnapshot?.total ?? initialQuotaSnapshot?.per_day_total ?? 0,
+  }));
+  const [limitsLoaded, setLimitsLoaded] = useState(Boolean(initialQuotaSnapshot));
   const [limitsUnavailable, setLimitsUnavailable] = useState(false);
   const [libraryCount, setLibraryCount] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
-  const [showProComingSoon, setShowProComingSoon] = useState(false);
+  const quotaMutationVersion = useRef(0);
+  const quotaRefreshRequest = useRef(0);
+  const startQuotaLookup = useCallback(() => {
+    const request = ++quotaRefreshRequest.current;
+    const version = quotaMutationVersion.current;
+    return () =>
+      request === quotaRefreshRequest.current && version === quotaMutationVersion.current;
+  }, []);
+  const [quotaInfo, setQuotaInfo] = useState<RateLimitInfo | null>(initialQuotaSnapshot ?? null);
+  const [showEmailBonus, setShowEmailBonus] = useState(
+    () =>
+      BACKEND_MODE === "fastapi" &&
+      Boolean(
+        initialQuotaSnapshot &&
+        isPeriodQuotaExhausted(initialQuotaSnapshot) &&
+        !initialQuotaSnapshot.bonus_claimed,
+      ),
+  );
+  const [emailBonusNotice, setEmailBonusNotice] = useState(false);
+  const applyQuota = useCallback(
+    (info: RateLimitInfo, offer = false, source: "mutation" | "lookup" = "mutation") => {
+      if (source === "mutation") quotaMutationVersion.current += 1;
+      const remaining = info.remaining ?? info.per_day_remaining;
+      if (remaining > 0 || info.bonus_claimed || !isPeriodQuotaExhausted(info))
+        setShowEmailBonus(false);
+      setRateLimit({ remaining, total: info.total ?? info.per_day_total });
+      setQuotaInfo(info);
+      setLimitsUnavailable(false);
+      setLimitsLoaded(true);
+      if (
+        BACKEND_MODE === "fastapi" &&
+        offer &&
+        isPeriodQuotaExhausted(info) &&
+        !info.bonus_claimed
+      )
+        setShowEmailBonus(true);
+    },
+    [],
+  );
+  const recoverQuota = useCallback(() => {
+    const isCurrent = startQuotaLookup();
+    void browser.runtime
+      .sendMessage({ type: "GET_LIMITS" })
+      .then((response) => {
+        if (!isCurrent()) return;
+        const info = extractRateLimitResponse(response);
+        if (info) applyQuota(info, true, "lookup");
+      })
+      .catch(() => {
+        if (isCurrent()) setLimitsUnavailable(true);
+      });
+  }, [applyQuota, startQuotaLookup]);
   const [siteContext, setSiteContext] = useState<{
     hostname?: string;
     goal: AiImproveGoal;
@@ -266,6 +347,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const [lastModel, setLastModel] = useState<string | null>(null);
   const [lastLatencyMs, setLastLatencyMs] = useState<number | null>(null);
   const [attemptN, setAttemptN] = useState(0);
+  const [resultCompletedAt, setResultCompletedAt] = useState<number | null>(null);
   const [sessionDraftLoaded, setSessionDraftLoaded] = useState(false);
   const [goalIsUserSelected, setGoalIsUserSelected] = useState(false);
   const hasTrackedPopupOpenedRef = useRef(false);
@@ -401,6 +483,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLastModel(draft.lastModel);
         setLastLatencyMs(draft.lastLatencyMs);
         setAttemptN(draft.attemptN);
+        setResultCompletedAt(draft.resultCompletedAt ?? null);
 
         if (draft.goal && isOptimizerRequestContext({ mode: restoredMode, goal: draft.goal })) {
           // Legacy drafts do not distinguish explicit choices from detected defaults.
@@ -506,6 +589,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       lastModel,
       lastLatencyMs,
       attemptN,
+      ...(resultCompletedAt !== null ? { resultCompletedAt } : {}),
     }),
     [
       draftSessionId,
@@ -528,6 +612,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       lastModel,
       lastLatencyMs,
       attemptN,
+      resultCompletedAt,
     ],
   );
 
@@ -543,25 +628,38 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
   useEffect(() => {
     if (BACKEND_MODE !== "fastapi") return;
-    browser.runtime
-      .sendMessage({ type: "GET_LIMITS" })
-      .then((res) => {
-        const rate_limit = extractRateLimitResponse(res);
-        if (!rate_limit) {
-          setLimitsUnavailable(true);
-          return;
-        }
-        setRateLimit({
-          remaining: rate_limit.per_day_remaining,
-          total: rate_limit.per_day_total,
+    let active = true;
+    let initial = !initialQuotaSnapshot;
+    const refresh = () => {
+      const isCurrent = startQuotaLookup();
+      void browser.runtime
+        .sendMessage({ type: "GET_LIMITS" })
+        .then((response) => {
+          if (!active || !isCurrent()) return;
+          const info = extractRateLimitResponse(response);
+          if (info) {
+            applyQuota(
+              info,
+              initial && new URLSearchParams(window.location.search).get("quota") === "1",
+              "lookup",
+            );
+            initial = false;
+          } else setLimitsUnavailable(true);
+        })
+        .catch(() => {
+          if (active && isCurrent()) setLimitsUnavailable(true);
         });
-        setLimitsUnavailable(false);
-        setLimitsLoaded(true);
-      })
-      .catch(() => {
-        setLimitsUnavailable(true);
-      });
-  }, []);
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    const timer = setInterval(refresh, 60_000);
+    return () => {
+      active = false;
+      quotaRefreshRequest.current += 1;
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [applyQuota, startQuotaLookup, initialQuotaSnapshot]);
 
   useEffect(() => {
     const className = viewMode === "sidepanel" ? "sidepanel-body" : "popup-body";
@@ -584,6 +682,19 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     setLayoutTransition(true);
     let closing = false;
     try {
+      // A real standalone binding belongs to the result across explicit surface changes.
+      // The borrowed surface target is transferred separately and never becomes its source.
+      const genuineTarget =
+        isStandaloneWindow && sessionDraft.sourceTabId === undefined
+          ? sessionDraft.standaloneTarget
+          : undefined;
+      const transferDraft = genuineTarget
+        ? {
+            ...sessionDraft,
+            sourceTabId: genuineTarget.tabId,
+            sourceSessionId: genuineTarget.sessionId,
+          }
+        : sessionDraft;
       if (viewMode === "popup") {
         // Resolve/validate ahead of the click so open() retains the user gesture.
         const cached = layoutTargetRef.current;
@@ -604,7 +715,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
             type: "OPEN_OPTIMIZER_PANEL",
             windowId: tab.windowId,
             tabId: tab.id,
-            draft: { ...sessionDraft, sourceTabId: targetTabId, sourceSessionId: targetSessionId },
+            draft: transferDraft,
+            windowTarget: transferDraft.sourceTabId === undefined ? surfaceTarget : undefined,
           });
           if (!(response as { ok?: boolean } | undefined)?.ok)
             throw new Error("Panel transfer failed");
@@ -615,7 +727,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         }
       } else {
         // The next toolbar popup explicitly resumes this panel, even if another session is newer.
-        await preferPopupSessionDraft(sessionDraft);
+        await preferPopupSessionDraft(transferDraft);
         window.close();
         closing = true;
       }
@@ -627,10 +739,20 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLayoutTransition(false);
       }
     }
-  }, [viewMode, targetTabId, targetSessionId, sessionDraft, sessionDraftLoaded, t]);
+  }, [
+    viewMode,
+    targetTabId,
+    targetSessionId,
+    sessionDraft,
+    sessionDraftLoaded,
+    surfaceTarget,
+    isStandaloneWindow,
+    t,
+  ]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
+  const isQuotaPending = isExhausted && quotaInfo !== null && !isPeriodQuotaExhausted(quotaInfo);
   const isWarning =
     BACKEND_MODE === "fastapi" && limitsLoaded
       ? rateLimit.remaining > 0 && rateLimit.remaining <= 10
@@ -653,22 +775,15 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     }
   }, []);
 
-  const handleUpgradeClick = useCallback(
-    (surface: "rate_limit_tooltip" | "rate_limit_banner") => {
-      setShowProComingSoon(true);
-      void trackEvent(
-        "upgrade_clicked",
-        {
-          surface,
-          destination: "coming_soon",
-          email_collected: false,
-          paid_checkout_enabled: false,
-        },
-        viewMode,
-      );
-    },
-    [viewMode],
-  );
+  const renewalDate = quotaInfo?.next_reset_at
+    ? new Date(quotaInfo.next_reset_at).toLocaleDateString(undefined, {
+        timeZone: "Europe/Moscow",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : null;
+  const renewalMessage = renewalDate ? t.quotaRenewal(renewalDate) : t.tooltipResets;
 
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
@@ -685,11 +800,14 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setPromptInputMaxChars(lengthLimit);
         return { type: "generic", message: t.errorInputTooLong(lengthLimit) };
       }
+      if (errorMessage.toLowerCase().includes("temporarily reserved by pending requests")) {
+        return { type: "rate-limit", message: t.quotaPending };
+      }
       if (err instanceof ApiError) {
         if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
           return { type: "auth", message: t.errorAuthMessage };
         }
-        if (err.status === 429 || err.detail.toLowerCase().includes("rate limit")) {
+        if (err.detail.toLowerCase().includes("monthly improvement quota exhausted")) {
           return { type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) };
         }
         if (err.status === 422) {
@@ -701,12 +819,15 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       if (message.includes("403") || message.toLowerCase().includes("login is invalid")) {
         return { type: "auth", message: t.errorAuthMessage };
       }
-      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+      if (message.toLowerCase().includes("monthly improvement quota exhausted")) {
         return { type: "rate-limit", message: t.errorRateLimitMessage(rateLimit.total) };
       }
       if (message.includes("422")) {
         const validationDetail = message.replace(/^.*API 422:\s*/i, "").trim();
         return { type: "generic", message: validationDetail || message };
+      }
+      if (message.includes("429") || message.toLowerCase().includes("rate limit")) {
+        return { type: "generic", message: t.quotaTemporary };
       }
       if (
         message.includes("Failed to fetch") ||
@@ -752,19 +873,22 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       if (isExhausted) {
         // A canceled request may refund quota after a quick retry received 429.
         // Revalidate the cached zero so an open panel can recover without reopening.
+        const isCurrent = startQuotaLookup();
         const limits = extractRateLimitResponse(
           await browser.runtime.sendMessage({ type: "GET_LIMITS" }),
         );
-        if (activeRequestRef.current !== requestKey) return;
+        if (activeRequestRef.current !== requestKey || !isCurrent()) return;
         if (!limits) throw new Error(t.tooltipUnavailable);
-        setRateLimit({
-          remaining: limits.per_day_remaining,
-          total: limits.per_day_total,
-        });
+        applyQuota(limits, true, "lookup");
         setLimitsUnavailable(false);
         setLimitsLoaded(true);
-        if (limits.per_day_remaining <= 0) {
-          setError({ type: "rate-limit", message: t.errorRateLimitMessage(limits.per_day_total) });
+        if ((limits.remaining ?? limits.per_day_remaining) <= 0) {
+          setError({
+            type: "rate-limit",
+            message: isPeriodQuotaExhausted(limits)
+              ? t.errorRateLimitMessage(limits.total ?? limits.per_day_total)
+              : t.quotaPending,
+          });
           return;
         }
       }
@@ -775,9 +899,6 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       submitted = true;
       setSaveOnEditOnly(false);
       setEditingOriginal(false);
-      setImproved("");
-      setChanges([]);
-      setResultContext(null);
       const nextAttempt = isRegeneration ? attemptN + 1 : 1;
       const response = await browser.runtime.sendMessage({
         type: "IMPROVE_REQUEST",
@@ -796,6 +917,13 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
 
       if (result) {
         if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
+        if (sourceTabId === undefined && !standaloneTarget && surfaceTarget) {
+          // A result generated here keeps the borrowed launch target across surface transfers.
+          setStandaloneTarget(surfaceTarget);
+        } else if (sourceTabId === undefined && !isStandaloneWindow) {
+          // Independent surfaces must not inherit an inactive standalone result's target.
+          setStandaloneTarget(undefined);
+        }
         setImproved(result.improved_text);
         setResultContext({ mode: audienceMode, goal });
         setChanges(result.changes ?? []);
@@ -804,6 +932,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
         setLastModel(result.model ?? null);
         setLastLatencyMs(typeof result.latency_ms === "number" ? result.latency_ms : null);
         setAttemptN(nextAttempt);
+        setResultCompletedAt(result.completed_at ?? Date.now());
         if (isRegeneration) {
           void trackEvent(
             "result_regenerated",
@@ -821,10 +950,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           viewMode,
         );
         if (result.rate_limit) {
-          setRateLimit({
-            remaining: result.rate_limit.per_day_remaining,
-            total: result.rate_limit.per_day_total,
-          });
+          applyQuota(result.rate_limit, true);
           setLimitsUnavailable(false);
           setLimitsLoaded(true);
         }
@@ -836,9 +962,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       const info = mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
-        setRateLimit((prev) => ({ ...prev, remaining: 0 }));
-        setLimitsUnavailable(false);
-        setLimitsLoaded(true);
+        recoverQuota();
       }
     } finally {
       owner?.close();
@@ -855,14 +979,21 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     attemptN,
     goal,
     isExhausted,
+    startQuotaLookup,
     isOriginalOverLimit,
     lastRequestId,
     lastRequestContextKey,
     mapErrorToToast,
+    applyQuota,
+    recoverQuota,
     original,
     improved,
     siteHostname,
     sourceContextReady,
+    sourceTabId,
+    standaloneTarget,
+    surfaceTarget,
+    isStandaloneWindow,
     t,
     viewMode,
   ]);
@@ -918,9 +1049,18 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   const handleNew = useCallback(() => {
     if (layoutTransitionRef.current) return;
     setSaveOnEditOnly(false);
-    // The standalone window keeps its launch target; only the prompt binding is cleared.
+    // New in the side panel follows the active tab; a standalone window keeps its launch target.
     setSourceTabId(undefined);
     setSourceSessionId(undefined);
+    if (viewMode === "sidepanel") {
+      setStandaloneTarget(undefined);
+      setSurfaceTarget(undefined);
+    } else if (surfaceTarget) {
+      // A new quota-window prompt belongs to this launch, not the restored result's tab.
+      setStandaloneTarget(surfaceTarget);
+    } else if (!isStandaloneWindow) {
+      setStandaloneTarget(undefined);
+    }
     setOriginal("");
     setImproved("");
     setResultContext(null);
@@ -932,7 +1072,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     setLastModel(null);
     setLastLatencyMs(null);
     setAttemptN(0);
-  }, []);
+    setResultCompletedAt(null);
+  }, [viewMode, surfaceTarget, isStandaloneWindow]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (isOriginalOverLimit || saveInFlightRef.current || layoutTransitionRef.current) return false;
@@ -972,9 +1113,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           : mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
-        setRateLimit((prev) => ({ ...prev, remaining: 0 }));
-        setLimitsUnavailable(false);
-        setLimitsLoaded(true);
+        recoverQuota();
       }
       return false;
     } finally {
@@ -988,6 +1127,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
     isOriginalOverLimit,
     refreshLibraryCount,
     mapErrorToToast,
+    recoverQuota,
     viewMode,
     t,
   ]);
@@ -1010,6 +1150,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
       setGoal(defaultGoalForMode(mode, detectedAiGoal));
       setEditingOriginal(true);
       setImproved("");
+      setResultCompletedAt(null);
       setResultContext(null);
       setChanges([]);
       try {
@@ -1024,6 +1165,19 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className={`popup-container ${viewMode}`}>
+      {showEmailBonus && (
+        <EmailBonusModal
+          initialQuota={quotaInfo}
+          onPending={(info) => applyQuota(info)}
+          onClose={() => setShowEmailBonus(false)}
+          onConfirmed={(info) => {
+            applyQuota(info);
+            setEmailBonusNotice(info.email_bonus_outcome === "already_claimed");
+            setShowEmailBonus(false);
+            setError(null);
+          }}
+        />
+      )}
       <header className="header">
         <div className="header-brand">
           <img className="header-icon" src={APP_ICON_SRC} alt="" aria-hidden="true" />
@@ -1105,25 +1259,8 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                     </p>
                     <p>
                       {rateLimit.total > 0 ? t.tooltipDailyLimit(rateLimit.total) : ""}
-                      {t.tooltipResets}{" "}
-                      <button
-                        type="button"
-                        className="rate-limit-tooltip-link"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          handleUpgradeClick("rate_limit_tooltip");
-                        }}
-                      >
-                        {t.tooltipUpgrade}
-                      </button>
+                      {renewalMessage}
                     </p>
-                    {showProComingSoon && (
-                      <p className="tooltip-pro-coming-soon" role="status">
-                        <strong>{t.proComingSoonTitle}</strong>
-                        <span>{t.proComingSoonSubtitle}</span>
-                      </p>
-                    )}
                   </>
                 )}
               </div>
@@ -1170,18 +1307,17 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
           <>
             {isExhausted && (
               <div className="upgrade-banner">
-                <p>{t.exhaustedTitle}</p>
-                <button
-                  className="btn-upgrade"
-                  onClick={() => handleUpgradeClick("rate_limit_banner")}
-                >
-                  {t.btnUpgrade}
-                </button>
-                {showProComingSoon && (
-                  <div className="pro-coming-soon" role="status">
-                    <strong>{t.proComingSoonTitle}</strong>
-                    <span>{t.proComingSoonSubtitle}</span>
-                  </div>
+                <p>{isQuotaPending ? t.quotaPending : t.exhaustedTitle}</p>
+                {emailBonusNotice && <p role="status">{t.emailBonusAlreadyClaimed}</p>}
+                {!isQuotaPending && (
+                  <>
+                    <p>{renewalMessage}</p>
+                    {!quotaInfo?.bonus_claimed && (
+                      <button className="btn-upgrade" onClick={() => setShowEmailBonus(true)}>
+                        {t.emailBonusTitle}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -1193,7 +1329,7 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                   mode={audienceMode}
                   goal={goal}
                   loading={loading || layoutTransition}
-                  submitDisabled={!sourceContextReady}
+                  submitDisabled={!sourceContextReady || (isExhausted && !isQuotaPending)}
                   hidden={loading || Boolean(improved && !editingOriginal)}
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {
@@ -1205,6 +1341,15 @@ export function App({ viewMode = "popup", initialSelection, initialDraft }: AppP
                   }}
                   onImprove={handleImprove}
                 />
+                {editingOriginal && improved && !loading && (
+                  <button
+                    type="button"
+                    className="email-bonus-return"
+                    onClick={() => setEditingOriginal(false)}
+                  >
+                    {t.returnToResult}
+                  </button>
+                )}
                 {loading && (
                   <ProcessingScreen
                     mode={processingContext?.mode ?? audienceMode}

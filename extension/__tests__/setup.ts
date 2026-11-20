@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { vi } from "vitest";
+import "fake-indexeddb/auto";
 import type { Browser } from "webextension-polyfill";
 
 const testGlobals = globalThis as typeof globalThis & {
@@ -86,7 +87,9 @@ vi.mock("webextension-polyfill", async () => {
         onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
       },
       alarms: {
+        clear: vi.fn().mockResolvedValue(true),
         get: vi.fn().mockResolvedValue(undefined),
+        getAll: vi.fn().mockResolvedValue([]),
         create: vi.fn().mockResolvedValue(undefined),
         onAlarm: { addListener: vi.fn() },
       },

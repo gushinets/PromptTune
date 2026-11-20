@@ -36,17 +36,14 @@ export interface ImproveRequest {
 }
 
 export interface ImproveResponse {
+  /** Extension receipt time of the successful generation, in milliseconds. */
+  completed_at?: number;
   request_id: string;
   improved_text: string;
   changes?: string[];
   model?: string;
   latency_ms?: number;
-  rate_limit?: {
-    per_minute_remaining: number;
-    per_day_remaining: number;
-    per_minute_total: number;
-    per_day_total: number;
-  };
+  rate_limit?: RateLimitInfo;
 }
 
 export interface SavePromptRequest {
@@ -68,4 +65,23 @@ export interface PromptInputLimit {
   max_chars: number;
   // True when the latest lookup failed or returned invalid configuration.
   fallback: boolean;
+}
+
+export interface RateLimitInfo {
+  pending_improvements?: number;
+  exhausted?: boolean | null;
+  email_bonus_outcome?: "awarded" | "already_claimed" | null;
+  remaining?: number;
+  total?: number;
+  next_reset_at?: string | null;
+  bonus_claimed?: boolean;
+  email_verified?: boolean;
+  email?: string | null;
+  verification_pending?: boolean;
+  verification_resend_at?: string | null;
+  // Deprecated aliases during server/extension rollout; these mirror monthly quota.
+  per_minute_remaining: number;
+  per_day_remaining: number;
+  per_minute_total: number;
+  per_day_total: number;
 }

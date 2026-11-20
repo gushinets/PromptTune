@@ -25,6 +25,7 @@ export interface PopupSessionDraft {
   saveOnEditOnly?: boolean;
   draftSessionId?: string;
   draftCreatedAt?: number;
+  resultCompletedAt?: number;
   sourceTabId?: number;
   sourceSessionId?: string;
   standaloneTarget?: { tabId: number; sessionId?: string };
@@ -72,6 +73,10 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
     (draft.draftSessionId === undefined || typeof draft.draftSessionId === "string") &&
     (draft.draftCreatedAt === undefined ||
       (typeof draft.draftCreatedAt === "number" && Number.isFinite(draft.draftCreatedAt))) &&
+    (draft.resultCompletedAt === undefined ||
+      (typeof draft.resultCompletedAt === "number" &&
+        Number.isFinite(draft.resultCompletedAt) &&
+        draft.resultCompletedAt >= 0)) &&
     (draft.standaloneTarget === undefined || isStandaloneTarget(draft.standaloneTarget)) &&
     (draft.sourceSessionId === undefined || typeof draft.sourceSessionId === "string") &&
     (draft.sourceTabId === undefined ||
@@ -98,14 +103,31 @@ export function isPopupSessionDraft(value: unknown): value is PopupSessionDraft 
   );
 }
 
-export async function getInstallationId(): Promise<string> {
-  const data = await browser.storage.local.get(STORAGE_KEYS.INSTALLATION_ID);
-  if (data[STORAGE_KEYS.INSTALLATION_ID]) {
-    return data[STORAGE_KEYS.INSTALLATION_ID] as string;
-  }
-  const id = crypto.randomUUID();
-  await browser.storage.local.set({ [STORAGE_KEYS.INSTALLATION_ID]: id });
-  return id;
+let installationIdInitialization: Promise<string> | undefined;
+
+export function getInstallationId(): Promise<string> {
+  if (installationIdInitialization) return installationIdInitialization;
+  const initialize = async () => {
+    const data = await browser.storage.local.get(STORAGE_KEYS.INSTALLATION_ID);
+    if (data[STORAGE_KEYS.INSTALLATION_ID]) {
+      return data[STORAGE_KEYS.INSTALLATION_ID] as string;
+    }
+    const id = crypto.randomUUID();
+    await browser.storage.local.set({ [STORAGE_KEYS.INSTALLATION_ID]: id });
+    return id;
+  };
+  // Share initialization within a context and serialize creation across extension surfaces.
+  const pending = Promise.resolve()
+    .then(async () =>
+      navigator.locks
+        ? navigator.locks.request("prompttune-installation-id", initialize)
+        : initialize(),
+    )
+    .finally(() => {
+      if (installationIdInitialization === pending) installationIdInitialization = undefined;
+    });
+  installationIdInitialization = pending;
+  return pending;
 }
 
 export async function getAll(): Promise<LibraryEntry[]> {
@@ -263,7 +285,7 @@ export async function setAudienceMode(mode: AudienceMode): Promise<void> {
 
 export async function getPopupSessionDraft(
   consumePopupHandoff = true,
-  options: { independent?: boolean } = {},
+  options: { independent?: boolean; resultOnly?: boolean } = {},
 ): Promise<PopupSessionDraft | null> {
   const data = await readLocalEntries(
     (key) =>
@@ -299,6 +321,14 @@ export async function getPopupSessionDraft(
       if (preferred) return preferred;
     }
   }
+  return selectPopupSessionDraft(data, options);
+}
+
+async function selectPopupSessionDraft(
+  data: Record<string, unknown>,
+  options: { independent?: boolean; resultOnly?: boolean },
+  lockHeld = false,
+): Promise<PopupSessionDraft | null> {
   // Generic restores open an independent editor; explicit one-shot handoffs above retain identity.
   const restored = (draft: PopupSessionDraft): PopupSessionDraft =>
     options.independent
@@ -317,6 +347,7 @@ export async function getPopupSessionDraft(
       return (
         key.startsWith(POPUP_DRAFT_PREFIX) &&
         isPopupSessionDraft(draft) &&
+        (!options.resultOnly || Boolean(draft.improved.trim())) &&
         typeof updatedAt === "number" &&
         Number.isFinite(updatedAt) &&
         now - updatedAt <= LIMITS.POPUP_SESSION_TTL_MS &&
@@ -324,11 +355,16 @@ export async function getPopupSessionDraft(
         Number.isFinite(draft.draftCreatedAt)
       );
     })
-    .sort(
-      (a, b) =>
-        (b[1] as StoredPopupSessionDraft).draftCreatedAt! -
-        (a[1] as StoredPopupSessionDraft).draftCreatedAt!,
-    );
+    .sort((a, b) => {
+      const left = a[1] as StoredPopupSessionDraft;
+      const right = b[1] as StoredPopupSessionDraft;
+      if (options.resultOnly) {
+        const completion =
+          (right.resultCompletedAt ?? right.updatedAt) - (left.resultCompletedAt ?? left.updatedAt);
+        if (completion !== 0) return completion;
+      }
+      return right.draftCreatedAt! - left.draftCreatedAt!;
+    });
   const key = candidates[0]?.[0] ?? STORAGE_KEYS.POPUP_SESSION_DRAFT;
   const draft = data[key] as
     | StoredPopupSessionDraft
@@ -338,6 +374,11 @@ export async function getPopupSessionDraft(
     | boolean
     | undefined;
   if (!draft) return null;
+  if (
+    options.resultOnly &&
+    (typeof draft !== "object" || !isPopupSessionDraft(draft) || !draft.improved.trim())
+  )
+    return null;
 
   if (typeof draft !== "object") {
     await browser.storage.local.remove(key);
@@ -350,8 +391,14 @@ export async function getPopupSessionDraft(
       return null;
     }
 
-    await withOptimizerStorageLock(() => migrateLegacyPopupDraft({ [key]: draft }));
-    return restored(draft);
+    const migrate = () => migrateLegacyPopupDraft({ [key]: draft });
+    if (lockHeld) await migrate();
+    else await withOptimizerStorageLock(migrate);
+    return restored(
+      draft.improved.trim() && draft.resultCompletedAt === undefined
+        ? { ...draft, resultCompletedAt: draft.draftCreatedAt ?? Date.now() }
+        : draft,
+    );
   }
 
   if (typeof draft.updatedAt !== "number" || !Number.isFinite(draft.updatedAt)) {
@@ -365,7 +412,11 @@ export async function getPopupSessionDraft(
   }
 
   const { updatedAt: _updatedAt, ...sessionDraft } = draft;
-  return restored(sessionDraft);
+  return restored(
+    sessionDraft.improved.trim() && sessionDraft.resultCompletedAt === undefined
+      ? { ...sessionDraft, resultCompletedAt: draft.updatedAt }
+      : sessionDraft,
+  );
 }
 
 /** Restore only the live draft addressed by a standalone optimizer URL. */
@@ -384,7 +435,9 @@ export async function getPopupSessionDraftById(id: string): Promise<PopupSession
   )
     return null;
   const { updatedAt: _updatedAt, ...session } = draft as StoredPopupSessionDraft;
-  return session;
+  return session.improved.trim() && session.resultCompletedAt === undefined
+    ? { ...session, resultCompletedAt: updatedAt }
+    : session;
 }
 
 let draftQueue: Promise<unknown> = Promise.resolve();
@@ -401,7 +454,13 @@ export async function withOptimizerStorageLock<T>(operation: () => Promise<T>): 
 export async function migrateLegacyPopupDraft(data: Record<string, unknown>): Promise<void> {
   const legacy = data[STORAGE_KEYS.POPUP_SESSION_DRAFT];
   if (isPopupSessionDraft(legacy) && !("updatedAt" in legacy)) {
-    const migrated = { ...legacy, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
+    const migrated = {
+      ...legacy,
+      ...(legacy.improved.trim() && legacy.resultCompletedAt === undefined
+        ? { resultCompletedAt: legacy.draftCreatedAt ?? Date.now() }
+        : {}),
+      updatedAt: Date.now(),
+    } satisfies StoredPopupSessionDraft;
     await browser.storage.local.set({ [STORAGE_KEYS.POPUP_SESSION_DRAFT]: migrated });
     data[STORAGE_KEYS.POPUP_SESSION_DRAFT] = migrated;
   }
@@ -507,7 +566,10 @@ export async function setPopupSessionDraft(draft: PopupSessionDraft): Promise<vo
 }
 
 /** Commit the first selection snapshot without overwriting a concurrent autosave. */
-export async function initializePopupSessionDraft(draft: PopupSessionDraft): Promise<{
+export async function initializePopupSessionDraft(
+  draft: PopupSessionDraft,
+  options: { restoreLatestResult?: boolean } = {},
+): Promise<{
   created: boolean;
   draft: PopupSessionDraft;
 }> {
@@ -516,6 +578,22 @@ export async function initializePopupSessionDraft(draft: PopupSessionDraft): Pro
   return withOptimizerStorageLock(async () => {
     const existing = await getPopupSessionDraftById(id);
     if (existing) return { created: false, draft: existing };
+    if (options.restoreLatestResult) {
+      const data = await readDrafts();
+      await migrateLegacyPopupDraft(data);
+      const previous = await selectPopupSessionDraft(data, { resultOnly: true }, true);
+      const latest = await selectPopupSessionDraft(data, {}, true);
+      if (previous) {
+        draft = {
+          ...previous,
+          draftSessionId: id,
+          draftCreatedAt: Math.max(Date.now(), (latest?.draftCreatedAt ?? 0) + 1),
+          activeTab: "improve",
+          optimizer_screen: "result",
+          saveOnEditOnly: false,
+        };
+      }
+    }
     const value = { ...draft, updatedAt: Date.now() } satisfies StoredPopupSessionDraft;
     await writeWithDraftBudget(`${POPUP_DRAFT_PREFIX}${id}`, value, value);
     return { created: true, draft };

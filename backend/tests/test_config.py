@@ -100,3 +100,17 @@ def test_validate_rejects_wildcard_cors_origin(monkeypatch, allowed_origins: str
 
     with pytest.raises(ValueError, match=r"ALLOWED_ORIGINS must not contain wildcard \(\*\)"):
         config.validate()
+
+
+def test_ip_throttle_defaults_and_environment(monkeypatch):
+    monkeypatch.delenv("FREE_REQ_PER_IP_MIN", raising=False)
+    assert BotConfig.from_env().free_req_per_ip_min == 50
+    monkeypatch.setenv("FREE_REQ_PER_IP_MIN", "75")
+    assert BotConfig.from_env().free_req_per_ip_min == 75
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_ip_throttle_must_be_positive(monkeypatch, value):
+    monkeypatch.setenv("FREE_REQ_PER_IP_MIN", str(value))
+    with pytest.raises(ValueError, match="FREE_REQ_PER_IP_MIN must be positive"):
+        BotConfig.from_env().validate()
