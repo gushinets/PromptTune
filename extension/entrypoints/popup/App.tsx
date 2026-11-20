@@ -175,6 +175,7 @@ function OptimizerApp({
   const [sourceSessionId, setSourceSessionId] = useState(
     initialSelection?.sourceSessionId ?? initialDraft?.sourceSessionId,
   );
+  const [surfaceTarget, setSurfaceTarget] = useState(quotaReturnTarget);
   // A standalone window's target survives New independently of the current prompt binding.
   const [standaloneTarget, setStandaloneTarget] = useState<PopupSessionDraft["standaloneTarget"]>(
     () =>
@@ -186,10 +187,10 @@ function OptimizerApp({
             : undefined)),
   );
   const isStandaloneWindow =
-    isSelectionLaunch || initialSelection !== undefined || quotaReturnTarget !== undefined;
+    isSelectionLaunch || initialSelection !== undefined || surfaceTarget !== undefined;
   // A quota launch may borrow the current tab for an unbound toolbar result. Keep that
   // window target out of sessionDraft so later launches choose their own fallback.
-  const windowTarget = standaloneTarget ?? quotaReturnTarget;
+  const windowTarget = standaloneTarget ?? surfaceTarget;
   const targetTabId = sourceTabId ?? (isStandaloneWindow ? windowTarget?.tabId : undefined);
   const targetSessionId =
     sourceTabId !== undefined
@@ -681,6 +682,19 @@ function OptimizerApp({
     setLayoutTransition(true);
     let closing = false;
     try {
+      // A real standalone binding belongs to the result across explicit surface changes.
+      // The borrowed surface target is transferred separately and never becomes its source.
+      const genuineTarget =
+        isStandaloneWindow && sessionDraft.sourceTabId === undefined
+          ? sessionDraft.standaloneTarget
+          : undefined;
+      const transferDraft = genuineTarget
+        ? {
+            ...sessionDraft,
+            sourceTabId: genuineTarget.tabId,
+            sourceSessionId: genuineTarget.sessionId,
+          }
+        : sessionDraft;
       if (viewMode === "popup") {
         // Resolve/validate ahead of the click so open() retains the user gesture.
         const cached = layoutTargetRef.current;
@@ -701,11 +715,8 @@ function OptimizerApp({
             type: "OPEN_OPTIMIZER_PANEL",
             windowId: tab.windowId,
             tabId: tab.id,
-            draft: sessionDraft,
-            windowTarget:
-              targetTabId !== undefined && targetSessionId !== undefined
-                ? { tabId: targetTabId, sessionId: targetSessionId }
-                : undefined,
+            draft: transferDraft,
+            windowTarget: transferDraft.sourceTabId === undefined ? surfaceTarget : undefined,
           });
           if (!(response as { ok?: boolean } | undefined)?.ok)
             throw new Error("Panel transfer failed");
@@ -716,7 +727,7 @@ function OptimizerApp({
         }
       } else {
         // The next toolbar popup explicitly resumes this panel, even if another session is newer.
-        await preferPopupSessionDraft(sessionDraft);
+        await preferPopupSessionDraft(transferDraft);
         window.close();
         closing = true;
       }
@@ -728,7 +739,16 @@ function OptimizerApp({
         setLayoutTransition(false);
       }
     }
-  }, [viewMode, targetTabId, targetSessionId, sessionDraft, sessionDraftLoaded, t]);
+  }, [
+    viewMode,
+    targetTabId,
+    targetSessionId,
+    sessionDraft,
+    sessionDraftLoaded,
+    surfaceTarget,
+    isStandaloneWindow,
+    t,
+  ]);
 
   // ── Derived state ────────────────────────────────────────────────────────────
   const isExhausted = BACKEND_MODE === "fastapi" && limitsLoaded ? rateLimit.remaining <= 0 : false;
@@ -1018,9 +1038,13 @@ function OptimizerApp({
   const handleNew = useCallback(() => {
     if (layoutTransitionRef.current) return;
     setSaveOnEditOnly(false);
-    // The standalone window keeps its launch target; only the prompt binding is cleared.
+    // New in the side panel follows the active tab; a standalone window keeps its launch target.
     setSourceTabId(undefined);
     setSourceSessionId(undefined);
+    if (viewMode === "sidepanel") {
+      setStandaloneTarget(undefined);
+      setSurfaceTarget(undefined);
+    }
     setOriginal("");
     setImproved("");
     setResultContext(null);
@@ -1033,7 +1057,7 @@ function OptimizerApp({
     setLastLatencyMs(null);
     setAttemptN(0);
     setResultCompletedAt(null);
-  }, []);
+  }, [viewMode]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (isOriginalOverLimit || saveInFlightRef.current || layoutTransitionRef.current) return false;
