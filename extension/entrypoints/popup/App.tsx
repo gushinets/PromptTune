@@ -917,6 +917,16 @@ function OptimizerApp({
 
       if (result) {
         if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
+        if (
+          viewMode === "popup" &&
+          sourceTabId === undefined &&
+          !standaloneTarget &&
+          surfaceTarget
+        ) {
+          // A result generated here belongs to this window's launch tab, even if the
+          // window originally borrowed that target while showing an unbound result.
+          setStandaloneTarget(surfaceTarget);
+        }
         setImproved(result.improved_text);
         setResultContext({ mode: audienceMode, goal });
         setChanges(result.changes ?? []);
@@ -983,6 +993,9 @@ function OptimizerApp({
     improved,
     siteHostname,
     sourceContextReady,
+    sourceTabId,
+    standaloneTarget,
+    surfaceTarget,
     t,
     viewMode,
   ]);
