@@ -917,14 +917,8 @@ function OptimizerApp({
 
       if (result) {
         if (!result.improved_text.trim()) throw new Error(t.errorEmptyResponse);
-        if (
-          viewMode === "popup" &&
-          sourceTabId === undefined &&
-          !standaloneTarget &&
-          surfaceTarget
-        ) {
-          // A result generated here belongs to this window's launch tab, even if the
-          // window originally borrowed that target while showing an unbound result.
+        if (sourceTabId === undefined && !standaloneTarget && surfaceTarget) {
+          // A result generated here keeps the borrowed launch target across surface transfers.
           setStandaloneTarget(surfaceTarget);
         } else if (sourceTabId === undefined && !isStandaloneWindow) {
           // Independent surfaces must not inherit an inactive standalone result's target.

@@ -181,6 +181,44 @@ it.each(bindingCases)(
   },
 );
 
+it.each(bindingCases.flatMap((entry) => [false, true].map((panel) => ({ ...entry, panel }))))(
+  "preserves the target of an edited result across surface transfers (binding=$binding, panel=$panel)",
+  async ({ fields, borrowed, panel }) => {
+    await mountPopup(fields, borrowed);
+    if (panel) await switchSurface(true);
+    await click("Edit original");
+    await act(async () => {
+      const input = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+        input,
+        "Edited prompt",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Improve");
+    expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "IMPROVE_REQUEST",
+        payload: expect.objectContaining({ text: "Edited prompt" }),
+      }),
+    );
+    await click("Insert");
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(11, {
+      type: "PASTE_TEXT",
+      payload: { text: "New result" },
+    });
+    vi.mocked(browser.tabs.sendMessage).mockClear();
+    if (!panel) await switchSurface(true, "New result");
+    activeTab = 42;
+    await switchSurface(false, "New result");
+    await click("Insert");
+    expect(browser.tabs.sendMessage).toHaveBeenCalledExactlyOnceWith(11, {
+      type: "PASTE_TEXT",
+      payload: { text: "New result" },
+    });
+  },
+);
+
 it("opens the panel for a generic toolbar restore using its active tab", async () => {
   await mountPopup({ standaloneTarget: { tabId: 11, sessionId: "test-session" } });
   await act(async () => root.unmount());
