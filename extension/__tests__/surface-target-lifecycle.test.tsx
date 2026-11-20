@@ -196,9 +196,11 @@ it("opens the panel for a generic toolbar restore using its active tab", async (
   });
 });
 
-it.each(["New", "Edit original"])(
-  "clears an inactive standalone binding after toolbar %s → Improve",
-  async (action) => {
+it.each(
+  ["New", "Edit original"].flatMap((action) => [false, true].map((panel) => ({ action, panel }))),
+)(
+  "clears an inactive standalone binding after $action → Improve (panel=$panel)",
+  async ({ action, panel }) => {
     let remaining = 1;
     const originalHandler = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
     vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
@@ -218,8 +220,8 @@ it.each(["New", "Edit original"])(
     await act(async () => root.unmount());
     root = createRoot(host);
     activeTab = 42;
-    window.history.replaceState({}, "", "/popup.html");
-    await act(async () => root.render(<App />));
+    window.history.replaceState({}, "", panel ? "/sidepanel.html" : "/popup.html");
+    await act(async () => root.render(panel ? <SidepanelApp /> : <App />));
     await click(action);
     await act(async () => {
       const input = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;

@@ -926,8 +926,8 @@ function OptimizerApp({
           // A result generated here belongs to this window's launch tab, even if the
           // window originally borrowed that target while showing an unbound result.
           setStandaloneTarget(surfaceTarget);
-        } else if (viewMode === "popup" && sourceTabId === undefined && !isStandaloneWindow) {
-          // Toolbar generation must not inherit an inactive standalone result's target.
+        } else if (sourceTabId === undefined && !isStandaloneWindow) {
+          // Independent surfaces must not inherit an inactive standalone result's target.
           setStandaloneTarget(undefined);
         }
         setImproved(result.improved_text);
