@@ -20,6 +20,17 @@ export function EmailBonusModal({
 }) {
   const t = useT();
   const dialog = useRef<HTMLDivElement>(null);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const close = () => {
+    active.current = false;
+    onClose();
+  };
   const [email, setEmail] = useState(initialQuota?.email ?? "");
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<"email" | "code">(
@@ -77,6 +88,7 @@ export function EmailBonusModal({
   }, [stage]);
   const send = async () => {
     const response = await browser.runtime.sendMessage({ type: "REQUEST_EMAIL_BONUS", email });
+    if (!active.current) return;
     const pending = extractRateLimitResponse(response);
     if (pending) onPending?.(pending);
     setStage("code");
@@ -85,7 +97,7 @@ export function EmailBonusModal({
     setClock(Date.now());
   };
   const run = async (action: () => Promise<void>) => {
-    if (inFlight.current) return;
+    if (!active.current || inFlight.current) return;
     if (!consent?.granted || consentBusy) {
       setError(t.emailBonusConsentRequired);
       return;
@@ -98,10 +110,10 @@ export function EmailBonusModal({
     try {
       await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.errorGenericFallback);
+      if (active.current) setError(err instanceof Error ? err.message : t.errorGenericFallback);
     } finally {
       inFlight.current = false;
-      setBusy(false);
+      if (active.current) setBusy(false);
     }
   };
   const submit = (event: FormEvent) => {
@@ -109,6 +121,7 @@ export function EmailBonusModal({
     void run(async () => {
       if (stage === "email") return send();
       const response = await browser.runtime.sendMessage({ type: "CONFIRM_EMAIL_BONUS", code });
+      if (!active.current) return;
       const info = extractRateLimitResponse(response);
       if (!info || !info.email_verified || !info.bonus_claimed)
         throw new Error(t.errorGenericFallback);
@@ -118,7 +131,7 @@ export function EmailBonusModal({
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      onClose();
+      close();
     }
     if (event.key !== "Tab") return;
     const elements = dialog.current?.querySelectorAll<HTMLElement>(
@@ -149,7 +162,7 @@ export function EmailBonusModal({
           data-close
           type="button"
           className="email-bonus-close"
-          onClick={onClose}
+          onClick={close}
           aria-label={closeLabel ?? t.emailBonusClose}
         >
           ×
@@ -245,7 +258,7 @@ export function EmailBonusModal({
                 if (clock < resendAt) return;
                 void run(async () => {
                   await send();
-                  setNotice(t.emailBonusSent);
+                  if (active.current) setNotice(t.emailBonusSent);
                 });
               }}
             >
@@ -266,7 +279,7 @@ export function EmailBonusModal({
             </button>
           </div>
         )}
-        <button type="button" className="email-bonus-return" onClick={onClose}>
+        <button type="button" className="email-bonus-return" onClick={close}>
           {closeLabel ?? t.emailBonusClose}
         </button>
       </div>

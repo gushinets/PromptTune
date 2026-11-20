@@ -100,6 +100,57 @@ it("shows renewal date after claimed bonus and blocks only new generation", asyn
   expect(host.querySelector<HTMLButtonElement>(".btn-improve")?.disabled).toBe(true);
   expect(host.textContent).not.toContain("Get 50 more improvements?");
 });
+it.each(["popup", "sidepanel"] as const)(
+  "ignores a closed email dialog's late request after bonus confirmation in %s",
+  async (viewMode) => {
+    let release!: (value: unknown) => void;
+    let current = quota(0);
+    const pending = { ...current, verification_pending: true, email: "person@example.com" };
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
+      const message = raw as { type: string };
+      if (message.type === "GET_LIMITS") return current;
+      if (message.type === "REQUEST_EMAIL_BONUS")
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      if (message.type === "CONFIRM_EMAIL_BONUS")
+        return { ...quota(50, true), total: 100, per_day_total: 100 };
+      return { ok: true };
+    });
+    await act(async () => root.render(<App viewMode={viewMode} />));
+    const submit = async (value: string) => {
+      await act(async () => {
+        const input = host.querySelector<HTMLInputElement>(".email-bonus-modal input")!;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+          input,
+          value,
+        );
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () =>
+        host.querySelector<HTMLFormElement>(".email-bonus-modal form")!.requestSubmit(),
+      );
+    };
+    await act(async () => host.querySelector<HTMLButtonElement>(".btn-upgrade")!.click());
+    await submit("person@example.com");
+    current = pending;
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".upgrade-banner button")!.click());
+    await submit("123456");
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe(
+      "50/100",
+    );
+    await act(async () => release(pending));
+    expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe(
+      "50/100",
+    );
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.querySelector(".upgrade-banner")).toBeNull();
+  },
+);
+
 it("temporary 429 does not erase monthly balance or offer bonus", async () => {
   vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
     if ((message as { type?: string }).type === "GET_LIMITS") return quota(12);

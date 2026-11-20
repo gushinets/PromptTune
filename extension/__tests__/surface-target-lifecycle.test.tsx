@@ -196,40 +196,68 @@ it("opens the panel for a generic toolbar restore using its active tab", async (
   });
 });
 
-it("clears an inactive standalone binding when starting a new toolbar prompt", async () => {
-  await mountPopup({ standaloneTarget: { tabId: 11, sessionId: "test-session" } });
-  await act(async () => root.unmount());
-  root = createRoot(host);
-  activeTab = 42;
-  window.history.replaceState({}, "", "/popup.html");
-  await act(async () => root.render(<App />));
-  await click("New");
-  await act(async () => {
-    const input = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
-      input,
-      "New toolbar prompt",
-    );
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await click("Improve");
-  await act(async () => root.unmount());
-  root = createRoot(host);
-  vi.mocked(browser.runtime.getURL).mockImplementation((path) => path);
-  vi.mocked(browser.windows.create).mockResolvedValue({ id: 8 } as never);
-  activeTab = 99;
-  await openQuotaWindow("Rejected prompt", undefined, { id: 99 } as never);
-  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
-  const search = new URL(String(options.url), "https://extension.test").search;
-  window.history.replaceState({}, "", `/popup.html${search}`);
-  const loaded = await loadSelectionSession(search);
-  await act(async () => root.render(<App {...loaded} />));
-  await click("Insert");
-  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(99, {
-    type: "PASTE_TEXT",
-    payload: { text: "New result" },
-  });
-});
+it.each(["New", "Edit original"])(
+  "clears an inactive standalone binding after toolbar %s → Improve",
+  async (action) => {
+    let remaining = 1;
+    const originalHandler = vi.mocked(browser.runtime.sendMessage).getMockImplementation()!;
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
+      const type = (raw as { type?: string }).type;
+      if (type === "GET_LIMITS") return { ...limits, remaining, per_day_remaining: remaining };
+      if (type === "IMPROVE_REQUEST") {
+        remaining = 0;
+        return {
+          request_id: "toolbar-result",
+          improved_text: "New result",
+          rate_limit: { ...limits, remaining, per_day_remaining: remaining },
+        };
+      }
+      return originalHandler(raw);
+    });
+    await mountPopup({ standaloneTarget: { tabId: 11, sessionId: "test-session" } });
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    activeTab = 42;
+    window.history.replaceState({}, "", "/popup.html");
+    await act(async () => root.render(<App />));
+    await click(action);
+    await act(async () => {
+      const input = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+        input,
+        "New toolbar prompt",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Improve");
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+    await click("Insert");
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(42, {
+      type: "PASTE_TEXT",
+      payload: { text: "New result" },
+    });
+    vi.mocked(browser.tabs.sendMessage).mockClear();
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    vi.mocked(browser.runtime.getURL).mockImplementation((path) => path);
+    vi.mocked(browser.windows.create).mockResolvedValue({ id: 8 } as never);
+    activeTab = 99;
+    await openQuotaWindow("Rejected prompt", undefined, { id: 99 } as never);
+    const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+    const search = new URL(String(options.url), "https://extension.test").search;
+    window.history.replaceState({}, "", `/popup.html${search}`);
+    const loaded = await loadSelectionSession(search);
+    await act(async () => root.render(<App {...loaded} />));
+    expect(loaded.initialDraft?.original).toBe("New toolbar prompt");
+    expect(loaded.initialDraft?.lastRequestId).toBe("toolbar-result");
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+    await click("Insert");
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(99, {
+      type: "PASTE_TEXT",
+      payload: { text: "New result" },
+    });
+  },
+);
 
 it.each([
   { previous: "unbound", fields: {}, launchTab: 11 },
