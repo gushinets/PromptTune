@@ -1057,6 +1057,11 @@ function OptimizerApp({
     if (viewMode === "sidepanel") {
       setStandaloneTarget(undefined);
       setSurfaceTarget(undefined);
+    } else if (surfaceTarget) {
+      // A new quota-window prompt belongs to this launch, not the restored result's tab.
+      setStandaloneTarget(surfaceTarget);
+    } else if (!isStandaloneWindow) {
+      setStandaloneTarget(undefined);
     }
     setOriginal("");
     setImproved("");
@@ -1070,7 +1075,7 @@ function OptimizerApp({
     setLastLatencyMs(null);
     setAttemptN(0);
     setResultCompletedAt(null);
-  }, [viewMode]);
+  }, [viewMode, surfaceTarget, isStandaloneWindow]);
 
   const handleSave = useCallback(async (): Promise<boolean> => {
     if (isOriginalOverLimit || saveInFlightRef.current || layoutTransitionRef.current) return false;

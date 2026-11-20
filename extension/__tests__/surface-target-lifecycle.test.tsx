@@ -196,82 +196,141 @@ it("opens the panel for a generic toolbar restore using its active tab", async (
   });
 });
 
-it("binds a new result to the quota window after the email bonus across panel and toolbar", async () => {
-  await mountPopup({});
+it("clears an inactive standalone binding when starting a new toolbar prompt", async () => {
+  await mountPopup({ standaloneTarget: { tabId: 11, sessionId: "test-session" } });
   await act(async () => root.unmount());
   root = createRoot(host);
-  let currentQuota: RateLimitInfo = {
-    ...limits,
-    remaining: 0,
-    per_day_remaining: 0,
-    bonus_claimed: false,
-    email_verified: false,
-  };
-  vi.mocked(browser.runtime.getURL).mockImplementation((path) => path);
-  vi.mocked(browser.windows.create).mockResolvedValue({ id: 8 } as never);
-  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
-    const msg = raw as { type?: string; windowId: number; id: string };
-    if (msg.type === "GET_LIMITS") return currentQuota;
-    if (msg.type === "GET_PROMPT_LIMIT") return { max_chars: 30000, fallback: false };
-    if (msg.type === "REQUEST_EMAIL_BONUS") return { sent: true };
-    if (msg.type === "CONFIRM_EMAIL_BONUS") {
-      currentQuota = {
-        ...limits,
-        total: 100,
-        per_day_total: 100,
-        bonus_claimed: true,
-        email_verified: true,
-      };
-      return currentQuota;
-    }
-    if (msg.type === "IMPROVE_REQUEST") {
-      currentQuota = { ...currentQuota, remaining: 49, per_day_remaining: 49 };
-      return { request_id: "new-result", improved_text: "New result", rate_limit: currentQuota };
-    }
-    if (msg.type === "OPEN_OPTIMIZER_PANEL") return openOptimizerPanel(raw as OpenOptimizerPanel);
-    if (msg.type === "CONFIRM_PANEL_HANDOFF") return confirmPanelHandoff(msg.windowId, msg.id);
-    return { ok: true };
-  });
-  await openQuotaWindow("Rejected prompt", undefined, { id: 11 } as never);
-  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
-  const search = new URL(String(options.url), "https://extension.test").search;
-  window.history.replaceState({}, "", `/popup.html${search}`);
-  const loaded = await loadSelectionSession(search);
-  await act(async () => root.render(<App {...loaded} />));
-  expect(host.querySelector('[role="dialog"]')).not.toBeNull();
-  for (const value of ["person@example.com", "123456"]) {
-    await act(async () => {
-      const input = host.querySelector<HTMLInputElement>(".email-bonus-modal input")!;
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await act(async () =>
-      host.querySelector<HTMLFormElement>(".email-bonus-modal form")!.requestSubmit(),
-    );
-  }
-  expect(host.querySelector('[role="dialog"]')).toBeNull();
+  activeTab = 42;
+  window.history.replaceState({}, "", "/popup.html");
+  await act(async () => root.render(<App />));
   await click("New");
   await act(async () => {
     const input = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
       input,
-      "New prompt after bonus",
+      "New toolbar prompt",
     );
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await click("Improve");
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  vi.mocked(browser.runtime.getURL).mockImplementation((path) => path);
+  vi.mocked(browser.windows.create).mockResolvedValue({ id: 8 } as never);
+  activeTab = 99;
+  await openQuotaWindow("Rejected prompt", undefined, { id: 99 } as never);
+  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+  const search = new URL(String(options.url), "https://extension.test").search;
+  window.history.replaceState({}, "", `/popup.html${search}`);
+  const loaded = await loadSelectionSession(search);
+  await act(async () => root.render(<App {...loaded} />));
   await click("Insert");
-  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(11, {
-    type: "PASTE_TEXT",
-    payload: { text: "New result" },
-  });
-  vi.mocked(browser.tabs.sendMessage).mockClear();
-  await switchSurface(true, "New result");
-  activeTab = 42;
-  await switchSurface(false, "New result");
-  await click("Insert");
-  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(11, {
+  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(99, {
     type: "PASTE_TEXT",
     payload: { text: "New result" },
   });
 });
+
+it.each([
+  { previous: "unbound", fields: {}, launchTab: 11 },
+  {
+    previous: "bound to another tab",
+    fields: {
+      sourceTabId: 11,
+      sourceSessionId: "test-session",
+      standaloneTarget: { tabId: 11, sessionId: "test-session" },
+    },
+    launchTab: 42,
+  },
+])(
+  "binds a new quota-window result after the bonus (previous=$previous)",
+  async ({ fields, launchTab }) => {
+    await mountPopup(fields);
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    let currentQuota: RateLimitInfo = {
+      ...limits,
+      remaining: 0,
+      per_day_remaining: 0,
+      bonus_claimed: false,
+      email_verified: false,
+    };
+    vi.mocked(browser.runtime.getURL).mockImplementation((path) => path);
+    vi.mocked(browser.windows.create).mockResolvedValue({ id: 8 } as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
+      const msg = raw as { type?: string; windowId: number; id: string };
+      if (msg.type === "GET_LIMITS") return currentQuota;
+      if (msg.type === "GET_PROMPT_LIMIT") return { max_chars: 30000, fallback: false };
+      if (msg.type === "REQUEST_EMAIL_BONUS") return { sent: true };
+      if (msg.type === "CONFIRM_EMAIL_BONUS") {
+        currentQuota = {
+          ...limits,
+          total: 100,
+          per_day_total: 100,
+          bonus_claimed: true,
+          email_verified: true,
+        };
+        return currentQuota;
+      }
+      if (msg.type === "IMPROVE_REQUEST") {
+        currentQuota = { ...currentQuota, remaining: 49, per_day_remaining: 49 };
+        return { request_id: "new-result", improved_text: "New result", rate_limit: currentQuota };
+      }
+      if (msg.type === "OPEN_OPTIMIZER_PANEL") return openOptimizerPanel(raw as OpenOptimizerPanel);
+      if (msg.type === "CONFIRM_PANEL_HANDOFF") return confirmPanelHandoff(msg.windowId, msg.id);
+      return { ok: true };
+    });
+    activeTab = launchTab;
+    await openQuotaWindow("Rejected prompt", undefined, { id: launchTab } as never);
+    const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+    const search = new URL(String(options.url), "https://extension.test").search;
+    window.history.replaceState({}, "", `/popup.html${search}`);
+    const loaded = await loadSelectionSession(search);
+    await act(async () => root.render(<App {...loaded} />));
+    expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+    for (const value of ["person@example.com", "123456"]) {
+      await act(async () => {
+        const input = host.querySelector<HTMLInputElement>(".email-bonus-modal input")!;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+          input,
+          value,
+        );
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () =>
+        host.querySelector<HTMLFormElement>(".email-bonus-modal form")!.requestSubmit(),
+      );
+    }
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    await click("Insert");
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(11, {
+      type: "PASTE_TEXT",
+      payload: { text: "Original result" },
+    });
+    vi.mocked(browser.tabs.sendMessage).mockClear();
+    await click("New");
+    await act(async () => {
+      const input = host.querySelector<HTMLTextAreaElement>(".original-textarea")!;
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+        input,
+        "New prompt after bonus",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Improve");
+    await click("Insert");
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(launchTab, {
+      type: "PASTE_TEXT",
+      payload: { text: "New result" },
+    });
+    vi.mocked(browser.tabs.sendMessage).mockClear();
+    await switchSurface(true, "New result");
+    activeTab = launchTab === 11 ? 42 : 99;
+    await switchSurface(false, "New result");
+    await click("Insert");
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(launchTab, {
+      type: "PASTE_TEXT",
+      payload: { text: "New result" },
+    });
+  },
+);
