@@ -332,13 +332,20 @@ it.each([
     async (id) => ({ id, url: "https://chatgpt.com" }) as never,
   );
   vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 7, url: "popup.html" }] as never);
-  await openQuotaWindow("Rejected hotkey", undefined, { id: 42 } as never);
-  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
-  const search = new URL(String(options.url), "https://extension.test").search;
-  window.history.replaceState({}, "", `/popup.html${search}`);
-  const session = await loadSelectionSession(search);
-  await act(async () => root.render(<App {...session} />));
-  await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+  for (const tabId of [11, 42]) {
+    await openQuotaWindow("Rejected hotkey", undefined, { id: tabId } as never);
+    const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+    const search = new URL(String(options.url), "https://extension.test").search;
+    window.history.replaceState({}, "", `/popup.html${search}`);
+    const session = await loadSelectionSession(search);
+    await act(async () => root.render(<App {...session} />));
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+    if (tabId === 11) {
+      // The first window is closed without inserting; its autosave must not bind the result.
+      await act(async () => root.unmount());
+      root = createRoot(host);
+    }
+  }
   const insert = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent?.trim() === "Insert",
   )!;

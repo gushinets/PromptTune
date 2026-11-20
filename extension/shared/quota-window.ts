@@ -58,6 +58,15 @@ export async function openQuotaWindow(
   }
   const draftSessionId = crypto.randomUUID();
   const sourceSessionId = await ensureBrowserSessionId();
+  const windowParams = new URLSearchParams({
+    selection: `optimizer_selection_${draftSessionId}`,
+    session: draftSessionId,
+    quota: "1",
+  });
+  if (source.id !== undefined) {
+    windowParams.set("returnTab", String(source.id));
+    windowParams.set("returnSession", sourceSessionId);
+  }
   await initializePopupSessionDraft(
     {
       draftSessionId,
@@ -95,7 +104,7 @@ export async function openQuotaWindow(
   }
   // loadSelectionSession restores an addressed committed draft before reading any selection payload.
   await browser.windows.create({
-    url: `${browser.runtime.getURL("popup.html")}?selection=optimizer_selection_${draftSessionId}&session=${draftSessionId}&quota=1`,
+    url: `${browser.runtime.getURL("popup.html")}?${windowParams}`,
     type: "popup",
     width: 380,
     height: 660,

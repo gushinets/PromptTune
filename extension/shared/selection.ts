@@ -117,15 +117,18 @@ export async function loadSelectionSession(search: string): Promise<{
   const params = new URLSearchParams(search);
   const privateQuotaLaunch = params.get("quota") === "1" && !params.has("selection");
   const tabId = Number(params.get("returnTab"));
+  const returnTargetProps =
+    params.get("quota") === "1" &&
+    params.has("returnTab") &&
+    Number.isSafeInteger(tabId) &&
+    tabId >= 0 &&
+    params.get("returnSession")
+      ? { quotaReturnTarget: { tabId, sessionId: params.get("returnSession")! } }
+      : {};
   const quotaOnlyProps = privateQuotaLaunch
     ? {
         quotaOnly: true,
-        ...(params.has("returnTab") &&
-        Number.isSafeInteger(tabId) &&
-        tabId >= 0 &&
-        params.get("returnSession")
-          ? { quotaReturnTarget: { tabId, sessionId: params.get("returnSession")! } }
-          : {}),
+        ...returnTargetProps,
       }
     : {};
   const quotaOnlyKey = params.get("quotaHandoff") ?? "";
@@ -154,7 +157,10 @@ export async function loadSelectionSession(search: string): Promise<{
           })
           .catch(() => null)
       : null;
-  const initialQuota = quotaHandoff ? { initialQuota: quotaHandoff.info } : {};
+  const initialQuota = {
+    ...(quotaHandoff ? { initialQuota: quotaHandoff.info } : {}),
+    ...returnTargetProps,
+  };
   if (quotaOnlyLaunch || quotaHandoff?.quotaOnly) {
     await browser.storage.local.remove(key).catch(() => undefined);
     return { ...initialQuota, ...quotaOnlyProps };

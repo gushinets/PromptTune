@@ -147,6 +147,7 @@ function OptimizerApp({
   initialSelection,
   initialDraft,
   initialQuota,
+  quotaReturnTarget,
 }: AppProps) {
   const t = useT();
   const [initialQuotaSnapshot] = useState(initialQuota);
@@ -185,12 +186,15 @@ function OptimizerApp({
             : undefined)),
   );
   const isStandaloneWindow = isSelectionLaunch || initialSelection !== undefined;
-  const targetTabId = sourceTabId ?? (isStandaloneWindow ? standaloneTarget?.tabId : undefined);
+  // A quota launch may borrow the current tab for an unbound toolbar result. Keep that
+  // window target out of sessionDraft so later launches choose their own fallback.
+  const windowTarget = standaloneTarget ?? quotaReturnTarget;
+  const targetTabId = sourceTabId ?? (isStandaloneWindow ? windowTarget?.tabId : undefined);
   const targetSessionId =
     sourceTabId !== undefined
       ? sourceSessionId
       : isStandaloneWindow
-        ? standaloneTarget?.sessionId
+        ? windowTarget?.sessionId
         : undefined;
   const [promptInputMaxChars, setPromptInputMaxChars] = useState<number>(
     DEFAULT_PROMPT_INPUT_MAX_CHARS,
