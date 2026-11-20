@@ -94,6 +94,19 @@ export interface PanelHandoff {
   id: string;
   expiresAt: number;
   draft: PopupSessionDraft;
+  /** The current surface's target is not a saved source binding of the result. */
+  windowTarget?: { tabId: number; sessionId: string };
+}
+
+function isWindowTarget(value: unknown): value is NonNullable<PanelHandoff["windowTarget"]> {
+  if (!value || typeof value !== "object") return false;
+  const target = value as { tabId?: unknown; sessionId?: unknown };
+  return (
+    Number.isSafeInteger(target.tabId) &&
+    (target.tabId as number) >= 0 &&
+    typeof target.sessionId === "string" &&
+    target.sessionId.length > 0
+  );
 }
 
 /** Reject malformed, expired, and legacy transfers before replacing an open session. */
@@ -107,6 +120,9 @@ export function isPanelHandoff(value: unknown, browserSessionId: string): value 
     typeof handoff.expiresAt === "number" &&
     Number.isFinite(handoff.expiresAt) &&
     handoff.expiresAt > Date.now() &&
+    (handoff.windowTarget === undefined ||
+      (isWindowTarget(handoff.windowTarget) &&
+        handoff.windowTarget.sessionId === browserSessionId)) &&
     isPopupSessionDraft(handoff.draft)
   );
 }
@@ -244,6 +260,7 @@ export interface OpenOptimizerPanel {
   windowId: number;
   tabId: number;
   draft: PopupSessionDraft;
+  windowTarget?: PanelHandoff["windowTarget"];
 }
 
 /** Run in the background: opening a panel can destroy the calling toolbar popup. */
@@ -251,7 +268,8 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
   if (
     !Number.isInteger(message.windowId) ||
     !Number.isInteger(message.tabId) ||
-    !isPopupSessionDraft(message.draft)
+    !isPopupSessionDraft(message.draft) ||
+    (message.windowTarget !== undefined && !isWindowTarget(message.windowTarget))
   )
     throw new Error("Invalid panel transfer");
   const sidePanel = (
@@ -296,15 +314,22 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
     const failure = await intent;
     if (failure) throw failure.error;
     const browserSessionId = await ensureBrowserSessionId();
+    const sourceTabId = message.draft.sourceTabId ?? message.windowTarget?.tabId;
+    const sourceSessionId =
+      message.draft.sourceTabId !== undefined
+        ? message.draft.sourceSessionId
+        : message.windowTarget?.sessionId;
     if (
       openingAttempts.get(message.windowId)?.id !== id ||
       sourceChanged ||
-      (message.draft.sourceTabId !== undefined &&
-        message.draft.sourceSessionId !== browserSessionId)
+      (message.windowTarget !== undefined &&
+        (message.windowTarget.sessionId !== browserSessionId ||
+          message.windowTarget.tabId !== message.tabId)) ||
+      (sourceTabId !== undefined && sourceSessionId !== browserSessionId)
     )
       throw new Error("Source changed while opening panel");
-    if (message.draft.sourceTabId !== undefined) {
-      const source = await browser.tabs.get(message.draft.sourceTabId);
+    if (sourceTabId !== undefined) {
+      const source = await browser.tabs.get(sourceTabId);
       if (source.id !== message.tabId || source.windowId !== message.windowId || sourceChanged)
         throw new Error("Source tab no longer belongs to the target window");
     }
@@ -317,6 +342,7 @@ export async function openOptimizerPanel(message: OpenOptimizerPanel): Promise<{
       browserSessionId,
       requiresConfirmation: true,
       draft: message.draft,
+      ...(message.windowTarget ? { windowTarget: message.windowTarget } : {}),
       expiresAt,
     });
     if (sourceChanged || openingAttempts.get(message.windowId)?.id !== id) {

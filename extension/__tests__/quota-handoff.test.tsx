@@ -6,6 +6,12 @@ import { App } from "../entrypoints/popup/App";
 import { openQuotaWindow } from "../shared/quota-window";
 import { loadSelectionSession } from "../shared/selection";
 import { setPopupSessionDraft } from "../shared/storage";
+import { SidepanelApp } from "../entrypoints/sidepanel/SidepanelApp";
+import {
+  openOptimizerPanel,
+  confirmPanelHandoff,
+  type OpenOptimizerPanel,
+} from "../shared/panel-handoff";
 
 let state: Record<string, unknown>, host: HTMLDivElement, root: Root;
 const quota = {
@@ -292,66 +298,99 @@ it("shows the Moscow renewal day when the browser's default timezone is New York
   expect(host.querySelector(".upgrade-banner")?.textContent).toContain("1/6/2027");
 });
 
-it.each([
-  { binding: "unbound toolbar", previous: {}, target: 42 },
-  {
-    binding: "standalone target",
-    previous: { standaloneTarget: { tabId: 99, sessionId: "test-session" } },
-    target: 99,
-  },
-  {
-    binding: "source tab",
-    previous: { sourceTabId: 99, sourceSessionId: "test-session" },
-    target: 99,
-  },
-])("inserts a restored result with $binding into the correct tab", async ({ previous, target }) => {
-  await setPopupSessionDraft({
-    draftSessionId: "toolbar",
-    draftCreatedAt: Date.now(),
-    audienceMode: "ai",
-    optimizer_screen: "result",
-    activeTab: "improve",
-    original: "Toolbar prompt",
-    improved: "Toolbar result",
-    changes: [],
-    goal: "general",
-    result_context: { mode: "ai", goal: "general" },
-    lastRequestId: "toolbar",
-    lastRequestContextKey: "ai|general|Toolbar prompt",
-    lastModel: null,
-    lastLatencyMs: null,
-    attemptN: 1,
-    ...previous,
-  });
-  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
-    if ((raw as { type?: string }).type === "GET_LIMITS") return quota;
-    return { ok: true };
-  });
-  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
-  vi.mocked(browser.tabs.get).mockImplementation(
-    async (id) => ({ id, url: "https://chatgpt.com" }) as never,
-  );
-  vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 7, url: "popup.html" }] as never);
-  for (const tabId of [11, 42]) {
-    await openQuotaWindow("Rejected hotkey", undefined, { id: tabId } as never);
-    const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
-    const search = new URL(String(options.url), "https://extension.test").search;
-    window.history.replaceState({}, "", `/popup.html${search}`);
-    const session = await loadSelectionSession(search);
-    await act(async () => root.render(<App {...session} />));
-    await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
-    if (tabId === 11) {
-      // The first window is closed without inserting; its autosave must not bind the result.
-      await act(async () => root.unmount());
-      root = createRoot(host);
+it.each(
+  [
+    { binding: "unbound toolbar", previous: {}, target: 42 },
+    {
+      binding: "standalone target",
+      previous: { standaloneTarget: { tabId: 99, sessionId: "test-session" } },
+      target: 99,
+    },
+    {
+      binding: "source tab",
+      previous: { sourceTabId: 99, sourceSessionId: "test-session" },
+      target: 99,
+    },
+  ].flatMap((entry) => [false, true].map((viaPanel) => ({ ...entry, viaPanel }))),
+)(
+  "inserts a restored result with $binding into the correct tab (viaPanel=$viaPanel)",
+  async ({ previous, target, viaPanel }) => {
+    await setPopupSessionDraft({
+      draftSessionId: "toolbar",
+      draftCreatedAt: Date.now(),
+      audienceMode: "ai",
+      optimizer_screen: "result",
+      activeTab: "improve",
+      original: "Toolbar prompt",
+      improved: "Toolbar result",
+      changes: [],
+      goal: "general",
+      result_context: { mode: "ai", goal: "general" },
+      lastRequestId: "toolbar",
+      lastRequestContextKey: "ai|general|Toolbar prompt",
+      lastModel: null,
+      lastLatencyMs: null,
+      attemptN: 1,
+      ...previous,
+    });
+    const sessionState: Record<string, unknown> = { optimizer_browser_session: "test-session" };
+    vi.mocked(browser.storage.session.get).mockImplementation(async () => ({ ...sessionState }));
+    vi.mocked(browser.storage.session.set).mockImplementation(async (values) => {
+      Object.assign(sessionState, values);
+    });
+    vi.mocked(browser.storage.session.remove).mockImplementation(async (keys) => {
+      for (const key of [keys].flat()) delete sessionState[key];
+    });
+    Object.assign(browser, { sidePanel: { open: vi.fn().mockResolvedValue(undefined) } });
+    vi.mocked(browser.windows.getCurrent).mockResolvedValue({ id: 7 } as never);
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
+      const msg = raw as { type?: string; windowId: number; id: string };
+      if (msg.type === "GET_LIMITS") return quota;
+      if (msg.type === "OPEN_OPTIMIZER_PANEL") return openOptimizerPanel(raw as OpenOptimizerPanel);
+      if (msg.type === "CONFIRM_PANEL_HANDOFF") return confirmPanelHandoff(msg.windowId, msg.id);
+      return { ok: true };
+    });
+    vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+    vi.mocked(browser.tabs.get).mockImplementation(
+      async (id) => ({ id, windowId: 7, url: "https://chatgpt.com" }) as never,
+    );
+    vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 7, url: "popup.html" }] as never);
+    for (const tabId of [11, 42]) {
+      await openQuotaWindow("Rejected hotkey", undefined, { id: tabId } as never);
+      const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+      const search = new URL(String(options.url), "https://extension.test").search;
+      window.history.replaceState({}, "", `/popup.html${search}`);
+      const session = await loadSelectionSession(search);
+      await act(async () => root.render(<App {...session} />));
+      await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+      if (tabId === 11) {
+        if (viaPanel) {
+          await act(async () =>
+            host.querySelector<HTMLButtonElement>(".layout-toggle-btn")!.click(),
+          );
+          expect(browser.runtime.sendMessage).toHaveBeenCalledWith(
+            expect.objectContaining({ type: "OPEN_OPTIMIZER_PANEL" }),
+          );
+          await act(async () => root.unmount());
+          root = createRoot(host);
+          window.history.replaceState({}, "", "/sidepanel.html");
+          vi.mocked(browser.tabs.get).mockClear();
+          await act(async () => root.render(<SidepanelApp />));
+          expect(host.querySelector(".result-screen")?.textContent).toContain("Toolbar result");
+          expect(browser.tabs.get).toHaveBeenCalledWith(target === 42 ? 11 : target);
+        }
+        // The first window is closed without inserting; its autosave must not bind the result.
+        await act(async () => root.unmount());
+        root = createRoot(host);
+      }
     }
-  }
-  const insert = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent?.trim() === "Insert",
-  )!;
-  await act(async () => insert.click());
-  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(target, {
-    type: "PASTE_TEXT",
-    payload: { text: "Toolbar result" },
-  });
-});
+    const insert = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent?.trim() === "Insert",
+    )!;
+    await act(async () => insert.click());
+    expect(browser.tabs.sendMessage).toHaveBeenCalledWith(target, {
+      type: "PASTE_TEXT",
+      payload: { text: "Toolbar result" },
+    });
+  },
+);

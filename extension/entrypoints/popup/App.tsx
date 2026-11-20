@@ -185,7 +185,8 @@ function OptimizerApp({
             ? { tabId: initialDraft.sourceTabId, sessionId: initialDraft.sourceSessionId }
             : undefined)),
   );
-  const isStandaloneWindow = isSelectionLaunch || initialSelection !== undefined;
+  const isStandaloneWindow =
+    isSelectionLaunch || initialSelection !== undefined || quotaReturnTarget !== undefined;
   // A quota launch may borrow the current tab for an unbound toolbar result. Keep that
   // window target out of sessionDraft so later launches choose their own fallback.
   const windowTarget = standaloneTarget ?? quotaReturnTarget;
@@ -700,7 +701,11 @@ function OptimizerApp({
             type: "OPEN_OPTIMIZER_PANEL",
             windowId: tab.windowId,
             tabId: tab.id,
-            draft: { ...sessionDraft, sourceTabId: targetTabId, sourceSessionId: targetSessionId },
+            draft: sessionDraft,
+            windowTarget:
+              targetTabId !== undefined && targetSessionId !== undefined
+                ? { tabId: targetTabId, sessionId: targetSessionId }
+                : undefined,
           });
           if (!(response as { ok?: boolean } | undefined)?.ok)
             throw new Error("Panel transfer failed");
