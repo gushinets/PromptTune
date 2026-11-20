@@ -85,6 +85,7 @@ export default defineContentScript({
             }
             return;
           }
+          if (!canInsertIntoField(field)) return;
           const text = adapter.getText(field);
           if (!text.trim()) return;
 

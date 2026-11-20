@@ -16,7 +16,7 @@ from app.dependencies import (
     get_redis,
 )
 from app.services.abuse_limiter import allowance, throttle
-from app.services.email_bonus import EmailBonusService
+from app.services.email_bonus import EmailBonusService, canonical_email
 from app.services.quota import QuotaService
 
 router = APIRouter()
@@ -54,8 +54,9 @@ async def request_email(
     await ensure_installation_id_when_ip_present(ip, req.installation_id, redis)
     await throttle(redis, "email-ip", ip, 10, 3600)
     await throttle(redis, "email-installation", req.installation_id, 5, 3600)
-    await throttle(redis, "email-address", req.email.strip().lower(), 5, 3600)
-    await EmailBonusService(db).request(req.installation_id, req.email)
+    email = canonical_email(req.email)
+    await throttle(redis, "email-address", email, 5, 3600)
+    await EmailBonusService(db).request(req.installation_id, email)
     return {
         "sent": True,
         "rate_limit": await with_minute_allowance(

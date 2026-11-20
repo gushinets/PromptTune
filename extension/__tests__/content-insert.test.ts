@@ -27,6 +27,25 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it.each(["password", "email"])(
+  "does not send a focused %s field to improvement or quota handoff",
+  async (type) => {
+    const field = document.createElement("input");
+    field.type = type;
+    field.value = "fake-sensitive-value@example.com";
+    document.body.append(field);
+    field.focus();
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
+      if ((raw as Message).type === "IMPROVE_REQUEST")
+        throw new Error("Monthly improvement quota exhausted");
+      return { ok: true };
+    });
+    await handle({ type: "IMPROVE_ACTIVE_FIELD" });
+    expect(browser.runtime.sendMessage).not.toHaveBeenCalled();
+    expect(field.value).toBe("fake-sensitive-value@example.com");
+  },
+);
+
 it.each(["textarea", "div"])("rejects a detached previously focused %s", async (tag) => {
   const field = document.createElement(tag);
   field.setAttribute("contenteditable", "true");

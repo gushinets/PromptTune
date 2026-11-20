@@ -29,6 +29,32 @@ async def test_email_proof_and_global_deduplication(quota_sessions):
             await service.request("a", "other@example.com")
 
 
+async def test_unicode_equivalent_emails_share_one_bonus_across_installations(quota_sessions):
+    from sqlalchemy import select
+
+    from app.db.models import EmailBonusClaim
+    from app.services.email_bonus import EmailBonusService
+
+    sent = []
+
+    async def send(email, code):
+        sent.append((email, code))
+
+    async with quota_sessions() as db:
+        service = EmailBonusService(db, sender=send, secret="secret")
+        await service.request("first", "J\u030c@example.com")
+        first = await service.confirm("first", sent[-1][1])
+        await service.request("reinstalled", "\u01f0@example.com")
+        second = await service.confirm("reinstalled", sent[-1][1])
+        assert first.remaining == 100
+        assert second.remaining == 50
+        assert second.email_bonus_outcome == "already_claimed"
+        assert [email for email, _ in sent] == ["\u01f0@example.com", "\u01f0@example.com"]
+        assert list((await db.scalars(select(EmailBonusClaim.email))).all()) == [
+            "\u01f0@example.com"
+        ]
+
+
 async def test_expired_code_resend_guess_limits_and_delivery_failure(quota_sessions):
     from app.services.email_bonus import EmailBonusService
     from app.services.quota import QuotaService

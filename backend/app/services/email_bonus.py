@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import secrets
+import unicodedata
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 
@@ -12,6 +13,15 @@ from app.config import settings
 from app.db.models import EmailBonusClaim
 from app.services.mailer import send_verification_email
 from app.services.quota import QuotaService
+
+
+def canonical_email(email: str) -> str:
+    """Use one case-insensitive NFC identity for verification, delivery and claims."""
+    try:
+        normalized = validate_email(email.strip(), check_deliverability=False).normalized
+    except EmailNotValidError:
+        raise HTTPException(422, "Enter a valid email address") from None
+    return unicodedata.normalize("NFC", normalized.lower())
 
 
 class EmailBonusService(QuotaService):
@@ -34,10 +44,7 @@ class EmailBonusService(QuotaService):
         ).hexdigest()
 
     async def request(self, installation_id: str, email: str) -> None:
-        try:
-            email = validate_email(email.strip(), check_deliverability=False).normalized.lower()
-        except EmailNotValidError:
-            raise HTTPException(422, "Enter a valid email address") from None
+        email = canonical_email(email)
         code = f"{secrets.randbelow(1_000_000):06d}"
         digest = self.digest(installation_id, email, code)
         quota = await self.locked(installation_id)

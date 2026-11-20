@@ -36,3 +36,25 @@ async def test_limits_throttles_rotating_installation_ids_before_quota_work(
         assert response.headers["Retry-After"] == "60"
         status.assert_not_awaited()
         mock_db.execute.assert_not_awaited()
+
+
+async def test_recipient_throttle_shares_unicode_equivalent_email_keys(client, mock_db, mock_redis):
+    counts = {}
+
+    async def increment(_script, _keys, key, _seconds):
+        counts[key] = counts.get(key, 0) + 1
+        return counts[key]
+
+    mock_redis.eval.side_effect = increment
+    with patch("app.api.v1.limits.EmailBonusService.request", new=AsyncMock()) as request:
+        for index in range(6):
+            response = await client.post(
+                "/v1/email/request",
+                json={
+                    "installation_id": f"rotating-{index}",
+                    "email": "J\u030c@example.com" if index % 2 == 0 else "\u01f0@example.com",
+                },
+            )
+            assert response.status_code == (202 if index < 5 else 429)
+        assert request.await_count == 5
+        assert all(call.args[1] == "\u01f0@example.com" for call in request.await_args_list)

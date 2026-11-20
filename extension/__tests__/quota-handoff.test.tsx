@@ -291,3 +291,60 @@ it("shows the Moscow renewal day when the browser's default timezone is New York
   );
   expect(host.querySelector(".upgrade-banner")?.textContent).toContain("1/6/2027");
 });
+
+it.each([
+  { binding: "unbound toolbar", previous: {}, target: 42 },
+  {
+    binding: "standalone target",
+    previous: { standaloneTarget: { tabId: 99, sessionId: "test-session" } },
+    target: 99,
+  },
+  {
+    binding: "source tab",
+    previous: { sourceTabId: 99, sourceSessionId: "test-session" },
+    target: 99,
+  },
+])("inserts a restored result with $binding into the correct tab", async ({ previous, target }) => {
+  await setPopupSessionDraft({
+    draftSessionId: "toolbar",
+    draftCreatedAt: Date.now(),
+    audienceMode: "ai",
+    optimizer_screen: "result",
+    activeTab: "improve",
+    original: "Toolbar prompt",
+    improved: "Toolbar result",
+    changes: [],
+    goal: "general",
+    result_context: { mode: "ai", goal: "general" },
+    lastRequestId: "toolbar",
+    lastRequestContextKey: "ai|general|Toolbar prompt",
+    lastModel: null,
+    lastLatencyMs: null,
+    attemptN: 1,
+    ...previous,
+  });
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (raw) => {
+    if ((raw as { type?: string }).type === "GET_LIMITS") return quota;
+    return { ok: true };
+  });
+  vi.mocked(browser.tabs.sendMessage).mockResolvedValue({ success: true });
+  vi.mocked(browser.tabs.get).mockImplementation(
+    async (id) => ({ id, url: "https://chatgpt.com" }) as never,
+  );
+  vi.mocked(browser.tabs.query).mockResolvedValue([{ id: 7, url: "popup.html" }] as never);
+  await openQuotaWindow("Rejected hotkey", undefined, { id: 42 } as never);
+  const options = vi.mocked(browser.windows.create).mock.calls.at(-1)![0]!;
+  const search = new URL(String(options.url), "https://extension.test").search;
+  window.history.replaceState({}, "", `/popup.html${search}`);
+  const session = await loadSelectionSession(search);
+  await act(async () => root.render(<App {...session} />));
+  await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
+  const insert = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent?.trim() === "Insert",
+  )!;
+  await act(async () => insert.click());
+  expect(browser.tabs.sendMessage).toHaveBeenCalledWith(target, {
+    type: "PASTE_TEXT",
+    payload: { text: "Toolbar result" },
+  });
+});

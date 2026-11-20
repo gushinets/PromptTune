@@ -586,6 +586,9 @@ export async function initializePopupSessionDraft(
       if (previous) {
         draft = {
           ...previous,
+          standaloneTarget:
+            previous.standaloneTarget ??
+            (previous.sourceTabId === undefined ? draft.standaloneTarget : undefined),
           draftSessionId: id,
           draftCreatedAt: Math.max(Date.now(), (latest?.draftCreatedAt ?? 0) + 1),
           activeTab: "improve",
