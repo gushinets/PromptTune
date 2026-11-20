@@ -59,6 +59,18 @@ async function generate(viewMode: "popup" | "sidepanel" = "popup") {
 it.each(["popup", "sidepanel"] as const)(
   "opens offer on last success and preserves result/library on %s",
   async (viewMode) => {
+    vi.mocked(browser.storage.local.get).mockResolvedValue({
+      installation_id: "i",
+      audience_mode: "ai",
+      library: [
+        {
+          id: "saved",
+          createdAt: Date.now(),
+          original: "Saved original",
+          improved: "Saved improvement",
+        },
+      ],
+    });
     await act(async () => root.render(<App viewMode={viewMode} />));
     await generate(viewMode);
     expect(host.querySelector('[role="dialog"]')?.textContent).toContain(
@@ -73,6 +85,10 @@ it.each(["popup", "sidepanel"] as const)(
       [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Library"))!.click(),
     );
     expect(host.querySelector('[role="dialog"]')).toBeNull();
+    expect(host.querySelector(".library")).not.toBeNull();
+    expect(host.querySelector(".library-item-improved")?.textContent).toContain(
+      "Saved improvement",
+    );
   },
 );
 it("shows renewal date after claimed bonus and blocks only new generation", async () => {
@@ -131,6 +147,7 @@ it("preserves the previous result if another surface consumes the last unit", as
     [...host.querySelectorAll("button")].find((b) => b.textContent === "Edit original")!.click(),
   );
   await act(async () => host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+  expect(attempts).toBe(2);
   expect((host.querySelector(".improved-textarea") as HTMLTextAreaElement)?.value).toBe(
     "Preserve my previous result",
   );
