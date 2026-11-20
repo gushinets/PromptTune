@@ -167,7 +167,8 @@ export function EmailBonusModal({
           {stage === "email" ? (
             <input
               autoComplete="email"
-              type="email"
+              type="text"
+              inputMode="email"
               required
               maxLength={254}
               aria-label="Email"

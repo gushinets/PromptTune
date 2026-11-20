@@ -150,6 +150,26 @@ it("requires email proof before reporting credit, and supports dismissal", async
   await act(async () => host.querySelector<HTMLButtonElement>("[data-close]")!.click());
   expect(onClose).toHaveBeenCalled();
 });
+
+it("allows an internationalized email through browser validation and submits it for server verification", async () => {
+  vi.mocked(browser.runtime.sendMessage).mockClear().mockResolvedValue({ sent: true });
+  await act(async () => root.render(<EmailBonusModal onClose={vi.fn()} onConfirmed={vi.fn()} />));
+  const input = host.querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "почта@example.com",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(host.querySelector("form")!.checkValidity()).toBe(true);
+  await act(async () => host.querySelector("form")!.requestSubmit());
+  expect(browser.runtime.sendMessage).toHaveBeenCalledWith({
+    type: "REQUEST_EMAIL_BONUS",
+    email: "почта@example.com",
+  });
+  expect(host.querySelector("input")?.getAttribute("inputmode")).toBe("numeric");
+});
 it("shows delivery failures without granting credit", async () => {
   const onConfirmed = vi.fn();
   vi.mocked(browser.runtime.sendMessage).mockRejectedValue(new Error("Unable to send email"));
@@ -209,7 +229,7 @@ it("hydrates a late verification lookup but respects an explicit change of email
   const change = host.querySelectorAll<HTMLButtonElement>(".email-bonus-secondary button")[1];
   await act(async () => change.click());
   await act(async () => render({ ...pendingQuota }));
-  expect(host.querySelector("input")?.type).toBe("email");
+  expect(host.querySelector("input")?.getAttribute("inputmode")).toBe("email");
 });
 
 it("preserves edited email when a pending verification lookup arrives", async () => {
@@ -224,7 +244,7 @@ it("preserves edited email when a pending verification lookup arrives", async ()
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await act(async () => root.render(<EmailBonusModal {...props} initialQuota={pendingQuota} />));
-  expect(host.querySelector("input")?.type).toBe("email");
+  expect(host.querySelector("input")?.getAttribute("inputmode")).toBe("email");
   expect(host.querySelector("input")?.value).toBe("new@example.com");
 });
 
