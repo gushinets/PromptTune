@@ -358,3 +358,53 @@ it("describes pending work accurately when Ctrl+Enter rechecks zero balance", as
       .mock.calls.some(([message]) => (message as { type?: string }).type === "IMPROVE_REQUEST"),
   ).toBe(false);
 });
+
+it.each(["popup", "sidepanel"] as const)(
+  "allows mouse revalidation after cancellation with cached pending zero (%s)",
+  async (viewMode) => {
+    let attempts = 0,
+      refunded = false;
+    let finishCancelled!: (value: unknown) => void;
+    const pending = { ...quota(0), pending_improvements: 1, exhausted: false };
+    vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+      const type = (message as { type?: string }).type;
+      if (type === "GET_LIMITS") return attempts && !refunded ? pending : quota(1);
+      if (type === "GET_PROMPT_LIMIT") return { max_chars: 30000, fallback: false };
+      if (type === "IMPROVE_REQUEST") {
+        if (++attempts === 1)
+          return new Promise((resolve) => {
+            finishCancelled = resolve;
+          });
+        return { request_id: "retry", improved_text: "Retry result", rate_limit: quota(0) };
+      }
+      return { ok: true };
+    });
+    await generate(viewMode);
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe("0/50");
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.trim() === "Cancel")!
+        .click(),
+    );
+    expect(host.querySelector<HTMLButtonElement>(".btn-improve")!.disabled).toBe(false);
+    // The refund is still in flight: this mouse retry may look up quota but cannot generate.
+    await act(async () => host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+    expect(attempts).toBe(1);
+    expect(host.querySelector(".error-toast-message")?.textContent).toContain(
+      "Improvements are still processing",
+    );
+    refunded = true;
+    await act(async () => host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+    expect(attempts).toBe(2);
+    expect(host.querySelector(".improved-textarea")?.textContent).toBe("Retry result");
+    await act(async () =>
+      finishCancelled({
+        request_id: "cancelled",
+        improved_text: "Discard me",
+        rate_limit: quota(1),
+      }),
+    );
+    expect(host.querySelector(".improved-textarea")?.textContent).toBe("Retry result");
+  },
+);

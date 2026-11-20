@@ -13,10 +13,12 @@ from app.config import settings
 def _send(email: str, code: str) -> None:
     if not settings.smtp_host or not settings.smtp_from:
         raise RuntimeError("SMTP is not configured")
+    recipient = validate_email(email, check_deliverability=False)
+    address = recipient.ascii_email or recipient.normalized
     message = EmailMessage()
     message["Subject"] = "PromptOptimizer — код подтверждения email"
     message["From"] = settings.smtp_from
-    message["To"] = email
+    message["To"] = address
     message.set_content(
         f"Код подтверждения PromptOptimizer: {code}\n\n"
         "Введите его в расширении в течение 10 минут, чтобы получить 50 улучшений.\n"
@@ -32,8 +34,7 @@ def _send(email: str, code: str) -> None:
             smtp.starttls(context=context)
         if settings.smtp_username:
             smtp.login(settings.smtp_username, settings.smtp_password or "")
-        recipient = validate_email(email, check_deliverability=False)
-        smtp.send_message(message, to_addrs=[recipient.ascii_email or recipient.normalized])
+        smtp.send_message(message, to_addrs=[address])
 
 
 async def send_verification_email(email: str, code: str) -> None:

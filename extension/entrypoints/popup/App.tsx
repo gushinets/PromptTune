@@ -1313,7 +1313,7 @@ function OptimizerApp({
                   mode={audienceMode}
                   goal={goal}
                   loading={loading || layoutTransition}
-                  submitDisabled={!sourceContextReady || isExhausted}
+                  submitDisabled={!sourceContextReady || (isExhausted && !isQuotaPending)}
                   hidden={loading || Boolean(improved && !editingOriginal)}
                   onGoalChange={handleGoalChange}
                   onOriginalChange={(text) => {
