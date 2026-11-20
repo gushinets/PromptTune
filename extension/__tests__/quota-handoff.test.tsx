@@ -275,3 +275,19 @@ it.each([
   expect(host.querySelector('[role="dialog"]')).toBeNull();
   expect(host.querySelector(".btn-upgrade")).toBeNull();
 });
+
+it("shows the Moscow renewal day when the browser's default timezone is New York", async () => {
+  const formatDate = Date.prototype.toLocaleDateString;
+  vi.spyOn(Date.prototype, "toLocaleDateString").mockImplementation(function (
+    this: Date,
+    locales,
+    options,
+  ) {
+    return formatDate.call(this, locales ?? "en-US", { timeZone: "America/New_York", ...options });
+  });
+  vi.mocked(browser.runtime.sendMessage).mockRejectedValue(new Error("offline"));
+  await act(async () =>
+    root.render(<App quotaOnly initialQuota={{ ...quota, bonus_claimed: true }} />),
+  );
+  expect(host.querySelector(".upgrade-banner")?.textContent).toContain("1/6/2027");
+});

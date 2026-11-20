@@ -111,7 +111,13 @@ export function QuotaOnlyWindow({
         )}
         {alreadyClaimed && <p role="status">{t.emailBonusAlreadyClaimed}</p>}
         {quota?.next_reset_at && (
-          <p>{t.quotaRenewal(new Date(quota.next_reset_at).toLocaleDateString())}</p>
+          <p>
+            {t.quotaRenewal(
+              new Date(quota.next_reset_at).toLocaleDateString(undefined, {
+                timeZone: "Europe/Moscow",
+              }),
+            )}
+          </p>
         )}
         {quota && !quota.bonus_claimed && !quota.pending_improvements && remaining === 0 && (
           <button className="btn-upgrade" onClick={() => setOffer(true)}>

@@ -20,7 +20,7 @@ The email bonus sends the address and installation ID to the configured backend 
 
 Private hotkey quota windows contain only quota information and a session-bound return target. They never mount the editor or restore/save regular drafts. Returning focuses the source tab and closes the quota window; private prompt text and generated results remain in the source page.
 
-The installation timestamp is journaled in extension-owned IndexedDB before writing `storage.local`. This journal survives browser restarts independently of Firefox alarms and is removed after successful installation registration. Alarms schedule retries but are not the persistent record.
+The installation timestamp is written to `storage.local`, with an additional journal attempted first in extension-owned IndexedDB. A valid local timestamp or confirmed registration remains usable when IndexedDB is unavailable. When the local timestamp is missing, the journal enables recovery across browser restarts independently of Firefox alarms and is removed after successful registration. Alarms schedule retries but are not the persistent record.
 
 ## Release Checklist
 

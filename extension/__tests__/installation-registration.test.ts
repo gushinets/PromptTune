@@ -103,6 +103,25 @@ it.each([true, false])(
   },
 );
 
+it.each([false, true])(
+  "registers with IndexedDB denied using the original install date (fresh=%s)",
+  async (fresh) => {
+    const installedAt = "2026-01-31T20:59:59.000Z";
+    state = { installation_id: "installed", ...(fresh ? {} : { install_at: installedAt }) };
+    vi.spyOn(indexedDB, "open").mockImplementation(() => {
+      throw new DOMException("IndexedDB unavailable", "InvalidStateError");
+    });
+    const request = vi
+      .spyOn(apiClient, "registerInstallation")
+      .mockResolvedValue({ registered: true });
+    const register = createInstallationRegistrar();
+    if (fresh) await register.initialize(installedAt);
+    await register();
+    expect(request).toHaveBeenCalledWith("installed", installedAt);
+    expect(state.registered_installation_id).toBe("installed");
+  },
+);
+
 it("registers from onInstalled and retries its original timestamp from the alarm", async () => {
   state = { installation_id: "installed" };
   vi.stubGlobal("defineBackground", (main: () => void) => main);
@@ -274,6 +293,22 @@ it("retries persisting the original install timestamp after storage recovers", a
   expect(state.install_at).toBe(installedAt);
   expect(request).toHaveBeenCalledTimes(1);
   expect(request).toHaveBeenCalledWith("installed", installedAt);
+});
+
+it("recovers the original date from an alarm after worker recreation when IndexedDB is denied", async () => {
+  state = { installation_id: "installed" };
+  vi.spyOn(indexedDB, "open").mockImplementation(() => {
+    throw new DOMException("IndexedDB unavailable", "InvalidStateError");
+  });
+  vi.mocked(browser.storage.local.set).mockRejectedValueOnce(new Error("storage unavailable"));
+  const request = vi
+    .spyOn(apiClient, "registerInstallation")
+    .mockResolvedValue({ registered: true });
+  await expect(
+    createInstallationRegistrar().initialize("2026-01-31T20:59:59.000Z"),
+  ).rejects.toThrow("storage unavailable");
+  await createInstallationRegistrar()();
+  expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
 });
 
 it("blocks registration until retrying the install-date write succeeds", async () => {

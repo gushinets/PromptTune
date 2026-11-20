@@ -27,7 +27,12 @@ export function createInstallationRegistrar(): InstallationRegistrar {
     const requestedEpoch = epoch;
     const promise = (async () => {
       let installedAt = pendingInstallAt;
-      if (installedAt === null) installedAt = await readInstallationJournal();
+      if (installedAt === null) {
+        const state = await browser.storage.local.get(STORAGE_KEYS.INSTALL_AT);
+        const storedAt = state[STORAGE_KEYS.INSTALL_AT];
+        if (typeof storedAt === "string" && Number.isFinite(Date.parse(storedAt))) return;
+        installedAt = await readInstallationJournal().catch(() => null);
+      }
       if (installedAt === null) {
         // Recover journals written by earlier versions during the current browser session.
         const alarms = await browser.alarms.getAll();
@@ -42,7 +47,9 @@ export function createInstallationRegistrar(): InstallationRegistrar {
       }
       if (installedAt === null) return;
       if (requestedEpoch !== epoch) return;
-      await writeInstallationJournal(installedAt);
+      // Either persistent store can preserve the anchor. A denied journal must not prevent
+      // the local write; if that also fails, retain pendingInstallAt and retry the original date.
+      await writeInstallationJournal(installedAt).catch(() => undefined);
       const journal = `${INSTALLATION_TIMESTAMP_ALARM_PREFIX}${installedAt}`;
       await browser.alarms.create(journal, { periodInMinutes: 5 });
       if (BACKEND_MODE === "fastapi") {
@@ -52,7 +59,7 @@ export function createInstallationRegistrar(): InstallationRegistrar {
       if (requestedEpoch === epoch) pendingInstallAt = null;
       // Keep the normal registration retry after the timestamp is durably committed.
       await browser.alarms.clear(journal).catch(() => undefined);
-      if (BACKEND_MODE !== "fastapi") await clearInstallationJournal();
+      if (BACKEND_MODE !== "fastapi") await clearInstallationJournal().catch(() => undefined);
     })().finally(() => {
       if (initialization === promise) initialization = null;
     });
