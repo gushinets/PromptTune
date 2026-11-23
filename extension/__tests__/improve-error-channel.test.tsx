@@ -215,3 +215,56 @@ it("does not show an aborted response as a service error", async () => {
   expect(host.querySelector(".error-toast")).toBeNull();
   expect(host.querySelector<HTMLButtonElement>(".btn-improve")!.disabled).toBe(false);
 });
+
+it.each([
+  ["popup", "en"],
+  ["sidepanel", "en"],
+  ["popup", "ru"],
+  ["sidepanel", "ru"],
+] as const)(
+  "localizes a pending-quota preflight 502 in %s (%s) and permits retry",
+  async (viewMode, locale) => {
+    language.value = locale;
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    let quotaCalls = 0;
+    let failPreflight = true;
+    vi.mocked(fetch).mockImplementation(async (...args) => {
+      if (String(args[0]).includes("/v1/limits")) {
+        quotaCalls++;
+        if (quotaCalls === 1)
+          return new Response(
+            JSON.stringify({
+              ...quota,
+              remaining: 0,
+              per_day_remaining: 0,
+              pending_improvements: 1,
+              exhausted: false,
+            }),
+          );
+        if (failPreflight)
+          return new Response(JSON.stringify({ detail: "Controlled quota preflight failure" }), {
+            status: 502,
+          });
+      }
+      return originalFetch(...args);
+    });
+    failure = null;
+    const goal = await start(viewMode);
+    expect(host.querySelector(".error-toast-message")?.textContent).toBe(
+      locale === "ru"
+        ? "Сервис временно недоступен. Попробуйте снова через несколько минут."
+        : "The service is temporarily unavailable. Please try again in a few minutes.",
+    );
+    expect(host.textContent).not.toMatch(/Uncaught|ApiError|API 502/);
+    expect(host.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("Original prompt");
+    expect(host.querySelector<HTMLInputElement>(".goal-pill-input:checked")!.value).toBe(goal);
+    expect(host.querySelector<HTMLButtonElement>(".btn-improve")!.disabled).toBe(false);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/v1/improve"))).toBe(
+      false,
+    );
+    failPreflight = false;
+    await act(async () => host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
+    expect(host.textContent).toContain("Recovered result");
+    expect(host.querySelector(".error-toast")).toBeNull();
+  },
+);

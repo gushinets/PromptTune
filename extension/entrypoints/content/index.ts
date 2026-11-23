@@ -2,7 +2,8 @@ import browser from "webextension-polyfill";
 import { getAdapter } from "@adapters/registry";
 import { trackEvent } from "@shared/analytics";
 import { extractImproveResponse, isPeriodQuotaExhausted } from "@shared/response-utils";
-import { throwIfImproveFailed } from "@shared/improve-error";
+import { ApiError } from "@shared/api-client";
+import { throwIfBackgroundFailed } from "@shared/background-error";
 import type { Message } from "@shared/messages";
 import type { ImproveGoal } from "@shared/types";
 
@@ -103,11 +104,14 @@ export default defineContentScript({
                 analytics_context: { source: "content" },
               },
             });
-            throwIfImproveFailed(response);
+            throwIfBackgroundFailed(response);
           } catch (error) {
             if (
-              String(error).toLowerCase().includes("monthly improvement quota exhausted") ||
-              String(error).toLowerCase().includes("temporarily reserved by pending requests")
+              (error instanceof ApiError
+                ? error.status === 429
+                : /\bAPI 429\b/i.test(String(error))) &&
+              (String(error).toLowerCase().includes("monthly improvement quota exhausted") ||
+                String(error).toLowerCase().includes("temporarily reserved by pending requests"))
             ) {
               await browser.runtime.sendMessage({
                 type: "SHOW_QUOTA",

@@ -25,7 +25,7 @@ import {
 } from "@shared/storage";
 import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
-import { throwIfImproveFailed } from "@shared/improve-error";
+import { throwIfBackgroundFailed } from "@shared/background-error";
 import {
   describeUnexpectedBackgroundResponse,
   extractImproveResponse,
@@ -917,7 +917,7 @@ function OptimizerApp({
         },
       });
       if (activeRequestRef.current !== requestKey) return;
-      throwIfImproveFailed(response);
+      throwIfBackgroundFailed(response);
       const result = extractImproveResponse(response);
 
       if (result) {
