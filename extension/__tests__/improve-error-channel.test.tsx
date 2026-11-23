@@ -147,6 +147,32 @@ it.each(["popup", "sidepanel"] as const)("localizes 502 in Russian in %s", async
 });
 
 it.each([
+  ["popup", 502, "The service is temporarily unavailable. Please try again in a few minutes.", 1],
+  [
+    "sidepanel",
+    502,
+    "The service is temporarily unavailable. Please try again in a few minutes.",
+    1,
+  ],
+  ["popup", 429, en.quotaPending, 2],
+  ["sidepanel", 429, en.quotaPending, 2],
+] as const)(
+  "prioritizes HTTP status over pending-quota provider text in %s (%s)",
+  async (viewMode, status, expected, quotaLookups) => {
+    failure = {
+      status,
+      detail: "Provider reports tokens temporarily reserved by pending requests",
+    };
+    await start(viewMode);
+    expect(host.querySelector(".error-toast-message")?.textContent).toBe(expected);
+    // Only quota failures should trigger an additional balance-recovery request.
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes("/v1/limits")),
+    ).toHaveLength(quotaLookups);
+  },
+);
+
+it.each([
   [422, "Input text exceeds maximum length of 8000 characters.", "Text is too long"],
   [422, "Please choose a goal", "Please choose a goal"],
   [429, "Rate limit exceeded", en.quotaTemporary],

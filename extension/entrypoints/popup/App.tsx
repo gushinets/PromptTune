@@ -789,6 +789,9 @@ function OptimizerApp({
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
     (err: unknown): ErrorInfo => {
+      if (err instanceof ApiError && err.status >= 500 && err.status < 600) {
+        return { type: "generic", message: t.errorServiceUnavailable };
+      }
       const errorMessage = err instanceof Error ? err.message : String(err);
       const lengthLimit = parseInputLengthError(errorMessage);
       if (
@@ -805,9 +808,6 @@ function OptimizerApp({
         return { type: "rate-limit", message: t.quotaPending };
       }
       if (err instanceof ApiError) {
-        if (err.status >= 500 && err.status < 600) {
-          return { type: "generic", message: t.errorServiceUnavailable };
-        }
         if (err.status === 403 || err.detail.toLowerCase().includes("login is invalid")) {
           return { type: "auth", message: t.errorAuthMessage };
         }
