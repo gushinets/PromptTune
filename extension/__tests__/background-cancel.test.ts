@@ -71,7 +71,7 @@ it("aborts the actual HTTP request when the owner disconnects without React clea
   }).catch((error) => error);
   await posted;
   port.disconnect();
-  expect(await work).toMatchObject({ name: "AbortError" });
+  expect(await work).toMatchObject({ type: "IMPROVE_ERROR", error: { kind: "aborted" } });
   expect(signal?.aborted).toBe(true);
 });
 
@@ -90,7 +90,7 @@ it("does not POST if the owner disconnects during configuration lookup", async (
   port.disconnect();
   await Promise.resolve();
   finish({ ok: true, json: async () => ({ prompt_input_max_chars: 30000 }) });
-  expect(await work).toMatchObject({ name: "AbortError" });
+  expect(await work).toMatchObject({ type: "IMPROVE_ERROR", error: { kind: "aborted" } });
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/v1/improve"))).toBe(
     false,
   );
@@ -122,10 +122,10 @@ it("disconnecting one surface does not cancel another surface's request", async 
   const workB = run("second");
   await posted;
   first.disconnect();
-  expect(await workA).toMatchObject({ name: "AbortError" });
+  expect(await workA).toMatchObject({ type: "IMPROVE_ERROR", error: { kind: "aborted" } });
   expect(signals.get("second")?.aborted).toBe(false);
   second.disconnect();
-  expect(await workB).toMatchObject({ name: "AbortError" });
+  expect(await workB).toMatchObject({ type: "IMPROVE_ERROR", error: { kind: "aborted" } });
 });
 
 it("aborts the actual improve HTTP request when the UI cancels", async () => {
@@ -150,7 +150,7 @@ it("aborts the actual improve HTTP request when the UI cancels", async () => {
   await posted;
   await handle({ type: "CANCEL_IMPROVE", payload: { client_request_id: "r1" } });
   expect(signal?.aborted).toBe(true);
-  expect(await work).toMatchObject({ name: "AbortError" });
+  expect(await work).toMatchObject({ type: "IMPROVE_ERROR", error: { kind: "aborted" } });
 });
 it("does not POST if cancellation arrives during configuration lookup", async () => {
   let finishConfig!: (value: unknown) => void;
@@ -165,7 +165,7 @@ it("does not POST if cancellation arrives during configuration lookup", async ()
   }).catch((error) => error);
   await handle({ type: "CANCEL_IMPROVE", payload: { client_request_id: "r2" } });
   finishConfig({ ok: true, json: async () => ({ prompt_input_max_chars: 30000 }) });
-  expect(await work).toMatchObject({ name: "AbortError" });
+  expect(await work).toMatchObject({ type: "IMPROVE_ERROR", error: { kind: "aborted" } });
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith("/v1/improve"))).toBe(
     false,
   );

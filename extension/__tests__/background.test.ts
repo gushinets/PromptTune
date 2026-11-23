@@ -20,7 +20,14 @@ it("blocks a direct background request before analytics or improve POST", async 
   const handle = listener as unknown as (msg: unknown) => Promise<unknown>;
   await expect(
     handle({ type: "IMPROVE_REQUEST", payload: { text: "x".repeat(30001) } }),
-  ).rejects.toThrow("maximum length of 30000");
+  ).resolves.toEqual({
+    type: "IMPROVE_ERROR",
+    error: {
+      kind: "api",
+      status: 422,
+      detail: "Input text exceeds maximum length of 30000 characters.",
+    },
+  });
   expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual([
     "https://api.anytoolai.store/v1/config",
   ]);

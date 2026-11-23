@@ -7,6 +7,7 @@ import browser from "webextension-polyfill";
 import { requireEmailConsent } from "@shared/email-consent";
 import { openQuotaWindow } from "@shared/quota-window";
 import { apiClient, ApiError } from "@shared/api-client";
+import { serializeImproveError } from "@shared/improve-error";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
@@ -655,6 +656,8 @@ export default defineBackground(() => {
             }
             throw error;
           }
+        } catch (error) {
+          return serializeImproveError(error);
         } finally {
           pendingRequests.delete(requestKey);
         }

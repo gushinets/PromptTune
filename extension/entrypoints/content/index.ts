@@ -2,6 +2,7 @@ import browser from "webextension-polyfill";
 import { getAdapter } from "@adapters/registry";
 import { trackEvent } from "@shared/analytics";
 import { extractImproveResponse, isPeriodQuotaExhausted } from "@shared/response-utils";
+import { throwIfImproveFailed } from "@shared/improve-error";
 import type { Message } from "@shared/messages";
 import type { ImproveGoal } from "@shared/types";
 
@@ -102,6 +103,7 @@ export default defineContentScript({
                 analytics_context: { source: "content" },
               },
             });
+            throwIfImproveFailed(response);
           } catch (error) {
             if (
               String(error).toLowerCase().includes("monthly improvement quota exhausted") ||
