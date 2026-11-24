@@ -9,6 +9,9 @@ on:
       - .editorconfig
       - .github/workflows/ci-extension.yml
 
+permissions:
+  contents: read
+
 jobs:
   lint-and-build:
     runs-on: ubuntu-latest

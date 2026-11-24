@@ -4,8 +4,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   changes:
+    permissions:
+      pull-requests: read
     runs-on: ubuntu-latest
     outputs:
       backend_changed: ${{ steps.changed-files.outputs.backend_changed }}
@@ -154,6 +159,7 @@ jobs:
 
   required:
     name: required-ci / required
+    permissions: {}
     runs-on: ubuntu-latest
     needs:
       - changes
