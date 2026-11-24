@@ -26,7 +26,6 @@ export default defineConfig({
   manifest: (env) => ({
     name: "PromptOptimizer",
     description: "Improve your AI prompts with one click",
-    version: "0.1.0",
     icons: {
       "16": "icon-16.png",
       "32": "icon-32.png",
