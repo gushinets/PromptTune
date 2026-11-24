@@ -262,3 +262,27 @@ it("routes an exhausted hotkey attempt to quota UI without changing the field", 
     expect.objectContaining({ type: "SHOW_QUOTA" }),
   );
 });
+
+it.each([
+  [502, "temporarily reserved by pending requests"],
+  [502, "monthly improvement quota exhausted"],
+  [429, "temporarily reserved by pending requests"],
+  [429, "monthly improvement quota exhausted"],
+] as const)("uses restored HTTP %s before hotkey quota detail (%s)", async (status, detail) => {
+  const field = document.createElement("textarea");
+  field.id = "prompt-textarea";
+  field.value = "Existing prompt";
+  document.body.append(field);
+  vi.mocked(browser.runtime.sendMessage).mockImplementation(async (message) => {
+    if ((message as Message).type === "IMPROVE_REQUEST")
+      return { type: "IMPROVE_ERROR", error: { kind: "api", status, detail } };
+    return { ok: true };
+  });
+  const work = handle({ type: "IMPROVE_ACTIVE_FIELD" });
+  if (status === 502) await expect(work).rejects.toMatchObject({ status: 502 });
+  else await work;
+  expect(field.value).toBe("Existing prompt");
+  const showQuota = expect.objectContaining({ type: "SHOW_QUOTA" });
+  if (status === 429) expect(browser.runtime.sendMessage).toHaveBeenCalledWith(showQuota);
+  else expect(browser.runtime.sendMessage).not.toHaveBeenCalledWith(showQuota);
+});

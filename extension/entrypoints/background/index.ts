@@ -7,6 +7,7 @@ import browser from "webextension-polyfill";
 import { requireEmailConsent } from "@shared/email-consent";
 import { openQuotaWindow } from "@shared/quota-window";
 import { apiClient, ApiError } from "@shared/api-client";
+import { serializeBackgroundError } from "@shared/background-error";
 import { ANALYTICS_ENABLED, BACKEND_MODE, STORAGE_KEYS, WELCOME_PAGE_URL } from "@shared/constants";
 import { getInstallationId } from "@shared/storage";
 import type { Message } from "@shared/messages";
@@ -655,6 +656,8 @@ export default defineBackground(() => {
             }
             throw error;
           }
+        } catch (error) {
+          return serializeBackgroundError(error);
         } finally {
           pendingRequests.delete(requestKey);
         }
@@ -685,10 +688,14 @@ export default defineBackground(() => {
         return apiClient.confirmEmailBonus(installationId, msg.code);
       }
       case "GET_LIMITS": {
-        await registerInstallation();
-        const installationId = await getInstallationId();
-        const rate_limit = await apiClient.limits(installationId);
-        return { type: "LIMITS_RESULT", payload: { rate_limit } };
+        try {
+          await registerInstallation();
+          const installationId = await getInstallationId();
+          const rate_limit = await apiClient.limits(installationId);
+          return { type: "LIMITS_RESULT", payload: { rate_limit } };
+        } catch (error) {
+          return serializeBackgroundError(error, "LIMITS_ERROR");
+        }
       }
 
       case "OPEN_AND_PASTE": {

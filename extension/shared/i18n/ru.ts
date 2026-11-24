@@ -184,6 +184,7 @@ export const ru: TranslationKeys = {
   // Errors
   errorAuthMessage: "Ваш логин недействителен. Обновите или переустановите расширение.",
   errorNetworkMessage: "Проверьте интернет-соединение и попробуйте снова.",
+  errorServiceUnavailable: "Сервис временно недоступен. Попробуйте снова через несколько минут.",
   errorRateLimitMessage: (total: number) =>
     `Вы использовали все ${total.toLocaleString()} улучшений в этом месяце.`,
   errorGenericFallback: "Что-то пошло не так. Попробуйте снова.",

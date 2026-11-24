@@ -182,6 +182,8 @@ export const en = {
   // Errors
   errorAuthMessage: "Your login is invalid. Try refreshing the extension or reinstalling.",
   errorNetworkMessage: "Check your internet and try again.",
+  errorServiceUnavailable:
+    "The service is temporarily unavailable. Please try again in a few minutes.",
   errorRateLimitMessage: (total: number) =>
     `You've used all ${total.toLocaleString()} improvements this month.`,
   errorGenericFallback: "Something went wrong. Please try again.",

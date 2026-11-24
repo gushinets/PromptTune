@@ -1,3 +1,4 @@
+import { throwIfBackgroundFailed } from "./background-error";
 import type { ImproveResponse } from "./types";
 
 type RateLimitInfo = NonNullable<ImproveResponse["rate_limit"]>;
@@ -79,6 +80,7 @@ export function extractImproveResponse(value: unknown): ImproveResponse | null {
 }
 
 export function extractRateLimitResponse(value: unknown): RateLimitInfo | null {
+  throwIfBackgroundFailed(value);
   if (isRateLimitInfo(value)) {
     return value;
   }

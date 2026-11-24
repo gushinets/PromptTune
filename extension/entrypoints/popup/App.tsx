@@ -25,6 +25,7 @@ import {
 } from "@shared/storage";
 import { FEATURES, BACKEND_MODE, DEFAULT_PROMPT_INPUT_MAX_CHARS } from "@shared/constants";
 import { apiClient, ApiError } from "@shared/api-client";
+import { throwIfBackgroundFailed } from "@shared/background-error";
 import {
   describeUnexpectedBackgroundResponse,
   extractImproveResponse,
@@ -788,6 +789,9 @@ function OptimizerApp({
   // ── Error mapping ────────────────────────────────────────────────────────────
   const mapErrorToToast = useCallback(
     (err: unknown): ErrorInfo => {
+      if (err instanceof ApiError && err.status >= 500 && err.status < 600) {
+        return { type: "generic", message: t.errorServiceUnavailable };
+      }
       const errorMessage = err instanceof Error ? err.message : String(err);
       const lengthLimit = parseInputLengthError(errorMessage);
       if (
@@ -913,6 +917,7 @@ function OptimizerApp({
         },
       });
       if (activeRequestRef.current !== requestKey) return;
+      throwIfBackgroundFailed(response);
       const result = extractImproveResponse(response);
 
       if (result) {
@@ -959,6 +964,8 @@ function OptimizerApp({
       }
     } catch (err: unknown) {
       if (activeRequestRef.current !== requestKey) return;
+      if ((err instanceof Error || err instanceof DOMException) && err.name === "AbortError")
+        return;
       const info = mapErrorToToast(err);
       setError(info);
       if (info.type === "rate-limit") {
