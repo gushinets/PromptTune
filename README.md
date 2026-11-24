@@ -201,9 +201,9 @@ npm run zip:firefox  # Firefox package
 
 Generated files:
 
-- `extension/.output/prompttune-extension-0.1.0-chrome.zip`
-- `extension/.output/prompttune-extension-0.1.0-firefox.zip`
-- `extension/.output/prompttune-extension-0.1.0-sources.zip` (generated with the Firefox build)
+- `extension/.output/prompttune-extension-<version>-chrome.zip`
+- `extension/.output/prompttune-extension-<version>-firefox.zip`
+- `extension/.output/prompttune-extension-<version>-sources.zip` (generated with the Firefox build)
 
 Notes:
 - `npm run zip` builds the Chrome Manifest V3 package used by Chrome and Edge.
