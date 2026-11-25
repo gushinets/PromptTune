@@ -120,7 +120,7 @@ wait_for_service_ready() {
   local container_id
   local attempt
 
-  container_id="$(compose ps -q "${service}")"
+  container_id="$(regular_service_container "${service}")"
   [[ -n "${container_id}" ]] || die "Could not find container for service ${service}"
 
   for attempt in $(seq 1 30); do
@@ -230,10 +230,33 @@ print_git_context() {
   fi
 }
 
+regular_service_container() {
+  local service="$1"
+  local candidates
+  local candidate
+  local oneoff
+  local selected=""
+
+  candidates="$(compose ps -a -q "${service}")" || return 1
+  while IFS= read -r candidate; do
+    [[ -n "${candidate}" ]] || continue
+    oneoff="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.oneoff"}}' "${candidate}")" \
+      || return 1
+    case "${oneoff}" in
+      True|true) continue ;;
+      False|false) ;;
+      *) die "Could not identify regular container for service ${service}" ;;
+    esac
+    [[ -z "${selected}" ]] || die "Expected a single regular container for service ${service}"
+    selected="${candidate}"
+  done <<< "${candidates}"
+  printf '%s\n' "${selected}"
+}
+
 require_support_container() {
   local service="$1"
   local container_id
-  container_id="$(compose ps -a -q "${service}")"
+  container_id="$(regular_service_container "${service}")"
   [[ -n "${container_id}" ]] \
     || die "Supporting service ${service} is not provisioned; provision it separately before a backend release"
 }
@@ -276,6 +299,8 @@ run_preflight() {
     if [[ "$(read_env_value "PROMPTTUNE_START_CADDY")" != "false" ]]; then
       require_support_container caddy
     fi
+    # An absent API is valid for a first release; multiple regular instances are not.
+    regular_service_container api >/dev/null
   fi
   log "Preflight checks passed"
 }
@@ -303,14 +328,14 @@ run_audited_deploy() {
 
   compose up -d --no-recreate --no-build --pull never egress-lb egress-alert
 
+  log "Applying database migrations before replacing the current API"
+  compose run --rm --no-deps --pull never api alembic upgrade head
+
   log "Creating API container without starting it"
   compose up --no-start --no-deps --no-build --pull never api
-  api_container="$(compose ps -a -q api)"
+  api_container="$(regular_service_container api)"
   [[ -n "${api_container}" ]] || die "Could not find the created API container"
   verify_audited_api_image "${api_container}"
-
-  log "Applying database migrations"
-  compose run --rm --no-deps --pull never api alembic upgrade head
 
   log "Starting API container with verified image ${RELEASE_IMAGE}"
   docker start "${api_container}" >/dev/null

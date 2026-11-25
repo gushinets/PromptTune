@@ -68,7 +68,7 @@ def test_production_preflight_requires_smoke_origin_in_allowed_list(tmp_path: Pa
 
 
 @pytest.mark.parametrize(
-    ("release_arch", "running_image", "post_start_image", "missing_support"),
+    ("release_arch", "running_image", "post_start_image", "scenario"),
     [
         (None, None, None, None),
         ("linux/amd64", None, None, None),
@@ -76,12 +76,16 @@ def test_production_preflight_requires_smoke_origin_in_allowed_list(tmp_path: Pa
         ("linux/amd64", "wrong", None, None),
         ("linux/amd64", None, "wrong", None),
         ("linux/amd64", "inspect-error", None, None),
-        ("linux/amd64", None, None, "egress-lb"),
+        ("linux/amd64", None, None, "missing-support"),
+        ("linux/amd64", None, None, "oneoff-leftovers"),
+        ("linux/amd64", None, None, "oneoff-support-only"),
+        ("linux/amd64", None, None, "multiple-api"),
+        ("linux/amd64", None, None, "migration-failure"),
     ],
 )
 @pytest.mark.parametrize("start_caddy", ["true", "false"])
 def test_production_smoke_checks_cors_for_each_extension_endpoint(
-    tmp_path: Path, release_arch, running_image, post_start_image, missing_support, start_caddy
+    tmp_path: Path, release_arch, running_image, post_start_image, scenario, start_caddy
 ):
     script = _copy_deploy_script(tmp_path)
     _write_env(tmp_path / "infra" / ".env", EXTENSION_ORIGIN)
@@ -101,7 +105,9 @@ if [[ "$1 ${2:-}" == "image inspect" ]]; then
 elif [[ "$*" == "info --format {{.DockerRootDir}}" ]]; then
   printf '/tmp\\n'
 elif [[ "$1" == "inspect" ]]; then
-  if [[ "$*" == *'{{.Image}}'* ]]; then
+  if [[ "$*" == *'com.docker.compose.oneoff'* ]]; then
+    if [[ "${!#}" == "one-off" ]]; then printf 'True\\n'; else printf 'False\\n'; fi
+  elif [[ "$*" == *'{{.Image}}'* ]]; then
     [[ "${RUNNING_IMAGE}" != "inspect-error" ]] || exit 1
     if [[ -e "${API_STARTED}" ]]; then
       printf '%s\\n' "${POST_START_IMAGE}"
@@ -111,11 +117,22 @@ elif [[ "$1" == "inspect" ]]; then
   else
     printf 'healthy\\n'
   fi
+elif [[ "$*" == *" api alembic upgrade head" && "${SCENARIO}" == "migration-failure" ]]; then
+  exit 42
 elif [[ "$1" == "start" ]]; then
   touch "${API_STARTED}"
 elif [[ "$*" == *" ps "* && "$*" == *"-q"* ]]; then
-  [[ -z "${MISSING_SUPPORT}" || "$*" != *"-q ${MISSING_SUPPORT}" ]] || exit 0
-  printf 'fake-container\\n'
+  if [[ "${SCENARIO}" == "missing-support" && "$*" == *"-q egress-lb" ]]; then
+    exit 0
+  elif [[ "${SCENARIO}" == "oneoff-support-only" && "$*" == *"-q egress-lb" ]]; then
+    printf 'one-off\\n'
+  elif [[ "${SCENARIO}" == "oneoff-leftovers" ]]; then
+    printf 'one-off\\nfake-container\\n'
+  elif [[ "${SCENARIO}" == "multiple-api" && "$*" == *"-q api" ]]; then
+    printf 'fake-container\\nsecond-container\\n'
+  else
+    printf 'fake-container\\n'
+  fi
 fi
 """
     )
@@ -150,7 +167,7 @@ fi
         "RUNNING_IMAGE": running_image or "sha256:" + "a" * 64,
         "POST_START_IMAGE": post_start_image or "sha256:" + "a" * 64,
         "API_STARTED": str(tmp_path / "api-started"),
-        "MISSING_SUPPORT": missing_support or "",
+        "SCENARIO": scenario or "",
     }
     image = "sha256:" + "a" * 64
     args = ["--image", image] if release_arch else []
@@ -163,11 +180,21 @@ fi
     )
 
     calls = command_log.read_text() if command_log.exists() else ""
-    if missing_support:
+    if scenario in {"missing-support", "oneoff-support-only", "multiple-api"}:
         assert result.returncode != 0
-        assert f"Supporting service {missing_support} is not provisioned" in result.stderr
+        if scenario == "multiple-api":
+            assert "single regular container for service api" in result.stderr
+        else:
+            assert "Supporting service egress-lb is not provisioned" in result.stderr
         assert " up " not in calls
         assert " upgrade head" not in calls
+        return
+    if scenario == "migration-failure":
+        assert result.returncode == 42
+        assert " upgrade head" in calls
+        assert "up --no-start" not in calls
+        assert "docker start " not in calls
+        assert "docker stop " not in calls
         return
     if release_arch == "linux/arm64":
         assert result.returncode != 0
@@ -181,7 +208,6 @@ fi
         assert "curl " not in calls
         if running_image in {"wrong", "inspect-error"}:
             assert "docker start fake-container" not in calls
-            assert " upgrade head" not in calls
         else:
             assert calls.index("docker start fake-container") < calls.index(
                 "docker stop fake-container"
@@ -196,10 +222,12 @@ fi
         assert "up -d --no-recreate --no-build --pull never egress-lb egress-alert" in calls
         assert "up --no-start --no-deps --no-build --pull never api" in calls
         assert "docker start fake-container" in calls
+        assert "docker start one-off" not in calls
+        assert "docker stop one-off" not in calls
         assert (
-            calls.index("up --no-start --no-deps")
+            calls.index(" upgrade head")
+            < calls.index("up --no-start --no-deps")
             < calls.index("inspect --format {{.Image}}")
-            < calls.index(" upgrade head")
             < calls.index("docker start fake-container")
         )
         if start_caddy == "true":

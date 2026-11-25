@@ -66,8 +66,10 @@ make migrate
 Use the production stack only for VPS deployment. Follow the
 [canonical runbook](../docs/deployment.md#3-standard-production-deploy-load-the-approved-image)
 for first deployment, routine updates and rollback. Select the approved image
-and matching dependency report from the same successful Trivy run, retain them,
+and matching dependency report from the same successful Trivy `push` run on `main`
+(not a PR's temporary merge commit), retain them,
 check out their approved source commit, verify the archive checksum and load it.
+The dependency evidence includes `backend-health.json` for the exact scanned IID.
 Then, from `infra/`, use its exact image ID:
 
 ```bash
@@ -77,9 +79,11 @@ image="$(cat "$release_dir/image/backend-image-id.txt")"
 ./scripts/deploy-prod.sh --image "$image"
 ```
 
-The image path removes the API build recipe, disables building/pulling, creates
-and verifies the API container before starting it, and uses the approved image
-for migrations and startup. A failed identity check stops the API. Existing
+The image path removes the API build recipe and disables building/pulling. It
+runs migrations from the approved image while the previous API stays running,
+then creates and verifies the replacement container before starting it. A failed
+identity check stops the API. One-off diagnostic containers are ignored; exactly
+one regular API container is required. Existing
 support containers are started with `--no-recreate`; do not pull mutable support
 tags during a backend release. Provision or update the support stack separately,
 recording its approved image digests and rollback plan. Keep the original backend

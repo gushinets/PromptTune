@@ -109,10 +109,19 @@ This validates the Compose configuration without printing resolved env values. O
 
 Use this procedure for every production release, including the first deploy.
 Select the `backend-release-<sha>-<attempt>` artifact from a successful Trivy
-workflow together with its `backend-dependencies-<sha>-<attempt>` report from
-the same run. Review the complete OS/Python report, record a release decision
+workflow triggered by **`push` to `main`**, together with its matching
+`backend-dependencies-<sha>-<attempt>` report from the same run. Verify the run's
+event is `push`, its branch is `main`, and the artifact SHA equals the run's full
+head commit SHA. PR runs are review evidence only: their `github.sha` can name a
+temporary `refs/pull/.../merge` commit that a release host cannot fetch normally.
+Do not use PR artifacts for production or rollback.
+
+Review the complete OS/Python report, record a release decision
 for every remaining High/Critical, and record the approved commit SHA and image
-ID. A successful scan job alone is not a release approval.
+ID. Check that `backend-health.json` in the dependency evidence records that same
+image ID and HTTP 200 from both `/healthz` and `/readyz`; the workflow runs migrations
+and starts the exact scanned image against disposable PostgreSQL/Redis. A
+successful scan job alone is not a release approval.
 
 Keep both artifacts and the approval outside the repository, for example under
 `/opt/prompttune-releases/APPROVED_SHA-ATTEMPT/`. Extract the release workflow
@@ -130,7 +139,8 @@ Stop if artifact comparison, checksum verification or image inspection fails.
 ```bash
 set -e
 cd /path/to/PromptTune
-git fetch origin
+git fetch origin main
+git merge-base --is-ancestor APPROVED_SHA origin/main
 git checkout --detach APPROVED_SHA
 
 release_dir=/opt/prompttune-releases/APPROVED_SHA-ATTEMPT
@@ -169,8 +179,11 @@ The guarded script:
 - warns if the repo checkout is dirty; use the approved clean source checkout
 - requires the selected image to be loaded locally and to target linux/amd64
 - starts supporting services without pulling or recreating existing containers
-- creates the API without starting it and checks its `.Image` before migrations/startup
-- uses the selected image for migrations, then starts the exact verified container
+- runs migrations from the selected image while the previous API keeps serving;
+  a migration failure exits before replacing that container
+- creates the replacement API without starting it, excludes one-off diagnostic
+  containers and requires a single regular API container with the approved `.Image`
+- starts that exact verified container
 - checks the started container again and stops it if identity verification fails
 - verifies `healthz`, `readyz`, and `/v1/limits` after the rollout
 - prunes dangling Docker images and build cache after a successful deploy to recover disk space
@@ -217,9 +230,11 @@ The script starts PostgreSQL/Redis, waits for them, runs `alembic upgrade head`
 using the approved image and production `DATABASE_URL`, then starts the same API
 image and the selected supporting services. Do not run a separate source-building
 migration or startup command before it. No `make` installation is required.
-Preparing a changed API container can stop the previous API before migrations;
-schedule that brief maintenance window. A failed image check leaves the new API
-stopped rather than serving an unapproved image.
+The previous API stays running until migrations succeed. Preparing the replacement
+then introduces a brief restart window. A failed image check leaves the new API
+stopped rather than serving an unapproved image. Preflight rejects multiple
+regular API instances and ignores one-off containers left by `compose run`;
+one-off support containers do not count as a provisioned support service.
 
 ## 5. Optional outbound HTTPS proxy
 
@@ -366,7 +381,7 @@ curl -i https://api.anytoolai.store/v1/limits?installation_id=test-installation
 
 A new checkout is not an approved image. For an ordinary update:
 
-1. Select the successful Trivy run for the desired commit and review its matching
+1. Select the successful Trivy **push-to-main** run for the desired commit and review its matching
    release/dependency artifacts and remaining High/Critical findings.
 2. Retain the current approved artifact, image ID and source commit for rollback.
 3. Follow section 3 to check out the newly approved commit, verify and load its
@@ -388,7 +403,9 @@ new revisions exist. Do not replace these commands with a source build after
 If a source change, base update or dependency change requires rebuilding, build
 and scan a new candidate through the Trivy workflow, review its actual installed
 OS/Python packages, and record a new release decision. Then load its saved image
-and deploy through section 3. A scan of an earlier build does not approve it.
+and deploy through section 3. Production candidates come from the main push run
+after the source change is merged, not its temporary PR merge ref. A scan of an
+earlier build does not approve it.
 
 The legacy `make prod-up`, `make prod-migrate`, `make prod-deploy` and bare
 `./scripts/deploy-prod.sh` helpers still build from the checkout. They are source
@@ -412,6 +429,8 @@ steps for that artifact, not for the failed release:
 ```bash
 set -e
 cd /path/to/PromptTune
+git fetch origin main
+git merge-base --is-ancestor PREVIOUS_APPROVED_SHA origin/main
 git checkout --detach PREVIOUS_APPROVED_SHA
 release_dir=/opt/prompttune-releases/PREVIOUS_APPROVED_SHA-ATTEMPT
 cmp "$release_dir/image/backend-image-id.txt" "$release_dir/evidence/backend-image-id.txt"
