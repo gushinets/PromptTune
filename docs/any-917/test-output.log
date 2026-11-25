@@ -1,0 +1,540 @@
+===== baseline-target =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t opens welcome despite
+
+
+ RUN  v3.2.4 D:/Devpy/PromptTune/.any-917/extension
+
+ ✓ __tests__/installation-registration.test.ts (17 tests | 16 skipped) 260ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 16 skipped (17)
+   Start at  22:19:25
+   Duration  16.10s (transform 497ms, setup 307ms, collect 446ms, tests 260ms, environment 13.73s, prepare 597ms)
+
+Exit: 0
+
+===== baseline-file =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts
+
+
+ RUN  v3.2.4 D:/Devpy/PromptTune/.any-917/extension
+
+ ✓ __tests__/installation-registration.test.ts (17 tests) 571ms
+   ✓ keeps a registered installation usable when IndexedDB is denied (timestamp=true)  362ms
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  22:19:54
+   Duration  4.85s (transform 512ms, setup 225ms, collect 472ms, tests 571ms, environment 2.65s, prepare 278ms)
+
+Exit: 0
+
+===== pr71-target =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/.git-evidence-local/experiment/extension
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 16 skipped (17)
+   Start at  22:21:28
+   Duration  18.38s (environment 94%, transform 2%, tests 1%, setup 1%, import 1%)
+
+Exit: 0
+
+===== pr71-pair =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t overtakes slow install cleanup|opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/.git-evidence-local/experiment/extension
+
+ ❯ __tests__/installation-registration.test.ts (17 tests | 1 failed | 15 skipped) 5161ms
+   × opens welcome despite install-date storage failure and recovers from a durable alarm in a new background 5030ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/installation-registration.test.ts > opens welcome despite install-date storage failure and recovers from a durable alarm in a new background
+TestTimeoutError: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ __tests__/installation-registration.test.ts:364:1
+    362| });
+    363|
+    364| it("opens welcome despite install-date storage failure and recovers fr…
+       | ^
+    365|   state = { installation_id: "installed" };
+    366|   vi.stubGlobal("defineBackground", (main: () => void) => main);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 15 skipped (17)
+   Start at  22:21:48
+   Duration  8.43s (tests 64%, environment 31%, transform 2%, setup 2%, import 1%)
+
+Exit: 1
+
+===== pr71-file =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/.git-evidence-local/experiment/extension
+
+ ❯ __tests__/installation-registration.test.ts (17 tests | 1 failed) 5321ms
+   × opens welcome despite install-date storage failure and recovers from a durable alarm in a new background 5019ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/installation-registration.test.ts > opens welcome despite install-date storage failure and recovers from a durable alarm in a new background
+TestTimeoutError: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ __tests__/installation-registration.test.ts:364:1
+    362| });
+    363|
+    364| it("opens welcome despite install-date storage failure and recovers fr…
+       | ^
+    365|   state = { installation_id: "installed" };
+    366|   vi.stubGlobal("defineBackground", (main: () => void) => main);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+   Start at  22:21:59
+   Duration  8.53s (tests 65%, environment 31%, transform 2%, setup 2%, import 1%)
+
+Exit: 1
+
+===== pr71-pair-one-shot =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t overtakes slow install cleanup|opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/.git-evidence-local/experiment/extension
+
+ ❯ __tests__/installation-registration.test.ts (17 tests | 1 failed | 15 skipped) 5363ms
+   × opens welcome despite install-date storage failure and recovers from a durable alarm in a new background 5079ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/installation-registration.test.ts > opens welcome despite install-date storage failure and recovers from a durable alarm in a new background
+TestTimeoutError: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ __tests__/installation-registration.test.ts:364:1
+    362| });
+    363|
+    364| it("opens welcome despite install-date storage failure and recovers fr…
+       | ^
+    365|   state = { installation_id: "installed" };
+    366|   vi.stubGlobal("defineBackground", (main: () => void) => main);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 15 skipped (17)
+   Start at  22:23:28
+   Duration  10.70s (tests 54%, environment 33%, setup 9%, transform 3%, worker 1%, import 1%)
+
+Exit: 1
+
+===== final-install =====
+
+> prompttune-extension@0.1.3 prepare
+> wxt prepare
+
+
+WXT [1m[90m0.20.25[39m[22m
+i Generating types...
+√ Finished in 5.677 s
+
+added 663 packages in 1m
+
+234 packages are looking for funding
+  run `npm fund` for details
+Exit: 0
+
+===== final-pair =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t overtakes slow install cleanup|opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/extension
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 15 skipped (17)
+   Start at  22:22:37
+   Duration  12.32s (environment 83%, tests 7%, transform 5%, setup 2%, import 2%)
+
+Exit: 0
+
+===== final-target-1 =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/extension
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 16 skipped (17)
+   Start at  22:22:51
+   Duration  3.80s (environment 77%, setup 10%, tests 5%, transform 5%, import 3%)
+
+Exit: 0
+
+===== final-target-2 =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/extension
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 16 skipped (17)
+   Start at  22:22:57
+   Duration  3.33s (environment 85%, setup 5%, tests 4%, transform 4%, import 2%)
+
+Exit: 0
+
+===== final-target-3 =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/extension
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 16 skipped (17)
+   Start at  22:23:02
+   Duration  3.80s (environment 76%, setup 12%, transform 5%, tests 4%, import 2%)
+
+Exit: 0
+
+===== final-file =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/extension
+
+
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+   Start at  22:23:07
+   Duration  3.57s (environment 79%, tests 11%, setup 4%, transform 4%, import 2%)
+
+Exit: 0
+
+===== final-lint =====
+
+> prompttune-extension@0.1.3 lint
+> eslint .
+
+Exit: 0
+
+===== final-typecheck =====
+
+> prompttune-extension@0.1.3 typecheck
+> tsc --noEmit
+
+Exit: 0
+
+===== final-format-check =====
+
+> prompttune-extension@0.1.3 format:check
+> prettier --check "**/*.{ts,tsx,json,css,html}"
+
+Checking formatting...
+All matched files use Prettier code style!
+Exit: 0
+
+===== final-coverage =====
+
+> prompttune-extension@0.1.3 test:coverage
+> vitest run --coverage
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/extension
+      Coverage enabled with v8
+
+
+ Test Files  30 passed (30)
+      Tests  453 passed (453)
+   Start at  22:23:13
+   Duration  49.38s (environment 59%, tests 28%, transform 4%, setup 4%, import 3%, worker 1%)
+
+Environment  jsdom was created 30 times · 433.66s total, 59% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   84.43 |    83.26 |   77.24 |   87.11 |
+ adapters          |   53.84 |    45.45 |   41.02 |      54 |
+  chatgpt.ts       |     100 |      100 |   83.33 |     100 |
+  claude.ts        |   33.33 |      100 |   16.66 |   33.33 | 10-22
+  deepseek.ts      |   33.33 |      100 |   16.66 |   33.33 | 10-22
+  fallback.ts      |   57.89 |       40 |   71.42 |   61.11 | 18-29,36,48
+  groq.ts          |   33.33 |      100 |   16.66 |   33.33 | 10-22
+  perplexity.ts    |   33.33 |      100 |   16.66 |   33.33 | 10-22
+ ...nts/background |   48.72 |    38.34 |   47.36 |   49.05 |
+  index.ts         |   48.72 |    38.34 |   47.36 |   49.05 | ...02-712,718-721
+ ...points/content |   80.64 |       75 |   85.71 |   83.33 |
+  index.ts         |   80.64 |       75 |     100 |   83.33 | ...6,74,83-88,170
+  toolbar.tsx      |       0 |        0 |       0 |       0 |
+ entrypoints/popup |   92.88 |    89.48 |   86.66 |   95.38 |
+  App.tsx          |   93.92 |    91.74 |   89.24 |    96.6 | ...1228,1355,1423
+  ...nlyWindow.tsx |   78.72 |    61.53 |      60 |      80 | ...2,68-69,95-127
+ ...pup/components |   84.19 |    80.06 |   82.45 |   87.79 |
+  ActionBar.tsx    |   76.78 |    79.31 |   76.92 |   81.63 | 119-137,151
+  ...onusModal.tsx |   84.55 |    76.85 |   89.65 |   89.56 | ...37,141-148,245
+  Library.tsx      |   65.51 |    56.25 |   63.63 |   65.38 | 10,34-38,44-47
+  LibraryItem.tsx  |    60.6 |       64 |   88.88 |   70.37 | 86-93
+  ...zerResult.tsx |   96.09 |    88.11 |   94.44 |   97.29 | 154,203,275
+  ...ingScreen.tsx |   81.81 |       75 |   66.66 |     100 | 39-40
+  RatingBar.tsx    |   84.61 |     62.5 |   66.66 |   84.61 | 24,29
+  SearchBar.tsx    |      75 |      100 |   66.66 |      75 | 34
+  SiteIcons.tsx    |   83.33 |      100 |   77.77 |   83.33 | 88,104
+  Spinner.tsx      |       0 |      100 |       0 |       0 | 2
+ ...ints/sidepanel |   90.78 |    90.07 |      75 |   96.72 |
+  SidepanelApp.tsx |   91.62 |    90.07 |      75 |   97.79 | 96,197,213,249
+  main.tsx         |       0 |      100 |     100 |       0 | 6-7
+ shared            |   93.01 |    91.29 |      89 |   96.19 |
+  ...tics-types.ts |       0 |      100 |     100 |       0 | 1
+  api-client.ts    |   83.47 |    83.07 |      70 |   88.46 | ...22,234-238,247
+  ...ound-error.ts |     100 |    91.66 |     100 |     100 | 29-30
+  constants.ts     |      90 |    91.66 |     100 |      90 | 15,19
+  email-consent.ts |   94.44 |       90 |     100 |     100 | 11
+  improve-owner.ts |   96.87 |    83.33 |   85.71 |   96.29 | 35
+  ...on-journal.ts |   89.65 |    66.66 |      80 |   95.23 | 22
+  ...gistration.ts |   89.36 |    83.67 |   77.77 |   95.94 | 101-103
+  panel-handoff.ts |    95.9 |    95.17 |   96.15 |    98.7 | 196,274
+  quota-window.ts  |   96.66 |    84.61 |      50 |     100 | 20-77
+  ...onse-utils.ts |    92.3 |       90 |     100 |   92.15 | 89,108,112,117
+  selection.ts     |    92.3 |    98.07 |   72.22 |   98.71 | 158
+  storage.ts       |   95.23 |    91.11 |   98.43 |   97.48 | ...27,244,381,623
+ shared/i18n       |   60.46 |    63.63 |   51.61 |   63.41 |
+  en.ts            |   73.33 |       75 |   71.42 |   73.33 | 147-151
+  index.tsx        |   76.92 |       50 |   66.66 |    90.9 | 27
+  ru.ts            |   33.33 |       60 |   28.57 |   33.33 | ...79-152,182-189
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 84.43% ( 2392/2833 )
+Branches     : 83.26% ( 1916/2301 )
+Functions    : 77.24% ( 455/589 )
+Lines        : 87.11% ( 2183/2506 )
+================================================================================
+Exit: 0
+
+The first one-shot control attempt above reran the unedited experiment. Set-Content rejected -Encoding.
+
+===== pr71-pair-one-shot-verified =====
+
+> prompttune-extension@0.1.3 test
+> vitest run __tests__/installation-registration.test.ts -t overtakes slow install cleanup|opens welcome despite
+
+
+ RUN  v5.1.1 D:/Devpy/PromptTune/.any-917/.git-evidence-local/experiment/extension
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 15 skipped (17)
+   Start at  22:24:42
+   Duration  3.52s (environment 75%, transform 12%, tests 5%, setup 4%, import 4%)
+
+Exit: 0
+
+===== final-build =====
+
+> prompttune-extension@0.1.3 build
+> wxt build
+
+
+WXT [1m[90m0.20.25[39m[22m
+i Building chrome-mv3 for production with Vite 8.0.8
+- Preparing...
+√ Built extension in 3.303 s
+  ├─ .output\chrome-mv3\manifest.json                    980 B
+  ├─ .output\chrome-mv3\popup.html                       561 B
+  ├─ .output\chrome-mv3\sidepanel.html                   495 B
+  ├─ .output\chrome-mv3\background.js                    44.49 kB
+  ├─ .output\chrome-mv3\chunks\App-mg-GhPB6.js           295.72 kB
+  ├─ .output\chrome-mv3\chunks\popup-D5gAEZ48.js         735 B
+  ├─ .output\chrome-mv3\chunks\sidepanel-Bf-E7MqY.js     5.24 kB
+  ├─ .output\chrome-mv3\content-scripts\content.js       20.14 kB
+  ├─ .output\chrome-mv3\assets\App-RKHfHivj.css          18.71 kB
+  ├─ .output\chrome-mv3\assets\popup-x1XGuNl0.css        1 B
+  ├─ .output\chrome-mv3\fonts\geist-cyrillic.woff2       14.9 kB
+  ├─ .output\chrome-mv3\fonts\geist-latin.woff2          29.29 kB
+  ├─ .output\chrome-mv3\fonts\geist-mono-cyrillic.woff2  12.87 kB
+  ├─ .output\chrome-mv3\fonts\geist-mono-latin.woff2     23.11 kB
+  ├─ .output\chrome-mv3\fonts\Geist-Mono-OFL.txt         4.39 kB
+  ├─ .output\chrome-mv3\fonts\Geist-OFL.txt              4.39 kB
+  ├─ .output\chrome-mv3\icon-128.png                     2.41 kB
+  ├─ .output\chrome-mv3\icon-16.png                      353 B
+  ├─ .output\chrome-mv3\icon-32.png                      617 B
+  └─ .output\chrome-mv3\icon-48.png                      906 B
+Σ Total size: 480.3 kB
+√ Finished in 4.050 s
+
+Exit: 0
+
+===== final-zip-chrome =====
+
+> prompttune-extension@0.1.3 zip
+> wxt zip --browser chrome
+
+
+WXT [1m[90m0.20.25[39m[22m
+i Building chrome-mv3 for production with Vite 8.0.8
+- Preparing...
+√ Built extension in 2.083 s
+  ├─ .output\chrome-mv3\manifest.json                    980 B
+  ├─ .output\chrome-mv3\popup.html                       561 B
+  ├─ .output\chrome-mv3\sidepanel.html                   495 B
+  ├─ .output\chrome-mv3\background.js                    44.49 kB
+  ├─ .output\chrome-mv3\chunks\App-mg-GhPB6.js           295.72 kB
+  ├─ .output\chrome-mv3\chunks\popup-D5gAEZ48.js         735 B
+  ├─ .output\chrome-mv3\chunks\sidepanel-Bf-E7MqY.js     5.24 kB
+  ├─ .output\chrome-mv3\content-scripts\content.js       20.14 kB
+  ├─ .output\chrome-mv3\assets\App-RKHfHivj.css          18.71 kB
+  ├─ .output\chrome-mv3\assets\popup-x1XGuNl0.css        1 B
+  ├─ .output\chrome-mv3\fonts\geist-cyrillic.woff2       14.9 kB
+  ├─ .output\chrome-mv3\fonts\geist-latin.woff2          29.29 kB
+  ├─ .output\chrome-mv3\fonts\geist-mono-cyrillic.woff2  12.87 kB
+  ├─ .output\chrome-mv3\fonts\geist-mono-latin.woff2     23.11 kB
+  ├─ .output\chrome-mv3\fonts\Geist-Mono-OFL.txt         4.39 kB
+  ├─ .output\chrome-mv3\fonts\Geist-OFL.txt              4.39 kB
+  ├─ .output\chrome-mv3\icon-128.png                     2.41 kB
+  ├─ .output\chrome-mv3\icon-16.png                      353 B
+  ├─ .output\chrome-mv3\icon-32.png                      617 B
+  └─ .output\chrome-mv3\icon-48.png                      906 B
+Σ Total size: 480.3 kB
+i Zipping extension...
+√ Zipped extension in 427 ms
+  └─ .output\prompttune-extension-0.1.3-chrome.zip  209.63 kB
+Σ Total size: 209.63 kB
+√ Finished in 3.235 s
+
+Exit: 0
+
+===== final-zip-firefox =====
+
+> prompttune-extension@0.1.3 zip
+> wxt zip --browser firefox
+
+
+WXT [1m[90m0.20.25[39m[22m
+i Building firefox-mv2 for production with Vite 8.0.8
+- Preparing...
+√ Built extension in 1.967 s
+  ├─ .output\firefox-mv2\manifest.json                    1.17 kB
+  ├─ .output\firefox-mv2\popup.html                       561 B
+  ├─ .output\firefox-mv2\sidepanel.html                   495 B
+  ├─ .output\firefox-mv2\background.js                    44.88 kB
+  ├─ .output\firefox-mv2\chunks\App-bqDPJ7g9.js           296.66 kB
+  ├─ .output\firefox-mv2\chunks\popup-DMVCvsBm.js         735 B
+  ├─ .output\firefox-mv2\chunks\sidepanel-mWK776LB.js     5.24 kB
+  ├─ .output\firefox-mv2\content-scripts\content.js       20.14 kB
+  ├─ .output\firefox-mv2\assets\App-RKHfHivj.css          18.71 kB
+  ├─ .output\firefox-mv2\assets\popup-x1XGuNl0.css        1 B
+  ├─ .output\firefox-mv2\fonts\geist-cyrillic.woff2       14.9 kB
+  ├─ .output\firefox-mv2\fonts\geist-latin.woff2          29.29 kB
+  ├─ .output\firefox-mv2\fonts\geist-mono-cyrillic.woff2  12.87 kB
+  ├─ .output\firefox-mv2\fonts\geist-mono-latin.woff2     23.11 kB
+  ├─ .output\firefox-mv2\fonts\Geist-Mono-OFL.txt         4.39 kB
+  ├─ .output\firefox-mv2\fonts\Geist-OFL.txt              4.39 kB
+  ├─ .output\firefox-mv2\icon-128.png                     2.41 kB
+  ├─ .output\firefox-mv2\icon-16.png                      353 B
+  ├─ .output\firefox-mv2\icon-32.png                      617 B
+  └─ .output\firefox-mv2\icon-48.png                      906 B
+Σ Total size: 481.83 kB
+i Zipping extension...
+√ Zipped extension in 2.193 s
+  ├─ .output\prompttune-extension-0.1.3-firefox.zip  210.1 kB
+  └─ .output\prompttune-extension-0.1.3-sources.zip  867.25 kB
+Σ Total size: 1.08 MB
+√ Finished in 4.903 s
+
+Exit: 0
+
+===== release-contents =====
+prompttune-extension-0.1.3-chrome.zip SHA256=9CAB81EBB9B0EDDEFD278F451F0AE49D188BCAA882363861447B25661430DE11 entries=24
+background.js
+icon-128.png
+icon-16.png
+icon-32.png
+icon-48.png
+manifest.json
+popup.html
+sidepanel.html
+assets/
+assets/App-RKHfHivj.css
+assets/popup-x1XGuNl0.css
+chunks/
+chunks/App-mg-GhPB6.js
+chunks/popup-D5gAEZ48.js
+chunks/sidepanel-Bf-E7MqY.js
+fonts/
+fonts/geist-cyrillic.woff2
+fonts/geist-latin.woff2
+fonts/geist-mono-cyrillic.woff2
+fonts/geist-mono-latin.woff2
+fonts/Geist-Mono-OFL.txt
+fonts/Geist-OFL.txt
+content-scripts/
+content-scripts/content.js
+No test dependency paths or bundle markers found.
+prompttune-extension-0.1.3-firefox.zip SHA256=BF3F47CFC3C15092296783260D26D90BF9382C808AE75A33C43D6DEFA21B8A34 entries=24
+background.js
+icon-128.png
+icon-16.png
+icon-32.png
+icon-48.png
+manifest.json
+popup.html
+sidepanel.html
+assets/
+assets/App-RKHfHivj.css
+assets/popup-x1XGuNl0.css
+content-scripts/
+content-scripts/content.js
+chunks/
+chunks/App-bqDPJ7g9.js
+chunks/popup-DMVCvsBm.js
+chunks/sidepanel-mWK776LB.js
+fonts/
+fonts/geist-cyrillic.woff2
+fonts/geist-latin.woff2
+fonts/geist-mono-cyrillic.woff2
+fonts/geist-mono-latin.woff2
+fonts/Geist-Mono-OFL.txt
+fonts/Geist-OFL.txt
+No test dependency paths or bundle markers found.
+prompttune-extension-0.1.3-sources.zip SHA256=0814E6780FED6A6B4FB6EF16899B3A1ADC5E6EF87BD614FA559CC9300B9278ED entries=240
+Excluded by the workflow upload glob.
