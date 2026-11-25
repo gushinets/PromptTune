@@ -70,6 +70,10 @@ and matching dependency report from the same successful Trivy `push` run on `mai
 (not a PR's temporary merge commit), retain them,
 check out their approved source commit, verify the archive checksum and load it.
 The dependency evidence includes `backend-health.json` for the exact scanned IID.
+For an existing source-built production stack's first audited update, prepare
+and rehearse the [bootstrap rollback](../docs/deployment.md#first-transition-from-a-legacy-source-built-production-release)
+first: save the running IID and archive together with a compatible deployer outside
+the checkout. The legacy application's deploy script may not support `--image`.
 Then, from `infra/`, use its exact image ID:
 
 ```bash

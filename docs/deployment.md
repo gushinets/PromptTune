@@ -108,6 +108,9 @@ This validates the Compose configuration without printing resolved env values. O
 ## 3. Standard production deploy: load the approved image
 
 Use this procedure for every production release, including the first deploy.
+Before the first audited update of an already running, source-built production
+stack, prepare and rehearse the bootstrap rollback in section 9. An old release
+without a saved CI artifact or a deployer supporting `--image` needs that path.
 Select the `backend-release-<sha>-<attempt>` artifact from a successful Trivy
 workflow triggered by **`push` to `main`**, together with its matching
 `backend-dependencies-<sha>-<attempt>` report from the same run. Verify the run's
@@ -423,7 +426,90 @@ the selected image, and an older application/migration set may not understand a
 newer schema. It does not downgrade or restore the database automatically. If
 needed, complete the separately reviewed database recovery before continuing.
 
-Select the previous approved release and repeat section 3's verification/loading
+### First transition from a legacy source-built production release
+
+Before changing the existing API, capture its **running image**, not a rebuild
+of its old Git commit. Select the running regular API container, verify its
+Compose service/project labels, and record its source revision separately.
+Prepare a private server-only rollback directory outside the repository:
+
+```bash
+set -euo pipefail
+umask 077
+cd /path/to/PromptTune
+git fetch origin main
+api_container=RUNNING_REGULAR_API_CONTAINER_ID
+rollback_dir=/opt/prompttune-releases/bootstrap-ROLLBACK_ID
+deployer_sha=COMPATIBLE_DEPLOYER_SHA
+test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$api_container")" = api
+case "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.oneoff"}}' "$api_container")" in
+  False|false) ;;
+  *) echo 'Select the regular API container, not a diagnostic one-off' >&2; exit 1 ;;
+esac
+project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$api_container")"
+test -n "$project"
+image="$(docker inspect --format '{{.Image}}' "$api_container")"
+test ! -e "$rollback_dir"
+mkdir -p "$rollback_dir/image" "$rollback_dir/evidence" "$rollback_dir/deployer"
+printf '%s\n' "$image" > "$rollback_dir/image/backend-image-id.txt"
+printf '%s\n' "$project" > "$rollback_dir/compose-project.txt"
+docker image inspect "$image" > "$rollback_dir/evidence/backend-image.json"
+docker image save --output "$rollback_dir/image/backend-image.tar" "$image"
+(cd "$rollback_dir/image" && sha256sum backend-image.tar > backend-image.tar.sha256)
+
+# Freeze a reviewed deployer from a successful main-push release that supports --image.
+git merge-base --is-ancestor "$deployer_sha" origin/main
+git archive "$deployer_sha" infra | tar -x -C "$rollback_dir/deployer"
+printf '%s\n' "$deployer_sha" > "$rollback_dir/deployer-sha.txt"
+# This copy contains production secrets: keep it private on the server, never upload it.
+install -m 600 infra/.env "$rollback_dir/deployer/infra/.env"
+COMPOSE_PROJECT_NAME="$project" bash "$rollback_dir/deployer/infra/scripts/deploy-prod.sh" \
+  --image "$image" --preflight-only
+```
+
+Replace `COMPATIBLE_DEPLOYER_SHA` with the approved **new** deployer commit, not
+the legacy application commit. Keep its full `infra/` tree so relative paths,
+release Compose overrides and mounted assets remain available. The explicit
+Compose project name is essential: running from the saved directory must target
+the existing stack, not create a different project. Existing supporting containers
+remain in place because the audited path uses `--no-recreate`.
+
+Scan the captured legacy IID's actual OS/Python packages, record an explicit
+rollback disposition for its findings, and retain the report and archive checksum
+with this record. Before the first update, rehearse loading that archive and
+restoring it through the **saved compatible deployer** on a disposable stack with
+sanitized configuration and an isolated Compose project. Check the running IID,
+migrations and both health endpoints. Also review schema compatibility and prepare
+database recovery if the new migrations cannot be used by the old image. Do not
+proceed with the first update without a rehearsed rollback or a separately audited
+compatible rollback candidate.
+
+If the first audited rollout fails, restore database state first if required,
+then use the retained bundle; do **not** check out the old source and invoke its
+old `deploy-prod.sh` (for example, `b26a78f` does not support `--image`):
+
+```bash
+set -euo pipefail
+rollback_dir=/opt/prompttune-releases/bootstrap-ROLLBACK_ID
+(cd "$rollback_dir/image" && sha256sum -c backend-image.tar.sha256)
+docker load --input "$rollback_dir/image/backend-image.tar"
+image="$(cat "$rollback_dir/image/backend-image-id.txt")"
+project="$(cat "$rollback_dir/compose-project.txt")"
+COMPOSE_PROJECT_NAME="$project" bash "$rollback_dir/deployer/infra/scripts/deploy-prod.sh" \
+  --image "$image" --preflight-only
+COMPOSE_PROJECT_NAME="$project" bash "$rollback_dir/deployer/infra/scripts/deploy-prod.sh" \
+  --image "$image"
+```
+
+The bundle is independent of the repository's later checkout. Its saved `.env`
+is a private recovery copy, not part of the shareable image/evidence artifacts.
+Preserve the previously approved support configuration too; this backend rollback
+does not roll back independently updated databases, proxies or configuration.
+
+### Rollback between audited releases
+
+Once the preceding release already has an approved main-push artifact and a
+compatible deployer, select it and repeat section 3's verification/loading
 steps for that artifact, not for the failed release:
 
 ```bash

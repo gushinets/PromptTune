@@ -76,10 +76,10 @@ jobs:
             -e POSTGRES_DB=prompttune postgres:16-alpine
           docker run -d --name backend-smoke-redis --network backend-smoke redis:7-alpine
           for attempt in $(seq 1 30); do
-            if docker exec backend-smoke-db pg_isready -U prompttune; then break; fi
+            if docker exec backend-smoke-db pg_isready -h 127.0.0.1 -U prompttune -d prompttune; then break; fi
             sleep 1
           done
-          docker exec backend-smoke-db pg_isready -U prompttune
+          docker exec backend-smoke-db pg_isready -h 127.0.0.1 -U prompttune -d prompttune
           docker run --rm --network backend-smoke \
             -e DATABASE_URL=postgresql+asyncpg://prompttune:smoke-only@backend-smoke-db/prompttune \
             -e REDIS_URL=redis://backend-smoke-redis:6379/0 "$image" alembic upgrade head
