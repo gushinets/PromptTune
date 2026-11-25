@@ -14,6 +14,9 @@ LIMITS_INSTALLATION_ID="${LIMITS_INSTALLATION_ID:-test-installation}"
 CORS_SMOKE_ORIGIN="${CORS_SMOKE_ORIGIN:-chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe}"
 PRECHECK_ONLY=false
 SKIP_SMOKE=false
+RELEASE_IMAGE=""
+RELEASE_FLAGS=()
+RELEASE_RUN_FLAGS=()
 
 log() {
   printf '[deploy] %s\n' "$*"
@@ -37,6 +40,7 @@ Deploy the current PromptTune production checkout with preflight checks.
 Options:
   --preflight-only       Run validation checks without changing containers
   --skip-smoke           Skip HTTP verification after deploy
+  --image sha256:ID     Use an audited, locally loaded linux/amd64 image; never rebuild
   --base-url URL         Override the smoke-test base URL
   --min-free-mb N        Minimum free space required on root/docker filesystems
   -h, --help             Show this help text
@@ -116,7 +120,7 @@ wait_for_service_ready() {
   local container_id
   local attempt
 
-  container_id="$(compose ps -q "${service}")"
+  container_id="$(regular_service_container "${service}")"
   [[ -n "${container_id}" ]] || die "Could not find container for service ${service}"
 
   for attempt in $(seq 1 30); do
@@ -226,6 +230,37 @@ print_git_context() {
   fi
 }
 
+regular_service_container() {
+  local service="$1"
+  local candidates
+  local candidate
+  local oneoff
+  local selected=""
+
+  candidates="$(compose ps -a -q "${service}")" || return 1
+  while IFS= read -r candidate; do
+    [[ -n "${candidate}" ]] || continue
+    oneoff="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.oneoff"}}' "${candidate}")" \
+      || return 1
+    case "${oneoff}" in
+      True|true) continue ;;
+      False|false) ;;
+      *) die "Could not identify regular container for service ${service}" ;;
+    esac
+    [[ -z "${selected}" ]] || die "Expected a single regular container for service ${service}"
+    selected="${candidate}"
+  done <<< "${candidates}"
+  printf '%s\n' "${selected}"
+}
+
+require_support_container() {
+  local service="$1"
+  local container_id
+  container_id="$(regular_service_container "${service}")"
+  [[ -n "${container_id}" ]] \
+    || die "Supporting service ${service} is not provisioned; provision it separately before a backend release"
+}
+
 run_preflight() {
   local docker_root
 
@@ -251,31 +286,97 @@ run_preflight() {
 
   log "Validating production compose config"
   compose config --quiet
+  if [[ -n "${RELEASE_IMAGE}" ]]; then
+    local platform
+    platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${RELEASE_IMAGE}")" \
+      || die "Audited image is not loaded locally; use docker load first"
+    [[ "${platform}" == "linux/amd64" ]] || die "Expected linux/amd64; found ${platform}"
+    log "Using audited image ${RELEASE_IMAGE} (${platform})"
+    local service
+    for service in postgres redis egress-lb egress-alert; do
+      require_support_container "${service}"
+    done
+    if [[ "$(read_env_value "PROMPTTUNE_START_CADDY")" != "false" ]]; then
+      require_support_container caddy
+    fi
+    # An absent API is valid for a first release; multiple regular instances are not.
+    regular_service_container api >/dev/null
+  fi
   log "Preflight checks passed"
+}
+
+verify_audited_api_image() {
+  local container_id="$1"
+  local actual_image
+
+  if ! actual_image="$(docker inspect --format '{{.Image}}' "${container_id}")" \
+    || [[ "${actual_image}" != "${RELEASE_IMAGE}" ]]; then
+    docker stop "${container_id}" >/dev/null \
+      || die "Unable to stop API container after image verification failed"
+    die "API image differs from audited image or could not be verified; API stopped"
+  fi
+}
+
+run_audited_deploy() {
+  local start_caddy
+  local api_container
+
+  log "Starting postgres and redis without replacing supporting containers"
+  compose up -d --no-recreate --no-build --pull never postgres redis
+  wait_for_service_ready "postgres"
+  wait_for_service_ready "redis"
+
+  compose up -d --no-recreate --no-build --pull never egress-lb egress-alert
+
+  log "Applying database migrations before replacing the current API"
+  compose run --rm --no-deps --pull never api alembic upgrade head
+
+  log "Creating API container without starting it"
+  compose up --no-start --no-deps --no-build --pull never api
+  api_container="$(regular_service_container api)"
+  [[ -n "${api_container}" ]] || die "Could not find the created API container"
+  verify_audited_api_image "${api_container}"
+
+  log "Starting API container with verified image ${RELEASE_IMAGE}"
+  docker start "${api_container}" >/dev/null
+  verify_audited_api_image "${api_container}"
+
+  start_caddy="$(read_env_value "PROMPTTUNE_START_CADDY")"
+  if [[ "${start_caddy:-true}" != "false" ]]; then
+    compose up -d --no-deps --no-recreate --no-build --pull never caddy
+  fi
+  compose ps
 }
 
 run_deploy() {
   local start_caddy
 
+  if [[ -n "${RELEASE_IMAGE}" ]]; then
+    run_audited_deploy
+    return
+  fi
+
   log "Starting postgres and redis"
-  compose up -d postgres redis
+  compose up -d ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} postgres redis
 
   wait_for_service_ready "postgres"
   wait_for_service_ready "redis"
 
-  log "Building api image"
-  compose build api
+  if [[ -z "${RELEASE_IMAGE}" ]]; then
+    log "Building api image"
+    compose build api
+  fi
 
   log "Applying database migrations"
-  compose run --rm --no-deps api alembic upgrade head
+  compose run --rm --no-deps ${RELEASE_RUN_FLAGS[@]+"${RELEASE_RUN_FLAGS[@]}"} api alembic upgrade head
 
   start_caddy="$(read_env_value "PROMPTTUNE_START_CADDY")"
   if [[ "${start_caddy:-true}" == "false" ]]; then
     log "Starting api and egress services without PromptTune caddy"
-    compose up -d egress-lb egress-alert api
+    compose up -d ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} egress-lb egress-alert api
   else
     log "Starting api, egress services, and caddy"
-    compose up -d egress-lb egress-alert api caddy
+    compose up -d ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} egress-lb egress-alert api caddy
   fi
 
   log "Current production container state"
@@ -322,6 +423,17 @@ while (($# > 0)); do
       ;;
     --skip-smoke)
       SKIP_SMOKE=true
+      ;;
+    --image)
+      shift
+      [[ $# -gt 0 ]] || die "--image requires a value"
+      [[ "$1" =~ ^sha256:[a-f0-9]{64}$ ]] \
+        || die "--image requires a local sha256 image ID (64 lowercase hex characters)"
+      RELEASE_IMAGE="$1"
+      export BACKEND_IMAGE="${RELEASE_IMAGE}"
+      COMPOSE_FILES+=(-f docker-compose.release.yml)
+      RELEASE_FLAGS=(--no-build --pull never)
+      RELEASE_RUN_FLAGS=(--pull never)
       ;;
     --base-url)
       shift

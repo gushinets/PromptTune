@@ -1,0 +1,6 @@
+# Used only by deploy-prod.sh --image after docker load of the audited image.
+services:
+  api:
+    build: !reset null
+    image: ${BACKEND_IMAGE:?Pass an audited local image ID via deploy-prod.sh --image}
+    pull_policy: never

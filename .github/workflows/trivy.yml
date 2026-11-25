@@ -34,11 +34,11 @@ jobs:
 
       - name: Build backend image
         if: matrix.target == 'backend'
-        run: docker build --tag prompttune-backend:trivy backend
+        run: docker build --platform linux/amd64 --iidfile backend-image-id.txt --tag prompttune-backend:trivy backend
 
       - name: Scan backend image
         if: matrix.target == 'backend'
-        run: trivy image --image-src docker --scanners vuln --format sarif --exit-code 0 --output trivy.sarif prompttune-backend:trivy
+        run: trivy image --image-src docker --scanners vuln --format sarif --exit-code 0 --output trivy.sarif "$(cat backend-image-id.txt)"
 
       - name: Save main report for publication
         if: github.event_name == 'push'
@@ -59,10 +59,56 @@ jobs:
       - name: Record installed backend packages and image identity
         if: matrix.target == 'backend'
         run: |
-          docker image inspect prompttune-backend:trivy > backend-image.json
-          docker run --rm --network none --entrypoint python prompttune-backend:trivy -m pip list --format=json > backend-packages.json
-          docker run --rm --network none --entrypoint python prompttune-backend:trivy -m pip check
-          trivy image --image-src docker --scanners vuln --format json --exit-code 0 --output backend-vulnerabilities.json prompttune-backend:trivy
+          image="$(cat backend-image-id.txt)"
+          docker image inspect "$image" > backend-image.json
+          docker run --rm --network none --entrypoint python "$image" -m pip list --format=json > backend-packages.json
+          docker run --rm --network none --entrypoint dpkg-query "$image" -W > backend-os-packages.txt
+          docker run --rm --network none --entrypoint python "$image" -m pip check
+          trivy image --image-src docker --scanners vuln --pkg-types os,library --list-all-pkgs --format json --exit-code 0 --output backend-vulnerabilities.json "$image"
+
+      - name: Verify the exact backend image starts and is healthy
+        if: matrix.target == 'backend'
+        run: |
+          image="$(cat backend-image-id.txt)"
+          docker network create backend-smoke
+          docker run -d --name backend-smoke-db --network backend-smoke \
+            -e POSTGRES_USER=prompttune -e POSTGRES_PASSWORD=smoke-only \
+            -e POSTGRES_DB=prompttune postgres:16-alpine
+          docker run -d --name backend-smoke-redis --network backend-smoke redis:7-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec backend-smoke-db pg_isready -h 127.0.0.1 -U prompttune -d prompttune; then break; fi
+            sleep 1
+          done
+          docker exec backend-smoke-db pg_isready -h 127.0.0.1 -U prompttune -d prompttune
+          docker run --rm --network backend-smoke \
+            -e DATABASE_URL=postgresql+asyncpg://prompttune:smoke-only@backend-smoke-db/prompttune \
+            -e REDIS_URL=redis://backend-smoke-redis:6379/0 "$image" alembic upgrade head
+          docker run -d --name backend-smoke-api --network backend-smoke \
+            -e DATABASE_URL=postgresql+asyncpg://prompttune:smoke-only@backend-smoke-db/prompttune \
+            -e REDIS_URL=redis://backend-smoke-redis:6379/0 "$image"
+          running="$(docker inspect --format '{{.Image}}' backend-smoke-api)"
+          test "$running" = "$image"
+          docker exec -i backend-smoke-api python - "$running" > backend-health.json <<'PY'
+          import json
+          import sys
+          import time
+          import urllib.request
+
+          for attempt in range(30):
+              try:
+                  checks = {}
+                  for path in ("/healthz", "/readyz"):
+                      with urllib.request.urlopen("http://localhost:8000" + path, timeout=2) as response:
+                          body = json.load(response)
+                          assert response.status == 200 and body == {"status": "ok"}
+                          checks[path] = {"status": response.status, "body": body}
+                  print(json.dumps({"image_id": sys.argv[1], "checks": checks}, indent=2))
+                  break
+              except OSError:
+                  if attempt == 29:
+                      raise
+                  time.sleep(1)
+          PY
 
       - name: Save backend dependency evidence
         if: matrix.target == 'backend'
@@ -70,7 +116,28 @@ jobs:
         with:
           name: backend-dependencies-${{ github.sha }}-${{ github.run_attempt }}
           path: |
+            backend-image-id.txt
             backend-image.json
             backend-packages.json
+            backend-os-packages.txt
             backend-vulnerabilities.json
+            backend-health.json
           if-no-files-found: error
+
+      - name: Export audited backend image
+        if: matrix.target == 'backend'
+        run: |
+          docker image save --output backend-image.tar "$(cat backend-image-id.txt)"
+          sha256sum backend-image.tar > backend-image.tar.sha256
+
+      - name: Save audited backend image for deployment without rebuilding
+        if: matrix.target == 'backend'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-release-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            backend-image.tar
+            backend-image.tar.sha256
+            backend-image-id.txt
+          if-no-files-found: error
+          retention-days: 7

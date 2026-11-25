@@ -63,32 +63,55 @@ make migrate
 
 ## Production commands
 
-Use the production stack only for VPS deployment. The canonical runbook lives in `docs/deployment.md`.
-
-These `make` targets are convenience wrappers. If `make` is not installed on the VPS, run the equivalent `docker compose -f docker-compose.base.yml -f docker-compose.prod.yml ...` commands directly.
-
-Recommended guarded flow:
+Use the production stack only for VPS deployment. Follow the
+[canonical runbook](../docs/deployment.md#3-standard-production-deploy-load-the-approved-image)
+for first deployment, routine updates and rollback. Select the approved image
+and matching dependency report from the same successful Trivy `push` run on `main`
+(not a PR's temporary merge commit), retain them,
+check out their approved source commit, verify the archive checksum and load it.
+The dependency evidence includes `backend-health.json` for the exact scanned IID.
+For an existing source-built production stack's first audited update, prepare
+and rehearse the [bootstrap rollback](../docs/deployment.md#first-transition-from-a-legacy-source-built-production-release)
+first: save the running IID and archive together with a compatible deployer outside
+the checkout. The legacy application's deploy script may not support `--image`.
+Then, from `infra/`, use its exact image ID:
 
 ```bash
-make prod-preflight  # env/config/free-space checks only
-make prod-deploy     # preflight + db/redis + build + migrate + restart + smoke checks
+# release_dir points to the retained, verified release directory from the runbook.
+image="$(cat "$release_dir/image/backend-image-id.txt")"
+./scripts/deploy-prod.sh --image "$image" --preflight-only
+./scripts/deploy-prod.sh --image "$image"
 ```
 
-The deploy script lives at `infra/scripts/deploy-prod.sh`. It deploys the current checkout exactly as-is, warns if the git worktree is dirty, builds the `api` image once, then reuses that image for the migration step and final restart. After a successful deploy it prunes dangling Docker images and build cache to recover space on small VPS disks.
+The image path removes the API build recipe and disables building/pulling. It
+runs migrations from the approved image while the previous API stays running,
+then creates and verifies the replacement container before starting it. A failed
+identity check stops the API. One-off diagnostic containers are ignored; exactly
+one regular API container is required. Existing
+support containers are started with `--no-recreate`; do not pull mutable support
+tags during a backend release. Provision or update the support stack separately,
+recording its approved image digests and rollback plan. Keep the original backend
+artifacts for rollback; an image
+ID that cannot be inspected after loading must not be replaced by a tag or a
+rebuild. No `make` installation is required for this flow.
+
+Read-only/supporting stack helpers remain available:
 
 ```bash
-make prod-db-up    # start postgres + redis only
-make prod-migrate  # apply alembic migrations using the prod env
-make prod-up       # build/start api + caddy
 make prod-logs
 make prod-ps
 make prod-config   # validate prod compose config without printing resolved env values
-make prod-preflight
-make prod-deploy
 make prod-down
 ```
 
 Both config targets use `docker compose ... config --quiet`, so success produces no output.
+
+The legacy `make prod-up`, `make prod-migrate`, `make prod-deploy` and bare
+`./scripts/deploy-prod.sh` helpers build from source. They are for isolated source
+validation, not standard production release or rollback. A rebuilt candidate
+requires its own complete Trivy scan and release decision, followed by the saved
+image procedure above. `make prod-preflight` without an image checks source-mode
+configuration only; use `--image ... --preflight-only` to validate a release.
 
 `infra/.env.example` contains the Chrome Web Store extension origin. The deploy preflight
 rejects wildcard CORS and verifies that `CORS_SMOKE_ORIGIN` is present in `ALLOWED_ORIGINS`.

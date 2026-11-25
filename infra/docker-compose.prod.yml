@@ -1,5 +1,6 @@
 services:
   api:
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       egress-lb:
