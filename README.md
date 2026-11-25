@@ -252,7 +252,7 @@ Backend dependency policy and validation:
   - `ruff format --check .`
 - One-time sanity check:
   - `pip install -e "backend[dev]"`
-  - `python -c "from importlib.metadata import version; print(version('litellm'))"` (expected: `1.82.2`)
+  - `python -c "from importlib.metadata import version; print(version('litellm'))"` (expected: `1.110.3`)
 
 Then set env vars for the extension:
 
