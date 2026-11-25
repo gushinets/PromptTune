@@ -230,6 +230,14 @@ print_git_context() {
   fi
 }
 
+require_support_container() {
+  local service="$1"
+  local container_id
+  container_id="$(compose ps -a -q "${service}")"
+  [[ -n "${container_id}" ]] \
+    || die "Supporting service ${service} is not provisioned; provision it separately before a backend release"
+}
+
 run_preflight() {
   local docker_root
 
@@ -261,12 +269,67 @@ run_preflight() {
       || die "Audited image is not loaded locally; use docker load first"
     [[ "${platform}" == "linux/amd64" ]] || die "Expected linux/amd64; found ${platform}"
     log "Using audited image ${RELEASE_IMAGE} (${platform})"
+    local service
+    for service in postgres redis egress-lb egress-alert; do
+      require_support_container "${service}"
+    done
+    if [[ "$(read_env_value "PROMPTTUNE_START_CADDY")" != "false" ]]; then
+      require_support_container caddy
+    fi
   fi
   log "Preflight checks passed"
 }
 
+verify_audited_api_image() {
+  local container_id="$1"
+  local actual_image
+
+  if ! actual_image="$(docker inspect --format '{{.Image}}' "${container_id}")" \
+    || [[ "${actual_image}" != "${RELEASE_IMAGE}" ]]; then
+    docker stop "${container_id}" >/dev/null \
+      || die "Unable to stop API container after image verification failed"
+    die "API image differs from audited image or could not be verified; API stopped"
+  fi
+}
+
+run_audited_deploy() {
+  local start_caddy
+  local api_container
+
+  log "Starting postgres and redis without replacing supporting containers"
+  compose up -d --no-recreate --no-build --pull never postgres redis
+  wait_for_service_ready "postgres"
+  wait_for_service_ready "redis"
+
+  compose up -d --no-recreate --no-build --pull never egress-lb egress-alert
+
+  log "Creating API container without starting it"
+  compose up --no-start --no-deps --no-build --pull never api
+  api_container="$(compose ps -a -q api)"
+  [[ -n "${api_container}" ]] || die "Could not find the created API container"
+  verify_audited_api_image "${api_container}"
+
+  log "Applying database migrations"
+  compose run --rm --no-deps --pull never api alembic upgrade head
+
+  log "Starting API container with verified image ${RELEASE_IMAGE}"
+  docker start "${api_container}" >/dev/null
+  verify_audited_api_image "${api_container}"
+
+  start_caddy="$(read_env_value "PROMPTTUNE_START_CADDY")"
+  if [[ "${start_caddy:-true}" != "false" ]]; then
+    compose up -d --no-deps --no-recreate --no-build --pull never caddy
+  fi
+  compose ps
+}
+
 run_deploy() {
   local start_caddy
+
+  if [[ -n "${RELEASE_IMAGE}" ]]; then
+    run_audited_deploy
+    return
+  fi
 
   log "Starting postgres and redis"
   compose up -d ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} postgres redis
@@ -293,12 +356,6 @@ run_deploy() {
 
   log "Current production container state"
   compose ps
-  if [[ -n "${RELEASE_IMAGE}" ]]; then
-    local running_image
-    running_image="$(docker inspect --format '{{.Image}}' "$(compose ps -q api)")"
-    [[ "${running_image}" == "${RELEASE_IMAGE}" ]] || die "Running API image differs from audited image"
-    log "Running API matches audited image ${running_image}"
-  fi
 }
 
 run_smoke_checks() {

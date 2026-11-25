@@ -68,14 +68,25 @@ def test_production_preflight_requires_smoke_origin_in_allowed_list(tmp_path: Pa
 
 
 @pytest.mark.parametrize(
-    ("release_arch", "running_image"),
-    [(None, None), ("linux/amd64", None), ("linux/arm64", None), ("linux/amd64", "wrong")],
+    ("release_arch", "running_image", "post_start_image", "missing_support"),
+    [
+        (None, None, None, None),
+        ("linux/amd64", None, None, None),
+        ("linux/arm64", None, None, None),
+        ("linux/amd64", "wrong", None, None),
+        ("linux/amd64", None, "wrong", None),
+        ("linux/amd64", "inspect-error", None, None),
+        ("linux/amd64", None, None, "egress-lb"),
+    ],
 )
+@pytest.mark.parametrize("start_caddy", ["true", "false"])
 def test_production_smoke_checks_cors_for_each_extension_endpoint(
-    tmp_path: Path, release_arch, running_image
+    tmp_path: Path, release_arch, running_image, post_start_image, missing_support, start_caddy
 ):
     script = _copy_deploy_script(tmp_path)
     _write_env(tmp_path / "infra" / ".env", EXTENSION_ORIGIN)
+    with (tmp_path / "infra" / ".env").open("a") as env_file:
+        env_file.write(f"PROMPTTUNE_START_CADDY={start_caddy}\n")
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
     command_log = tmp_path / "commands.log"
@@ -91,11 +102,19 @@ elif [[ "$*" == "info --format {{.DockerRootDir}}" ]]; then
   printf '/tmp\\n'
 elif [[ "$1" == "inspect" ]]; then
   if [[ "$*" == *'{{.Image}}'* ]]; then
-    printf '%s\\n' "${RUNNING_IMAGE}"
+    [[ "${RUNNING_IMAGE}" != "inspect-error" ]] || exit 1
+    if [[ -e "${API_STARTED}" ]]; then
+      printf '%s\\n' "${POST_START_IMAGE}"
+    else
+      printf '%s\\n' "${RUNNING_IMAGE}"
+    fi
   else
     printf 'healthy\\n'
   fi
-elif [[ "$*" == *" ps -q "* ]]; then
+elif [[ "$1" == "start" ]]; then
+  touch "${API_STARTED}"
+elif [[ "$*" == *" ps "* && "$*" == *"-q"* ]]; then
+  [[ -z "${MISSING_SUPPORT}" || "$*" != *"-q ${MISSING_SUPPORT}" ]] || exit 0
   printf 'fake-container\\n'
 fi
 """
@@ -129,6 +148,9 @@ fi
         "MIN_FREE_MB": "0",
         "RELEASE_ARCH": release_arch or "linux/amd64",
         "RUNNING_IMAGE": running_image or "sha256:" + "a" * 64,
+        "POST_START_IMAGE": post_start_image or "sha256:" + "a" * 64,
+        "API_STARTED": str(tmp_path / "api-started"),
+        "MISSING_SUPPORT": missing_support or "",
     }
     image = "sha256:" + "a" * 64
     args = ["--image", image] if release_arch else []
@@ -141,23 +163,49 @@ fi
     )
 
     calls = command_log.read_text() if command_log.exists() else ""
+    if missing_support:
+        assert result.returncode != 0
+        assert f"Supporting service {missing_support} is not provisioned" in result.stderr
+        assert " up " not in calls
+        assert " upgrade head" not in calls
+        return
     if release_arch == "linux/arm64":
         assert result.returncode != 0
         assert "Expected linux/amd64" in result.stderr
         assert " up " not in calls
         assert " upgrade head" not in calls
         return
-    if running_image == "wrong":
+    if running_image in {"wrong", "inspect-error"} or post_start_image == "wrong":
         assert result.returncode != 0
-        assert "Running API image differs from audited image" in result.stderr
+        assert "docker stop fake-container" in calls
+        assert "curl " not in calls
+        if running_image in {"wrong", "inspect-error"}:
+            assert "docker start fake-container" not in calls
+            assert " upgrade head" not in calls
+        else:
+            assert calls.index("docker start fake-container") < calls.index(
+                "docker stop fake-container"
+            )
         return
     assert result.returncode == 0, result.stderr
     if release_arch:
         assert "docker-compose.release.yml" in calls
         assert " build api" not in calls
-        assert "up -d --no-build --pull never postgres redis" in calls
+        assert "up -d --no-recreate --no-build --pull never postgres redis" in calls
         assert "run --rm --no-deps --pull never api alembic upgrade head" in calls
-        assert "up -d --no-build --pull never egress-lb egress-alert api" in calls
+        assert "up -d --no-recreate --no-build --pull never egress-lb egress-alert" in calls
+        assert "up --no-start --no-deps --no-build --pull never api" in calls
+        assert "docker start fake-container" in calls
+        assert (
+            calls.index("up --no-start --no-deps")
+            < calls.index("inspect --format {{.Image}}")
+            < calls.index(" upgrade head")
+            < calls.index("docker start fake-container")
+        )
+        if start_caddy == "true":
+            assert "up -d --no-deps --no-recreate --no-build --pull never caddy" in calls
+        else:
+            assert "--pull never caddy" not in calls
     else:
         assert " build api" in calls
     endpoints = {
