@@ -3,6 +3,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPLOY_SCRIPT = REPO_ROOT / "infra" / "scripts" / "deploy-prod.sh"
 EXTENSION_ORIGIN = "chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe"
@@ -65,7 +67,13 @@ def test_production_preflight_requires_smoke_origin_in_allowed_list(tmp_path: Pa
     assert f"ALLOWED_ORIGINS must include CORS_SMOKE_ORIGIN ({EXTENSION_ORIGIN})" in result.stderr
 
 
-def test_production_smoke_checks_cors_for_each_extension_endpoint(tmp_path: Path):
+@pytest.mark.parametrize(
+    ("release_arch", "running_image"),
+    [(None, None), ("linux/amd64", None), ("linux/arm64", None), ("linux/amd64", "wrong")],
+)
+def test_production_smoke_checks_cors_for_each_extension_endpoint(
+    tmp_path: Path, release_arch, running_image
+):
     script = _copy_deploy_script(tmp_path)
     _write_env(tmp_path / "infra" / ".env", EXTENSION_ORIGIN)
     fake_bin = tmp_path / "fake-bin"
@@ -77,10 +85,16 @@ def test_production_smoke_checks_cors_for_each_extension_endpoint(tmp_path: Path
         """#!/usr/bin/env bash
 set -eu
 printf 'docker %s\\n' "$*" >> "${COMMAND_LOG}"
-if [[ "$*" == "info --format {{.DockerRootDir}}" ]]; then
+if [[ "$1 ${2:-}" == "image inspect" ]]; then
+  printf '%s\\n' "${RELEASE_ARCH}"
+elif [[ "$*" == "info --format {{.DockerRootDir}}" ]]; then
   printf '/tmp\\n'
 elif [[ "$1" == "inspect" ]]; then
-  printf 'healthy\\n'
+  if [[ "$*" == *'{{.Image}}'* ]]; then
+    printf '%s\\n' "${RUNNING_IMAGE}"
+  else
+    printf 'healthy\\n'
+  fi
 elif [[ "$*" == *" ps -q "* ]]; then
   printf 'fake-container\\n'
 fi
@@ -113,17 +127,39 @@ fi
         "COMMAND_LOG": str(command_log),
         "CURL_STATE": str(tmp_path / "curl-state"),
         "MIN_FREE_MB": "0",
+        "RELEASE_ARCH": release_arch or "linux/amd64",
+        "RUNNING_IMAGE": running_image or "sha256:" + "a" * 64,
     }
+    image = "sha256:" + "a" * 64
+    args = ["--image", image] if release_arch else []
     result = subprocess.run(
-        ["bash", str(script)],
+        ["bash", str(script), *args],
         capture_output=True,
         text=True,
         env=env,
         check=False,
     )
 
+    calls = command_log.read_text() if command_log.exists() else ""
+    if release_arch == "linux/arm64":
+        assert result.returncode != 0
+        assert "Expected linux/amd64" in result.stderr
+        assert " up " not in calls
+        assert " upgrade head" not in calls
+        return
+    if running_image == "wrong":
+        assert result.returncode != 0
+        assert "Running API image differs from audited image" in result.stderr
+        return
     assert result.returncode == 0, result.stderr
-    calls = command_log.read_text()
+    if release_arch:
+        assert "docker-compose.release.yml" in calls
+        assert " build api" not in calls
+        assert "up -d --no-build --pull never postgres redis" in calls
+        assert "run --rm --no-deps --pull never api alembic upgrade head" in calls
+        assert "up -d --no-build --pull never egress-lb egress-alert api" in calls
+    else:
+        assert " build api" in calls
     endpoints = {
         "/v1/improve": "POST",
         "/v1/limits": "GET",
@@ -141,3 +177,13 @@ fi
             f"{path} -H Origin: https://unrelated.example "
             f"-H Access-Control-Request-Method: {method}"
         ) in calls
+
+
+@pytest.mark.parametrize("image", ["backend:latest", "sha256:abc", "repo@sha256:" + "a" * 64])
+def test_production_release_rejects_non_local_content_ids(tmp_path: Path, image):
+    script = _copy_deploy_script(tmp_path)
+    result = subprocess.run(
+        ["bash", str(script), "--image", image], capture_output=True, text=True, check=False
+    )
+    assert result.returncode != 0
+    assert "--image requires a local sha256 image ID (64 lowercase hex characters)" in result.stderr

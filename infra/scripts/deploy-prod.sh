@@ -14,6 +14,9 @@ LIMITS_INSTALLATION_ID="${LIMITS_INSTALLATION_ID:-test-installation}"
 CORS_SMOKE_ORIGIN="${CORS_SMOKE_ORIGIN:-chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe}"
 PRECHECK_ONLY=false
 SKIP_SMOKE=false
+RELEASE_IMAGE=""
+RELEASE_FLAGS=()
+RELEASE_RUN_FLAGS=()
 
 log() {
   printf '[deploy] %s\n' "$*"
@@ -37,6 +40,7 @@ Deploy the current PromptTune production checkout with preflight checks.
 Options:
   --preflight-only       Run validation checks without changing containers
   --skip-smoke           Skip HTTP verification after deploy
+  --image sha256:ID     Use an audited, locally loaded linux/amd64 image; never rebuild
   --base-url URL         Override the smoke-test base URL
   --min-free-mb N        Minimum free space required on root/docker filesystems
   -h, --help             Show this help text
@@ -251,6 +255,13 @@ run_preflight() {
 
   log "Validating production compose config"
   compose config --quiet
+  if [[ -n "${RELEASE_IMAGE}" ]]; then
+    local platform
+    platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "${RELEASE_IMAGE}")" \
+      || die "Audited image is not loaded locally; use docker load first"
+    [[ "${platform}" == "linux/amd64" ]] || die "Expected linux/amd64; found ${platform}"
+    log "Using audited image ${RELEASE_IMAGE} (${platform})"
+  fi
   log "Preflight checks passed"
 }
 
@@ -258,28 +269,36 @@ run_deploy() {
   local start_caddy
 
   log "Starting postgres and redis"
-  compose up -d postgres redis
+  compose up -d ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} postgres redis
 
   wait_for_service_ready "postgres"
   wait_for_service_ready "redis"
 
-  log "Building api image"
-  compose build api
+  if [[ -z "${RELEASE_IMAGE}" ]]; then
+    log "Building api image"
+    compose build api
+  fi
 
   log "Applying database migrations"
-  compose run --rm --no-deps api alembic upgrade head
+  compose run --rm --no-deps ${RELEASE_RUN_FLAGS[@]+"${RELEASE_RUN_FLAGS[@]}"} api alembic upgrade head
 
   start_caddy="$(read_env_value "PROMPTTUNE_START_CADDY")"
   if [[ "${start_caddy:-true}" == "false" ]]; then
     log "Starting api and egress services without PromptTune caddy"
-    compose up -d egress-lb egress-alert api
+    compose up -d ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} egress-lb egress-alert api
   else
     log "Starting api, egress services, and caddy"
-    compose up -d egress-lb egress-alert api caddy
+    compose up -d ${RELEASE_FLAGS[@]+"${RELEASE_FLAGS[@]}"} egress-lb egress-alert api caddy
   fi
 
   log "Current production container state"
   compose ps
+  if [[ -n "${RELEASE_IMAGE}" ]]; then
+    local running_image
+    running_image="$(docker inspect --format '{{.Image}}' "$(compose ps -q api)")"
+    [[ "${running_image}" == "${RELEASE_IMAGE}" ]] || die "Running API image differs from audited image"
+    log "Running API matches audited image ${running_image}"
+  fi
 }
 
 run_smoke_checks() {
@@ -322,6 +341,17 @@ while (($# > 0)); do
       ;;
     --skip-smoke)
       SKIP_SMOKE=true
+      ;;
+    --image)
+      shift
+      [[ $# -gt 0 ]] || die "--image requires a value"
+      [[ "$1" =~ ^sha256:[a-f0-9]{64}$ ]] \
+        || die "--image requires a local sha256 image ID (64 lowercase hex characters)"
+      RELEASE_IMAGE="$1"
+      export BACKEND_IMAGE="${RELEASE_IMAGE}"
+      COMPOSE_FILES+=(-f docker-compose.release.yml)
+      RELEASE_FLAGS=(--no-build --pull never)
+      RELEASE_RUN_FLAGS=(--pull never)
       ;;
     --base-url)
       shift

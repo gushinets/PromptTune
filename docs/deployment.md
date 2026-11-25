@@ -309,6 +309,58 @@ curl -i https://api.anytoolai.store/v1/limits?installation_id=test-installation
 
 ## 8. Redeploy after changes
 
+### Deploy an audited backend image (ANY-914)
+
+For a release reviewed by digest, use the `backend-release-<sha>-<attempt>` artifact
+from the successful Trivy workflow together with its matching
+`backend-dependencies-<sha>-<attempt>` report. Both contain `backend-image-id.txt`.
+The release artifact expires after seven days; retain an approved copy before then.
+The workflow builds `linux/amd64` and saves the actual image, not a rebuild recipe.
+The base is Python 3.12.16 / Debian trixie, pinned to its multiarch index in
+`backend/Dockerfile`, plus the pinned libzstd1 security update.
+
+After reviewing the complete OS/Python JSON report and recording a decision for
+every remaining High/Critical, copy the matching image artifact to the VPS:
+
+```bash
+# In the unpacked release artifact directory on the VPS:
+sha256sum -c backend-image.tar.sha256
+docker load --input backend-image.tar
+image="$(cat backend-image-id.txt)"
+docker image inspect --format '{{.Id}} {{.Os}}/{{.Architecture}}' "$image"
+# Must equal backend-image-id.txt and linux/amd64.
+
+cd /path/to/PromptTune/infra
+# Ensure these supporting images are already present; the image deploy never pulls.
+docker compose -f docker-compose.base.yml -f docker-compose.prod.yml pull postgres redis egress-lb egress-alert
+# Also pull caddy if this host runs PromptTune's Caddy.
+./scripts/deploy-prod.sh --image "$image" --preflight-only
+./scripts/deploy-prod.sh --image "$image"
+```
+
+The script rejects tags, abbreviated IDs, registry references and wrong architectures.
+The release override uses Compose's `!reset` tag to remove the API build recipe;
+use a Compose version supporting that tag (validated with v5.7.1). Preflight
+configuration validation fails before rollout on incompatible Compose versions.
+It uses the selected local image for both migrations and API, disables rebuilding
+and pulling during rollout, and checks the running API's `.Image` against the
+audited ID before HTTP smoke checks. `sha256:…` here is the exact ID returned by
+the build daemon, not a mutable tag. Its representation depends on the image
+store: this local candidate uses an OCI index digest in Docker's containerd store;
+the classic store uses a config digest. Build and release hosts must preserve the
+same representation. If the original ID is unavailable after `docker load`, stop
+and produce a fresh build/scan on a compatible host; do not substitute a different
+ID or rebuild during deployment. There is no registry push in this workflow.
+Archive SHA-256 is a separate transport checksum.
+
+Keep the previous approved image/archive and its dependency report for rollback:
+load it and rerun `deploy-prod.sh --image <previous-image-id>`, subject to the
+schema migration caveat in section 9. `make prod-up`, `make prod-migrate` and a
+plain `make prod-deploy` rebuild from source and must not substitute for this
+audited-image path. A rebuild requires its own scan and release decision.
+
+The source-based development/deployment commands below remain available.
+
 When new backend or infra changes are pulled onto the VPS:
 
 ```bash

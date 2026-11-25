@@ -34,11 +34,11 @@ jobs:
 
       - name: Build backend image
         if: matrix.target == 'backend'
-        run: docker build --tag prompttune-backend:trivy backend
+        run: docker build --platform linux/amd64 --iidfile backend-image-id.txt --tag prompttune-backend:trivy backend
 
       - name: Scan backend image
         if: matrix.target == 'backend'
-        run: trivy image --image-src docker --scanners vuln --format sarif --exit-code 0 --output trivy.sarif prompttune-backend:trivy
+        run: trivy image --image-src docker --scanners vuln --format sarif --exit-code 0 --output trivy.sarif "$(cat backend-image-id.txt)"
 
       - name: Save main report for publication
         if: github.event_name == 'push'
@@ -59,10 +59,12 @@ jobs:
       - name: Record installed backend packages and image identity
         if: matrix.target == 'backend'
         run: |
-          docker image inspect prompttune-backend:trivy > backend-image.json
-          docker run --rm --network none --entrypoint python prompttune-backend:trivy -m pip list --format=json > backend-packages.json
-          docker run --rm --network none --entrypoint python prompttune-backend:trivy -m pip check
-          trivy image --image-src docker --scanners vuln --format json --exit-code 0 --output backend-vulnerabilities.json prompttune-backend:trivy
+          image="$(cat backend-image-id.txt)"
+          docker image inspect "$image" > backend-image.json
+          docker run --rm --network none --entrypoint python "$image" -m pip list --format=json > backend-packages.json
+          docker run --rm --network none --entrypoint dpkg-query "$image" -W > backend-os-packages.txt
+          docker run --rm --network none --entrypoint python "$image" -m pip check
+          trivy image --image-src docker --scanners vuln --pkg-types os,library --list-all-pkgs --format json --exit-code 0 --output backend-vulnerabilities.json "$image"
 
       - name: Save backend dependency evidence
         if: matrix.target == 'backend'
@@ -70,7 +72,27 @@ jobs:
         with:
           name: backend-dependencies-${{ github.sha }}-${{ github.run_attempt }}
           path: |
+            backend-image-id.txt
             backend-image.json
             backend-packages.json
+            backend-os-packages.txt
             backend-vulnerabilities.json
           if-no-files-found: error
+
+      - name: Export audited backend image
+        if: matrix.target == 'backend'
+        run: |
+          docker image save --output backend-image.tar "$(cat backend-image-id.txt)"
+          sha256sum backend-image.tar > backend-image.tar.sha256
+
+      - name: Save audited backend image for deployment without rebuilding
+        if: matrix.target == 'backend'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-release-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            backend-image.tar
+            backend-image.tar.sha256
+            backend-image-id.txt
+          if-no-files-found: error
+          retention-days: 7
