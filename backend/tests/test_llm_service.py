@@ -343,7 +343,8 @@ async def test_improve_text_logs_do_not_include_api_key(caplog):
 
 
 @pytest.mark.asyncio
-async def test_improve_text_uses_temperature_from_settings():
+@pytest.mark.parametrize("reasoning_effort", [None, "high"])
+async def test_improve_text_uses_model_parameters_from_settings(reasoning_effort):
     mock_response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content="out"))],
         model="gpt-4o-mini",
@@ -353,6 +354,8 @@ async def test_improve_text_uses_temperature_from_settings():
     )
     with (
         patch("app.services.llm.settings.llm_temperature", 0.3),
+        patch("app.services.llm.settings.llm_reasoning_effort", reasoning_effort),
+        patch("app.services.llm.settings.llm_completion_tokens", 100),
         patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
         patch("app.services.llm.acompletion", new_callable=AsyncMock) as ac,
     ):
@@ -363,7 +366,17 @@ async def test_improve_text_uses_temperature_from_settings():
             installation_id="inst-b",
             site="example.com",
         )
-    assert ac.await_args.kwargs["temperature"] == 0.3
+    kwargs = ac.await_args.kwargs
+    if reasoning_effort:
+        assert kwargs["reasoning_effort"] == "high"
+        assert kwargs["allowed_openai_params"] == ["reasoning_effort"]
+        assert kwargs["max_completion_tokens"] == 100
+        assert "max_tokens" not in kwargs
+        assert "temperature" not in kwargs
+    else:
+        assert kwargs["temperature"] == 0.3
+        assert kwargs["max_tokens"] == 100
+        assert "reasoning_effort" not in kwargs
 
 
 @pytest.mark.asyncio

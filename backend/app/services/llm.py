@@ -426,7 +426,11 @@ class LiteLLMClient:
                 "timeout": settings.llm_request_timeout_seconds,
                 "extra_headers": extra_headers,
             }
-            if settings.llm_temperature is not None:
+            if settings.llm_reasoning_effort:
+                request_kwargs["reasoning_effort"] = settings.llm_reasoning_effort
+                request_kwargs["allowed_openai_params"] = ["reasoning_effort"]
+                request_kwargs["max_completion_tokens"] = request_kwargs.pop("max_tokens")
+            elif settings.llm_temperature is not None:
                 request_kwargs["temperature"] = settings.llm_temperature
             try:
                 response = await acompletion(**request_kwargs)

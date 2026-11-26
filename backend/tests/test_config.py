@@ -11,11 +11,13 @@ def test_clean_env_value_strips_inline_comments():
 def test_from_env_reads_openai_backend(monkeypatch):
     monkeypatch.setenv("LLM_BACKEND", "OPENAI")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("LLM_REASONING_EFFORT", "high")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
     config = BotConfig.from_env()
 
     assert config.llm_backend == "OPENAI"
+    assert config.llm_reasoning_effort == "high"
     assert config.get_provider_api_key() == "sk-test"
     assert config.provider_config_error() is None
 
