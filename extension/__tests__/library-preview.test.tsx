@@ -53,11 +53,11 @@ it("bounds long saved previews while copying full text and keeping delete availa
     const buttons = host.querySelectorAll<HTMLButtonElement>(".library-item-actions .icon-btn");
     expect(buttons).toHaveLength(2);
     await act(async () => {
-      buttons[0].click();
+      buttons[0]!.click();
     });
     expect(writeText).toHaveBeenCalledWith(entry.improved);
     await act(async () => {
-      buttons[1].click();
+      buttons[1]!.click();
     });
     expect(onDelete).toHaveBeenCalledWith(entry.id);
   } finally {

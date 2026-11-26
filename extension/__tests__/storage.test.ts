@@ -121,7 +121,7 @@ describe("storage", () => {
         6 * 1024 * 1024,
       );
       expect(written).toHaveLength(52);
-      expect(written[0].id).toBe(entry.id);
+      expect(written[0]!.id).toBe(entry.id);
       expect(written.at(-1)?.id).toBe("50");
     });
 
@@ -303,11 +303,11 @@ describe("storage", () => {
           (state.pending_library_saves as LibraryEntry[]).map((item) => item.original),
         ).toEqual([original]);
       });
-      expect((await getAll())[0].id).toBe(entry.id);
+      expect((await getAll())[0]!.id).toBe(entry.id);
       expect(await getAll()).toHaveLength(52);
       expect((await getAll()).some((item) => item.id === "old-51")).toBe(false);
       expect(sizes).toHaveLength(2);
-      expect(sizes[1]).toBeLessThanOrEqual(sizes[0]);
+      expect(sizes[1]).toBeLessThanOrEqual(sizes[0]!);
       expect(Math.max(...sizes)).toBeLessThan(10 * 1024 * 1024);
     });
 

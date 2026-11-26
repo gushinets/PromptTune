@@ -227,7 +227,7 @@ it("hydrates a late verification lookup but respects an explicit change of email
   expect(host.querySelector("input")?.getAttribute("inputmode")).toBe("numeric");
   expect(host.textContent).toContain("pending@example.com");
   const change = host.querySelectorAll<HTMLButtonElement>(".email-bonus-secondary button")[1];
-  await act(async () => change.click());
+  await act(async () => change!.click());
   await act(async () => render({ ...pendingQuota }));
   expect(host.querySelector("input")?.getAttribute("inputmode")).toBe("email");
 });

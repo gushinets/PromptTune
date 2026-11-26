@@ -239,11 +239,11 @@ it("keeps a new request active when a canceled request finishes late", async () 
   await typeOriginal("Second prompt");
   await click("Improve");
   await act(async () => {
-    finishes[0]({ type: "IMPROVE_RESULT", payload: { request_id: "old", improved_text: "Old" } });
+    finishes[0]!({ type: "IMPROVE_RESULT", payload: { request_id: "old", improved_text: "Old" } });
   });
   expect(host.querySelector(".processing-screen")).not.toBeNull();
   await act(async () => {
-    finishes[1]({
+    finishes[1]!({
       type: "IMPROVE_RESULT",
       payload: { request_id: "new", improved_text: "New result" },
     });

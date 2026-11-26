@@ -722,10 +722,10 @@ it("does not persist duplicate drafts or evict older work when popups are only v
     );
     await act(async () => {
       const tabs = popup.host.querySelectorAll<HTMLButtonElement>(".tab-bar button");
-      tabs[1].click();
+      tabs[1]!.click();
     });
     await act(async () =>
-      popup.host.querySelectorAll<HTMLButtonElement>(".tab-bar button")[0].click(),
+      popup.host.querySelectorAll<HTMLButtonElement>(".tab-bar button")[0]!.click(),
     );
     await act(async () => popup.root.unmount());
     roots.delete(popup.root);

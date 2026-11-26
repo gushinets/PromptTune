@@ -221,14 +221,14 @@ it.each(["older-first", "newer-first"])(
     await act(async () => window.dispatchEvent(new Event("focus")));
     expect(pending).toHaveLength(2);
     if (order === "older-first") {
-      await act(async () => pending[0](quota(0)));
+      await act(async () => pending[0]!(quota(0)));
       expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe(
         "7/50",
       );
-      await act(async () => pending[1](quota(50, true)));
+      await act(async () => pending[1]!(quota(50, true)));
     } else {
-      await act(async () => pending[1](quota(50, true)));
-      await act(async () => pending[0](quota(0)));
+      await act(async () => pending[1]!(quota(50, true)));
+      await act(async () => pending[0]!(quota(0)));
     }
     expect(host.querySelector('.rate-limit-badge [aria-hidden="true"]')?.textContent).toBe("50/50");
   },

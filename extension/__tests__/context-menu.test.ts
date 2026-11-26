@@ -57,7 +57,7 @@ it("opens the optimizer with an isolated, exact selection payload", async () => 
     { menuItemId: "optimize-selection", selectionText: "  Привет 👋\nworld  " } as never,
     { id: 42 } as never,
   );
-  const options = vi.mocked(browser.windows.create).mock.calls[0][0]!;
+  const options = vi.mocked(browser.windows.create).mock.calls[0]![0]!;
   expect(options.type).toBe("popup");
   const url = new URL(String(options.url), "https://extension.test");
   expect(url.pathname).toBe("/popup.html");
@@ -228,7 +228,7 @@ it("deletes a successfully opened window's payload after five minutes even if it
     .mocked(browser.storage.local.set)
     .mock.calls.map(([values]) => values)
     .find((values) => Object.keys(values).some((key) => key.startsWith("optimizer_selection_")))!;
-  const key = Object.keys(stored)[0];
+  const key = Object.keys(stored)[0]!;
   const expiresAt = (stored[key] as { expiresAt: number }).expiresAt;
   expect(expiresAt).toBeGreaterThanOrEqual(createdAt + 300000);
   expect(expiresAt).toBeLessThanOrEqual(Date.now() + 300000);

@@ -425,7 +425,7 @@ describe("App", () => {
     await act(async () => {
       getImproveButton(container).click();
     });
-    const activation = vi.mocked(browser.tabs.onActivated.addListener).mock.calls[0][0];
+    const activation = vi.mocked(browser.tabs.onActivated.addListener).mock.calls[0]![0];
     vi.mocked(browser.tabs.query).mockResolvedValue([
       { id: 2, url: "https://chatgpt.com" },
     ] as never);
@@ -2305,7 +2305,7 @@ describe("App", () => {
     expect(activationListener).toBeTypeOf("function");
 
     await act(async () => {
-      activationListener({ tabId: 88, windowId: 1 });
+      activationListener!({ tabId: 88, windowId: 1 });
       await Promise.resolve();
     });
     await flushEffects();
