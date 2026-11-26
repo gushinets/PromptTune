@@ -17,6 +17,8 @@ The extension trees of #68, #69 and #71 were identical. GitHub returned no forma
 
 The #71 dependency graph removes 54 lockfile paths and adds seven, including the relocated mocker. It updates shared Babel, source-map and glob-matching dependencies used by the new test graph. Among existing paths the only additional version change beyond #71 is `undici` 7.24.8 → 7.30.2, within jsdom 28.1.0's `^7.21.0` requirement. There is one installed Undici path in each lockfile. There are no installed `glob` or `tinypool` paths in the combined lockfile. The change uses upstream releases and requires no overrides.
 
+The PR review follow-up aligns the extension engine declaration with Vitest's supported Node versions: `^22.13.0 || ^24.0.0 || >=26.0.0`. The existing minimum stays at 22.13.0. Node 23 was already excluded by jsdom's engine range, and Vitest 5 also excludes Node 25. The follow-up changes only the root engine metadata in the lockfile. Trivy returned the same 73 matches using the recorded database. The new lockfile SHA-256 is `963824fdf6eb504dd2330222c5783f2ec34eb44c84fe1e711a66ff122e3c4d50`.
+
 ## Registration timeout
 
 The midnight interleaving test installed a persistent replacement on the shared `browser.alarms.get` mock. Each call created a new pending promise. The test released its own call, but the implementation survived teardown. Vitest 5 inherits the Vitest 4 behavior where `vi.restoreAllMocks()` restores spies and leaves plain `vi.fn()` implementations in place. Clearing mock history also leaves implementations in place. During the later installation test the background reached `cleanupSelections()`, which awaited the selection-cleanup alarm lookup. There was no resolver for that call.
