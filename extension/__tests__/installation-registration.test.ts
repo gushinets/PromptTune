@@ -21,6 +21,7 @@ beforeEach(() => {
     alarms.set(name, { name, scheduledTime: Date.now(), periodInMinutes: 5 });
   });
   vi.mocked(browser.alarms.getAll).mockImplementation(async () => [...alarms.values()]);
+  vi.mocked(browser.alarms.get).mockResolvedValue(undefined);
   vi.mocked(browser.alarms.clear).mockImplementation(async (name) => alarms.delete(name!));
   vi.mocked(browser.tabs.create).mockResolvedValue({ id: 1 } as never);
   state = { installation_id: "installed", install_at: "2026-01-05T10:00:00.000Z" };
