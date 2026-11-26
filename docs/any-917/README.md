@@ -1,5 +1,11 @@
 # ANY-917 validation
 
+## Integration with ANY-916
+
+After #89 landed on `main` at `f67a11ae53cd6e675e1d31e8b5eb503f08307d6d`, #88 adopted that dependency graph. It resolves Vitest, its mocker and V8 coverage to 5.1.2, Vite to 8.3.8, WXT to 0.21.5, and Undici to 7.30.2. The two package files differ from that revision only in the Node engine range. The registration tests retain the upstream mock reset and strict typing alongside the one-shot mock and stronger recovery assertions from #88.
+
+The merged lockfile SHA-256 is `32166579c5b285a6f44fc633d3210dc24137c2569cdbfdd30de1d05b62355dce`. Trivy 0.76.2 with the recorded database reported zero findings in the complete merged lockfile. An inventory run with `--list-all-pkgs` confirmed 695 npm packages. The findings register reflects the merged package versions. The sections below preserve the earlier comparison and its command output.
+
 The baseline is `gushinets/PromptTune` at `dad28ff8f26991a366837e6dcea82cc13eeb6252`, fetched from `origin/main`. The `codex/any-917` branch combines the extension dependency changes from #71 and the Undici package entry from #65.
 
 | Candidate | Head | Base | Required CI at candidate head |

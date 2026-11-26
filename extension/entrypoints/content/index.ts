@@ -9,9 +9,9 @@ import type { ImproveGoal } from "@shared/types";
 
 function detectAiGoalFromHostname(hostname: string): ImproveGoal {
   const host = hostname.toLowerCase();
-  if (host.endsWith("chatgpt.com")) return "chatgpt";
-  if (host.endsWith("claude.ai")) return "claude";
-  if (host.endsWith("perplexity.ai")) return "perplexity";
+  if (host === "chatgpt.com" || host.endsWith(".chatgpt.com")) return "chatgpt";
+  if (host === "claude.ai" || host.endsWith(".claude.ai")) return "claude";
+  if (host === "perplexity.ai" || host.endsWith(".perplexity.ai")) return "perplexity";
   return "general";
 }
 
