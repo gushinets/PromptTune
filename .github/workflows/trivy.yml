@@ -52,6 +52,9 @@ jobs:
       - name: Upload report to GitHub Code Scanning
         if: github.event_name == 'pull_request'
         uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        env:
+          # Match the main publisher so existing alerts share the PR baseline.
+          CODEQL_ACTION_ANALYSIS_KEY: .github/workflows/trivy-main.yml:publish
         with:
           sarif_file: trivy.sarif
           category: trivy-${{ matrix.target }}
