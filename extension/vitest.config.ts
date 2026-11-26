@@ -33,7 +33,6 @@ export default defineConfig({
     setupFiles: ["./__tests__/setup.ts"],
     coverage: {
       provider: "v8",
-      all: true,
       include: coverageInclude,
       exclude: coverageExclude,
       reporter: ["text", "html", "lcov", "json-summary"],

@@ -105,7 +105,7 @@ async function start(viewMode: "popup" | "sidepanel", expectError = true) {
     field.dispatchEvent(new Event("input", { bubbles: true }));
   });
   const goals = host.querySelectorAll<HTMLInputElement>(".goal-pill-input");
-  await act(async () => goals[1].click());
+  await act(async () => goals[1]!.click());
   const goal = host.querySelector<HTMLInputElement>(".goal-pill-input:checked")!.value;
   await act(async () => host.querySelector<HTMLButtonElement>(".btn-improve")!.click());
   if (expectError) expect(host.querySelector(".error-toast")).not.toBeNull();

@@ -138,8 +138,8 @@ export function EmailBonusModal({
       "button:not(:disabled), input:not(:disabled)",
     );
     if (!elements?.length) return;
-    const first = elements[0],
-      last = elements[elements.length - 1];
+    const first = elements.item(0),
+      last = elements.item(elements.length - 1);
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus();

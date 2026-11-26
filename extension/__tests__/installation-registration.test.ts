@@ -21,6 +21,7 @@ beforeEach(() => {
     alarms.set(name, { name, scheduledTime: Date.now(), periodInMinutes: 5 });
   });
   vi.mocked(browser.alarms.getAll).mockImplementation(async () => [...alarms.values()]);
+  vi.mocked(browser.alarms.get).mockResolvedValue(undefined);
   vi.mocked(browser.alarms.clear).mockImplementation(async (name) => alarms.delete(name!));
   vi.mocked(browser.tabs.create).mockResolvedValue({ id: 1 } as never);
   state = { installation_id: "installed", install_at: "2026-01-05T10:00:00.000Z" };
@@ -137,7 +138,7 @@ it("registers from onInstalled and retries its original timestamp from the alarm
   const installed = vi.mocked(browser.runtime.onInstalled.addListener).mock.calls.at(-1)![0];
   await installed({ reason: "install" } as never);
   expect(request).toHaveBeenCalledTimes(1);
-  const timestamp = request.mock.calls[0][1];
+  const timestamp = request.mock.calls[0]![1];
   const alarm = vi.mocked(browser.alarms.onAlarm.addListener).mock.calls.at(-1)![0];
   await alarm({ name: INSTALLATION_REGISTRATION_ALARM } as never);
   expect(request).toHaveBeenLastCalledWith("installed", timestamp);
@@ -248,7 +249,7 @@ it("uses the install timestamp when the first quota lookup overtakes slow instal
     const handle = vi.mocked(browser.runtime.onMessage.addListener).mock.calls.at(-1)![0];
     await handle({ type: "GET_LIMITS" }, {}, vi.fn());
     expect(request).toHaveBeenCalledWith("installed", "2026-01-31T20:59:59.000Z");
-    expect(request.mock.invocationCallOrder[0]).toBeLessThan(limits.mock.invocationCallOrder[0]);
+    expect(request.mock.invocationCallOrder[0]).toBeLessThan(limits.mock.invocationCallOrder[0]!);
   } finally {
     releaseCleanup({ name: "optimizer-selection-cleanup" } as never);
     await installing;
