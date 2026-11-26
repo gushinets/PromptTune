@@ -190,6 +190,7 @@ async def test_improve_text_includes_system_prompt_and_user_message():
     with (
         patch("app.services.llm._resolve_provider_api_key", return_value="sk-test"),
         patch("app.services.llm.settings.llm_temperature", None),
+        patch("app.services.llm.settings.llm_reasoning_effort", None),
         patch("app.services.llm.acompletion", new_callable=AsyncMock) as ac,
     ):
         ac.return_value = mock_response
@@ -401,6 +402,7 @@ async def test_improve_text_retries_token_exhaustion_with_higher_budget():
         _hidden_params={},
     )
     with (
+        patch("app.services.llm.settings.llm_reasoning_effort", None),
         patch("app.services.llm.settings.llm_completion_tokens", 100),
         patch("app.services.llm.settings.llm_completion_tokens_retry_max", 180),
         patch("app.services.llm.settings.llm_max_retries", 2),
