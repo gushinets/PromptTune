@@ -1,10 +1,12 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import { apiClient } from "../shared/api-client";
+import { WELCOME_PAGE_URL } from "../shared/constants";
 import { getInstallationId } from "../shared/storage";
 import {
   createInstallationRegistrar,
   INSTALLATION_REGISTRATION_ALARM,
+  INSTALLATION_TIMESTAMP_ALARM_PREFIX,
 } from "../shared/installation-registration";
 
 vi.mock("@shared/constants", async (importOriginal) => ({
@@ -236,7 +238,7 @@ it("uses the install timestamp when the first quota lookup overtakes slow instal
   await Promise.resolve();
   await Promise.resolve();
   let releaseCleanup!: (value: never) => void;
-  vi.mocked(browser.alarms.get).mockImplementation(
+  vi.mocked(browser.alarms.get).mockImplementationOnce(
     () =>
       new Promise((resolve) => {
         releaseCleanup = resolve;
@@ -379,20 +381,22 @@ it("opens welcome despite install-date storage failure and recovers from a durab
   (main as unknown as () => void)();
   const installed = vi.mocked(browser.runtime.onInstalled.addListener).mock.calls.at(-1)![0];
   await installed({ reason: "install" } as never);
-  expect(browser.tabs.create).toHaveBeenCalled();
+  expect(browser.tabs.create).toHaveBeenCalledWith({ url: WELCOME_PAGE_URL });
   expect(request).not.toHaveBeenCalled();
   const retry = [...alarms.values()].find((alarm) =>
-    alarm.name.startsWith(INSTALLATION_REGISTRATION_ALARM),
-  )!;
-  expect(retry).toBeDefined();
+    alarm.name.startsWith(INSTALLATION_TIMESTAMP_ALARM_PREFIX),
+  );
+  if (!retry) throw new Error("Missing installation timestamp alarm");
+  const installedAt = retry.name.slice(INSTALLATION_TIMESTAMP_ALARM_PREFIX.length);
   vi.mocked(browser.storage.local.set).mockImplementation(async (value) => {
     Object.assign(state, value);
   });
   (main as unknown as () => void)();
   const onAlarm = vi.mocked(browser.alarms.onAlarm.addListener).mock.calls.at(-1)![0];
   await onAlarm(retry);
-  expect(state.install_at).toEqual(expect.any(String));
-  expect(request).toHaveBeenCalledWith("installed", state.install_at);
+  expect(state.install_at).toBe(installedAt);
+  expect(request).toHaveBeenCalledExactlyOnceWith("installed", installedAt);
+  expect(state.registered_installation_id).toBe("installed");
   expect(
     [...alarms.keys()].filter((name) => name.startsWith(INSTALLATION_REGISTRATION_ALARM)),
   ).toEqual([]);
