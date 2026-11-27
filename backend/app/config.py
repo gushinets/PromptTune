@@ -107,6 +107,7 @@ class BotConfig:
     analytics_retention_months: int
     analytics_ingest_req_per_min: int
 
+    llm_reasoning_effort: str | None = None
     free_req_per_ip_min: int = 50
     smtp_host: str | None = None
     smtp_port: int = 587
@@ -144,6 +145,7 @@ class BotConfig:
             llm_completion_tokens_retry_max=_get_int_env("LLM_COMPLETION_TOKENS_RETRY_MAX", 12288),
             llm_max_retries=_get_int_env("LLM_MAX_RETRIES", 2),
             llm_temperature=_get_optional_float_env("LLM_TEMPERATURE"),
+            llm_reasoning_effort=_get_env("LLM_REASONING_EFFORT"),
             allowed_origins=_get_env(
                 "ALLOWED_ORIGINS",
                 "chrome-extension://fbageijibmjblopdbgpdcpkojhnjjbpe",
